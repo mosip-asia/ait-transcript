@@ -1,0 +1,301 @@
+{
+  "verifiableClaims": [
+    {
+      "logo": "/assets/cert.png",
+      "name": "MOSIP ID",
+      "type": "MOSIPVerifiableCredential",
+      "essential": true,
+      "clientIdScheme":"did",
+      "definition": {
+        "purpose": "Relying party is requesting your digital ID for the purpose of Self-Authentication",
+        "format": {
+          "ldp_vc": {
+            "proof_type": ["RsaSignature2018"]
+          }
+        },
+        "input_descriptors": [
+          {
+            "id": "id card credential",
+            "format": {
+              "ldp_vc": {
+                "proof_type": ["RsaSignature2018"]
+              }
+            },
+            "constraints": {
+              "fields": [
+                {
+                  "path": ["$.type"],
+                  "filter": {
+                    "type": "object",
+                    "pattern": "MOSIPVerifiableCredential"
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "logo": "/assets/cert.png",
+      "name": "Life Insurance",
+      "type": "LifeInsuranceCredential",
+      "clientIdScheme":"did",
+      "definition": {
+        "purpose": "Relying party is requesting your digital ID for the purpose of Self-Authentication",
+        "format": {
+          "ldp_vc": {
+            "proof_type": ["Ed25519Signature2018"]
+          }
+        },
+        "input_descriptors": [
+          {
+            "id": "id card credential",
+            "format": {
+              "ldp_vc": {
+                "proof_type": ["Ed25519Signature2020"]
+              }
+            },
+            "constraints": {
+              "fields": [
+                {
+                  "path": ["$.type"],
+                  "filter": {
+                    "type": "object",
+                    "pattern": "LifeInsuranceCredential"
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "logo": "/assets/cert.png",
+      "name": "Health Insurance",
+      "type": "InsuranceCredential",
+      "clientIdScheme":"pre_registered",
+      "definition": {
+        "purpose": "Relying party is requesting your digital ID for the purpose of Self-Authentication",
+        "format": {
+          "ldp_vc": {
+            "proof_type": ["Ed25519Signature2018"]
+          }
+        },
+        "input_descriptors": [
+          {
+            "id": "id card credential",
+            "format": {
+              "ldp_vc": {
+                "proof_type": ["Ed25519Signature2020"]
+              }
+            },
+            "constraints": {
+              "fields": [
+                {
+                  "path": ["$.type"],
+                  "filter": {
+                    "type": "object",
+                    "pattern": "InsuranceCredential"
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "logo": "/assets/cert.png",
+      "name": "Mock Identity (SD JWT)",
+      "type": "SD_JWT",
+      "clientIdScheme":"did",
+      "definition": {
+        "purpose": "Relying party is requesting your digital ID for the purpose of Self-Authentication",
+        "format": {
+          "vc+sd-jwt": {
+            "sd-jwt_alg_values": ["EdDSA"]
+          }
+        },
+        "input_descriptors": [
+          {
+            "id": "Mock Identity card credential",
+            "format": {
+              "vc+sd-jwt": {
+                "sd-jwt_alg_values": ["EdDSA"]
+              }
+            },
+            "constraints": {
+              "fields": [
+                {
+                  "path": ["$.vct"],
+                  "filter": {
+                    "type": "string",
+                    "pattern": "SD_JWT"
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "logo": "/assets/cert.png",
+      "name": "AIT Student ID",
+      "type": "StudentIDCredential",
+      "clientIdScheme": "did",
+      "definition": {
+        "purpose": "Relying party is requesting your AIT student credential to verify enrollment.",
+        "format": {
+          "ldp_vc": {
+            "proof_type": ["Ed25519Signature2020"]
+          }
+        },
+        "input_descriptors": [
+          {
+            "id": "ait student id credential",
+            "format": {
+              "ldp_vc": {
+                "proof_type": ["Ed25519Signature2020"]
+              }
+            },
+            "constraints": {
+              "fields": [
+                {
+                  "path": ["$.type"],
+                  "filter": {
+                    "type": "object",
+                    "pattern": "StudentIDCredential"
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "logo": "/assets/cert.png",
+      "name": "AIT Transcript",
+      "type": "AitTranscriptCredential",
+      "clientIdScheme": "did",
+      "definition": {
+        "purpose": "Verify the holder's AIT academic transcript credential.",
+        "format": {
+          "ldp_vc": {
+            "proof_type": ["Ed25519Signature2020"]
+          }
+        },
+        "input_descriptors": [
+          {
+            "id": "ait transcript credential",
+            "format": {
+              "ldp_vc": {
+                "proof_type": ["Ed25519Signature2020"]
+              }
+            },
+            "constraints": {
+              "fields": [
+                {
+                  "path": ["$.type"],
+                  "filter": {
+                    "type": "object",
+                    "pattern": "AitTranscriptCredential"
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "logo": "/assets/cert.png",
+      "name": "Land Registry",
+      "type": "LandStatementCredential",
+      "clientIdScheme":"did",
+      "definition": {
+        "purpose": "Relying party is requesting your digital ID for the purpose of Self-Authentication",
+        "format": {
+          "ldp_vc": {
+            "proof_type": ["Ed25519Signature2020"]
+          }
+        },
+        "input_descriptors": [
+          {
+            "id": "id card credential",
+            "format": {
+              "ldp_vc": {
+                "proof_type": ["Ed25519Signature2020"]
+              }
+            },
+            "constraints": {
+              "fields": [
+                {
+                  "path": ["$.type"],
+                  "filter": {
+                    "type": "object",
+                    "pattern": "LandStatementCredential"
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "VCRenderOrders": {
+    "InsuranceCredentialRenderOrder": [
+      "fullName",
+      "policyNumber",
+      "policyName",
+      "policyIssuedOn",
+      "policyExpiresOn",
+      "benefits",
+      "mobile",
+      "email",
+      "gender",
+      "dob"
+    ],
+    "MosipVerifiableCredentialRenderOrder": [
+      "face",
+      "fullName",
+      "phone",
+      "dateOfBirth",
+      "gender",
+      "email",
+      "city",
+      "UIN",
+      "VID",
+      "addressLine1",
+      "province",
+      "region",
+      "postalCode"
+    ],
+    "StudentIDCredentialRenderOrder": [
+      "studentID",
+      "fullName",
+      "faculty",
+      "expiryDate"
+    ],
+    "AitTranscriptCredentialRenderOrder": [
+      "fullName",
+      "registrationNo",
+      "academicProgram",
+      "degreeAwarded",
+      "dateGraduation",
+      "faculty"
+    ],
+    "IncomeTaxAccountCredentialRenderOrder": [
+      "fullName",
+      "tan",
+      "gender",
+      "dateOfBirth",
+      "issuedOn",
+      "expiresOn"
+    ]
+  }
+}

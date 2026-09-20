@@ -1,0 +1,181 @@
+{% extends "base.html" %}
+{% from "_macros.html" import journey_diagram, icon %}
+{% block title %}{{ student.fullName }} | Student{% endblock %}
+{% block content %}
+<p class="portal-tag">Student portal</p>
+{{ journey_diagram(["Request\ntranscript VC", "Registrar\nreview", "Claim in\nInji Web", "Present in\nInji Verify"]) }}
+<div class="page-header">
+  {{ icon('cap', 28) }}
+  <h1>{{ student.fullName }}</h1>
+  <form method="post" action="/student/logout" style="margin-left:auto;">
+    <button type="submit" class="btn btn-ghost btn-small">{{ icon('log-out', 14) }}</button>
+  </form>
+</div>
+
+{% if certify_error %}
+<p class="error">Could not reach Certify: {{ certify_error }}</p>
+{% endif %}
+
+{% if degree_views|length > 1 %}
+{% set claimable = degree_views | selectattr('has_wallet_access') | list %}
+{% if claimable|length > 1 %}
+<p class="subtitle" style="margin:0 0 1.5rem;">You have Inji Web access for more than one degree below. Each uses its own Keycloak login, and switching straight from one to the other in the same tab gets refused with "already authenticated as different user". <a href="{{ claimable[0].claim_panel.keycloak_logout_url }}" target="_blank" rel="noopener">sign out here</a> in between.</p>
+{% endif %}
+{% endif %}
+
+{% for view in degree_views %}
+{% set degree = view.degree %}
+{% set transcript_request = view.transcript_request %}
+{% set claim_panel = view.claim_panel %}
+{% set transcripts = view.transcripts %}
+<details class="card" id="degree-{{ degree.degreeId }}" style="border-left:3px solid var(--border);padding-left:1rem;">
+  <summary>{{ icon('cap', 18) }} {{ degree.level }}: {{ degree.academicProgram }}</summary>
+  <dl class="info-grid">
+    <dt>{{ icon('hash', 14) }} Student no.</dt>
+    <dd>{{ degree.registrationNo }}</dd>
+    <dt>{{ icon('cap', 14) }} Degree</dt>
+    <dd>{{ degree.degreeAwarded }} ({{ degree.option }})</dd>
+    <dt>{{ icon('calendar', 14) }} Graduation date</dt>
+    <dd>{{ degree.dateGraduation }}</dd>
+    <dt>{{ icon('file-text', 14) }} Thesis</dt>
+    <dd>{{ degree.thesisTitle }}</dd>
+  </dl>
+
+  <h3 class="section-heading">{{ icon('clipboard-list', 15) }} Transcript VC request</h3>
+  {% if transcript_request %}
+  <div class="vc-status-row">
+    {% if transcript_request.status == 'pending' %}
+    <span class="badge badge-pending">{{ icon('clock', 13) }} Pending registrar review</span>
+    {% elif transcript_request.status == 'approved' %}
+    <span class="badge badge-approved">{{ icon('check-circle', 13) }} Approved</span>
+    {% else %}
+    <span class="badge badge-rejected">{{ icon('x-circle', 13) }} Rejected</span>
+    {% endif %}
+    <span class="subtitle">Requested {{ transcript_request.created_at|bkk }}</span>
+  </div>
+  {% if transcript_request.status == 'rejected' %}
+  <p style="margin-top:1rem;">You may submit a new request after a rejection.</p>
+  <form method="post" action="/student/request">
+    <input type="hidden" name="degree_id" value="{{ degree.degreeId }}">
+    <button type="submit" class="btn">Request this transcript VC again</button>
+  </form>
+  {% elif transcript_request.status == 'approved' and not view.has_active_vc and transcripts %}
+  <p style="margin-top:1rem;">Your transcript VC was revoked. You may request a new one.</p>
+  <form method="post" action="/student/request">
+    <input type="hidden" name="degree_id" value="{{ degree.degreeId }}">
+    <button type="submit" class="btn">Request a new transcript VC</button>
+  </form>
+  {% endif %}
+  {% if view.request_history|length > 1 %}
+  <details style="margin-top:0.75rem;">
+    <summary class="history-toggle">{{ icon('list', 13) }} Request history ({{ view.request_history|length }})</summary>
+    <table style="margin-top:0.5rem;">
+      <thead>
+        <tr><th>Requested</th><th>Status</th><th>Decided</th></tr>
+      </thead>
+      <tbody>
+        {% for r in view.request_history %}
+        <tr>
+          <td>{{ r.created_at|bkk }}</td>
+          <td>
+            {% if r.status == 'pending' %}<span class="badge badge-pending">{{ icon('clock', 13) }} Pending</span>
+            {% elif r.status == 'approved' %}<span class="badge badge-approved">{{ icon('check-circle', 13) }} Approved</span>
+            {% else %}<span class="badge badge-rejected">{{ icon('x-circle', 13) }} Rejected</span>{% endif %}
+          </td>
+          <td>{{ r.decided_at|bkk if r.decided_at else "-" }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </details>
+  {% endif %}
+  {% else %}
+  <p>You have not requested a transcript verifiable credential for this degree yet.</p>
+  <form method="post" action="/student/request">
+    <input type="hidden" name="degree_id" value="{{ degree.degreeId }}">
+    <button type="submit" class="btn">Request this transcript VC</button>
+  </form>
+  {% endif %}
+
+  <h3 class="section-heading">{{ icon('file-text', 15) }} Official record (registrar source)</h3>
+  <details>
+    <summary class="history-toggle">{{ icon('list', 13) }} Compare against your transcript VC ({{ degree.courses|length }} semester{{ "s" if degree.courses|length != 1 }})</summary>
+    {% for term in degree.courses %}
+    <table style="margin-top:0.75rem;">
+      <caption class="subtitle" style="text-align:left;caption-side:top;padding-bottom:0.25rem;">{{ term.term }}</caption>
+      <thead>
+        <tr><th>Course</th><th>Title</th><th>Credits</th><th>Grade</th></tr>
+      </thead>
+      <tbody>
+        {% for c in term.courses %}
+        <tr>
+          <td><code>{{ c.no }}</code></td>
+          <td>{{ c.title }}</td>
+          <td>{{ c.credits }}</td>
+          <td>{{ c.grade }}</td>
+        </tr>
+        {% endfor %}
+        <tr>
+          <td colspan="2" class="subtitle">Semester total</td>
+          <td>{{ term.credits }}</td>
+          <td class="subtitle">GPA {{ term.gpa }} · Cum. {{ term.cumGpa }}</td>
+        </tr>
+      </tbody>
+    </table>
+    {% endfor %}
+  </details>
+
+  <h3 class="section-heading">{{ icon('shield-check', 15) }} Transcript VCs</h3>
+  {% if transcripts %}
+  <table>
+    <thead>
+      <tr>
+        <th>Credential</th>
+        <th>Issued</th>
+        <th>Status</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for vc in transcripts %}
+      <tr>
+        <td><code class="credential-id">{{ vc.credentialId.split('/')[-1] }}</code></td>
+        <td>{{ vc.issueDate|bkk }}</td>
+        <td>
+          {% if vc.revoked %}
+          <span class="badge badge-rejected">{{ icon('x-circle', 13) }} Revoked</span>
+          {% else %}
+          <span class="badge badge-approved">{{ icon('check-circle', 13) }} Active</span>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="subtitle" style="margin:0;">No transcript VCs issued yet.</p>
+  {% endif %}
+
+  {% if claim_panel and view.has_wallet_access %}
+  <h3 class="section-heading">{{ icon('key', 15) }} {{ "Claim" if view.needs_claim else "Access" }} your {{ degree.level }} credential</h3>
+  {% if view.needs_claim %}
+  <p>Open Inji Web, sign in with the Keycloak account below, and download your AIT Transcript VC for this degree.</p>
+  {% else %}
+  <p class="subtitle">Already claimed. See the active credential above. Use these credentials again if you need to reopen Inji Web (new device, cleared browser data, etc.).</p>
+  {% endif %}
+  <dl class="info-grid">
+    <dt>{{ icon('key', 14) }} Keycloak username</dt>
+    <dd><code>{{ claim_panel.keycloak_username }}</code></dd>
+    <dt>{{ icon('key', 14) }} Password</dt>
+    <dd><code>{{ claim_panel.keycloak_password }}</code></dd>
+  </dl>
+  <p>
+    <a class="btn" href="{{ claim_panel.inji_web_url }}" target="_blank" rel="noopener">{{ icon('external-link', 14) }} Open Inji Web</a>
+    <a class="btn btn-secondary" href="{{ claim_panel.inji_verify_url }}" target="_blank" rel="noopener" style="margin-left:0.5rem;">{{ icon('external-link', 14) }} Open Inji Verify</a>
+  </p>
+  {% if view.needs_claim %}
+  <p class="subtitle" style="margin-bottom:0;">After claiming, present your credential in Inji Verify to complete the demo journey.</p>
+  {% endif %}
+  {% endif %}
+</details>
+{% endfor %}
+{% endblock %}

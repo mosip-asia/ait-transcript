@@ -1,0 +1,53 @@
+{
+  "@context": {
+    "@version": 1.1,
+    "@protected": true,
+    "ait": "https://ait.example/transcript#",
+    "AitTranscriptCredential": {
+      "@id": "ait:AitTranscriptCredential",
+      "@context": {
+        "@version": 1.1,
+        "@protected": true,
+        "id": "@id",
+        "type": "@type",
+        "fullName": "ait:fullName",
+        "dateOfBirth": {
+          "@id": "ait:dateOfBirth",
+          "@type": "http://www.w3.org/2001/XMLSchema#date"
+        },
+        "country": "ait:country",
+        "registrationNo": "ait:registrationNo",
+        "previousDegree": "ait:previousDegree",
+        "yearAwarded": "ait:yearAwarded",
+        "dateAdmitted": {
+          "@id": "ait:dateAdmitted",
+          "@type": "http://www.w3.org/2001/XMLSchema#date"
+        },
+        "option": "ait:option",
+        "degreeAwarded": "ait:degreeAwarded",
+        "dateGraduation": {
+          "@id": "ait:dateGraduation",
+          "@type": "http://www.w3.org/2001/XMLSchema#date"
+        },
+        "faculty": "ait:faculty",
+        "academicProgram": "ait:academicProgram",
+        "areaOfSpecialization": "ait:areaOfSpecialization",
+        "notes": "ait:notes",
+        "issueDate": {
+          "@id": "ait:issueDate",
+          "@type": "http://www.w3.org/2001/XMLSchema#date"
+        },
+        "courses": "ait:courses",
+        "courseTableHtml": "ait:courseTableHtml",
+        "courseList": "ait:courseList",
+        "thesisTitle": "ait:thesisTitle",
+        "thesisGrade": "ait:thesisGrade",
+        "programCommittee": "ait:programCommittee",
+        "courseworkCredits": "ait:courseworkCredits",
+        "thesisCredits": "ait:thesisCredits",
+        "totalCredits": "ait:totalCredits",
+        "thesisExamination": "ait:thesisExamination"
+      }
+    }
+  }
+}

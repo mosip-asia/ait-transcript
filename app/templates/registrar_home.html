@@ -1,0 +1,185 @@
+{% extends "base.html" %}
+{% from "_macros.html" import journey_diagram, icon %}
+{% block title %}Registrar | AIT Transcript Demo{% endblock %}
+{% block content %}
+<p class="portal-tag">Registrar portal</p>
+{{ journey_diagram(["Review\nrequests", "Approve or\nreject", "Student\nclaims VC", "Manage /\nrevoke VCs"]) }}
+<div class="page-header">
+  {{ icon('clipboard-list', 28) }}
+  <h1>Transcript VC requests</h1>
+</div>
+<p class="subtitle">Approve or reject pending requests. Reload the student tab after deciding.</p>
+
+{% if certify_error %}
+<p class="error">Could not reach Certify: {{ certify_error }}</p>
+{% endif %}
+{% if action_error %}
+<p class="error">{{ action_error }}</p>
+{% endif %}
+{% if notice %}
+<div class="toast" id="notice-toast">{{ icon('clock', 14) }} {{ notice }}</div>
+<script>
+  (function () {
+    var toast = document.getElementById('notice-toast');
+    setTimeout(function () { toast.remove(); }, 5000);
+    if (window.history && history.replaceState) {
+      var url = new URL(window.location.href);
+      url.searchParams.delete('notice');
+      history.replaceState(null, '', url);
+    }
+  })();
+</script>
+{% endif %}
+
+<div class="card">
+  <h2 class="section-heading">{{ icon('clock', 15) }} Pending ({{ pending|length }})</h2>
+  {% if pending %}
+  <table>
+    <thead>
+      <tr>
+        <th>Student</th>
+        <th>Requesting</th>
+        <th>Requested</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in pending %}
+      {% set s = student_by_id.get(row.student_id) %}
+      {% set d = degree_by_id.get((row.student_id, row.degree_id)) %}
+      <tr>
+        <td>{{ s.fullName if s else row.student_id }}<br><span class="subtitle">{{ row.student_id }}</span></td>
+        <td>{{ (d.level + ": " + d.academicProgram) if d else row.degree_id }}</td>
+        <td>{{ row.created_at|bkk }}</td>
+        <td class="actions">
+          <form method="post" action="/registrar/requests/{{ row.student_id }}/{{ row.degree_id }}/approve">
+            <button type="submit" class="btn btn-small">{{ icon('check-circle', 13) }} Approve</button>
+          </form>
+          <form method="post" action="/registrar/requests/{{ row.student_id }}/{{ row.degree_id }}/reject">
+            <button type="submit" class="btn btn-small btn-danger">{{ icon('x-circle', 13) }} Reject</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="subtitle" style="margin:0;">No pending requests.</p>
+  {% endif %}
+</div>
+
+<div class="card">
+  <h2 class="section-heading">{{ icon('shield-check', 15) }} Student transcripts</h2>
+  <p class="subtitle" style="margin-top:0;">A revoke can take up to a minute to show here. Certify batches status-list updates.</p>
+  {% for student_id, group in student_degree_rows|groupby('student.id') %}
+  {% set group = group|list %}
+  {% set s = group[0].student %}
+  <details class="card" style="margin-bottom:0.75rem;">
+    <summary>{{ icon('user', 16) }} {{ s.displayName }} <span class="subtitle">{{ s.id }}</span></summary>
+    {% for row in group %}
+    {% set degree = row.degree %}
+    {% set vcs = row.transcripts %}
+    {% set active_vc = row.active_vc %}
+    <details style="padding:0.75rem 0 0.75rem 1.25rem;border-left:2px solid var(--border);">
+      <summary><strong>{{ icon('cap', 15) }} {{ degree.level }}: {{ degree.academicProgram }}</strong></summary>
+      {% set req = row.request %}
+      {% set awaiting_claim = req and req.status == 'approved' and not vcs %}
+      {% set pending_request = req and req.status == 'pending' %}
+      <div style="margin-top:0.75rem;">
+      {% if vcs %}
+      <table>
+        <thead>
+          <tr>
+            <th>Credential</th>
+            <th>Issued</th>
+            <th>Status</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for vc in vcs %}
+          <tr>
+            <td><code class="credential-id">{{ vc.credentialId.split('/')[-1] }}</code></td>
+            <td>{{ vc.issueDate|bkk }}</td>
+            <td>
+              {% if vc.revoked %}
+              <span class="badge badge-rejected">{{ icon('x-circle', 13) }} Revoked</span>
+              {% else %}
+              <span class="badge badge-approved">{{ icon('check-circle', 13) }} Active</span>
+              {% endif %}
+            </td>
+            <td class="actions">
+              {% if not vc.revoked and vc.revocable and vc.revoke_pending %}
+              <button type="button" class="btn btn-small btn-danger" disabled title="Revoke submitted, waiting on Certify's status-list batch job, can take up to a minute">{{ icon('clock', 13) }} Revoking…</button>
+              {% elif not vc.revoked and vc.revocable %}
+              <form method="post" action="/registrar/students/{{ s.id }}/{{ degree.degreeId }}/transcripts/revoke"
+                    onsubmit="if (!confirm('Revoke this transcript VC for {{ s.fullName }} ({{ degree.level }}: {{ degree.academicProgram }})? This cannot be undone, and can take up to a minute to show as Revoked here.')) return false;
+                              var btn = this.querySelector('button'); btn.disabled = true; btn.textContent = 'Revoking…';">
+                <input type="hidden" name="credential_id" value="{{ vc.credentialId }}">
+                <button type="submit" class="btn btn-small btn-danger">{{ icon('trash', 13) }} Revoke</button>
+              </form>
+              {% elif not vc.revoked %}
+              <span class="subtitle">not revocable (issued before revocation was enabled)</span>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      {% if awaiting_claim %}
+      <p class="subtitle" style="margin:0.5rem 0;">No transcript VCs issued yet. Approved, but nothing appears here until the student actually claims it in Inji Web. Approving again won't call Certify or speed that up.</p>
+      {% else %}
+      <p class="subtitle" style="margin:0.5rem 0;">No transcript VCs issued yet.</p>
+      {% endif %}
+      {% endif %}
+      {% if pending_request %}
+      <p class="subtitle" style="margin:0.5rem 0 0;">A request is already pending. Approve or reject it above.</p>
+      {% elif not awaiting_claim and not active_vc %}
+      <form method="post" action="/registrar/students/{{ s.id }}/{{ degree.degreeId }}/reissue">
+        <button type="submit" class="btn btn-small">{{ icon('plus-circle', 13) }} Issue without request</button>
+      </form>
+      {% endif %}
+      </div>
+    </details>
+    {% endfor %}
+  </details>
+  {% endfor %}
+</div>
+
+<details class="card">
+  <summary>{{ icon('list', 15) }} Decision log ({{ decided|length }})</summary>
+  {% if decided %}
+  <table>
+    <thead>
+      <tr>
+        <th>Student</th>
+        <th>Degree</th>
+        <th>Status</th>
+        <th>Decided</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in decided %}
+      {% set s = student_by_id.get(row.student_id) %}
+      {% set d = degree_by_id.get((row.student_id, row.degree_id)) %}
+      <tr>
+        <td>{{ s.fullName if s else row.student_id }}</td>
+        <td>{{ (d.level + ": " + d.academicProgram) if d else row.degree_id }}</td>
+        <td>
+          {% if row.status == 'approved' %}
+          <span class="badge badge-approved">{{ icon('check-circle', 13) }} Approved</span>
+          {% else %}
+          <span class="badge badge-rejected">{{ icon('x-circle', 13) }} Rejected</span>
+          {% endif %}
+        </td>
+        <td>{{ row.decided_at|bkk }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="subtitle" style="margin:0;">No decisions yet.</p>
+  {% endif %}
+</details>
+{% endblock %}

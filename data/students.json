@@ -1,0 +1,391 @@
+{
+  "registrars": [
+    {
+      "id": "registrar-001",
+      "role": "registrar",
+      "displayName": "Dr. Ananya Suksawat, Academic Registrar"
+    }
+  ],
+  "students": [
+    {
+      "id": "ait-2026-0001",
+      "role": "student",
+      "displayName": "Nara Wattanakul (M.Eng + Ph.D. Computer Science)",
+      "fullName": "Nara Wattanakul",
+      "dateOfBirth": "2000-03-14",
+      "country": "Thailand",
+      "degrees": [
+        {
+          "degreeId": "meng-cs",
+          "level": "Masters",
+          "keycloakId": "ait-2026-0001",
+          "registrationNo": "st125001",
+          "previousDegree": "B.Eng Computer Engineering, Kasetsart University",
+          "yearAwarded": "2023",
+          "dateAdmitted": "2024-08-19",
+          "option": "Thesis",
+          "degreeAwarded": "Master of Engineering",
+          "dateGraduation": "2026-08-31",
+          "faculty": "School of Engineering and Technology",
+          "academicProgram": "M.Eng Computer Science",
+          "areaOfSpecialization": "Distributed Systems",
+          "notes": "-",
+          "issueDate": "2026-09-17",
+          "thesisTitle": "Verifiable Credential Issuance for Federated Academic Records",
+          "thesisGrade": "A",
+          "programCommittee": "Prof. Kittipong Wongsathan (Chair)\nDr. Nathas Tirawattanakul\nDr. Priya Ramaswamy",
+          "courseworkCredits": "27.0",
+          "thesisCredits": "22.0",
+          "totalCredits": "49.0",
+          "thesisExamination": "Passed",
+          "courses": [
+            {
+              "term": "August Semester 2024",
+              "courses": [
+                { "no": "CS601", "title": "Advanced Algorithms", "lab": "0", "lec": "45", "credits": "3", "grade": "A" },
+                { "no": "CS602", "title": "Machine Learning", "lab": "45", "lec": "30", "credits": "3", "grade": "A-" },
+                { "no": "CS603", "title": "Distributed Systems", "lab": "45", "lec": "30", "credits": "3", "grade": "B+" }
+              ],
+              "credits": "9",
+              "gpa": "3.67",
+              "cumGpa": "3.67"
+            },
+            {
+              "term": "January Semester 2025",
+              "courses": [
+                { "no": "CS604", "title": "Computer Vision", "lab": "45", "lec": "30", "credits": "3", "grade": "A" },
+                { "no": "CS605", "title": "Cryptography and Network Security", "lab": "0", "lec": "45", "credits": "3", "grade": "A" },
+                { "no": "CS606", "title": "Cloud Computing", "lab": "45", "lec": "30", "credits": "3", "grade": "A-" }
+              ],
+              "credits": "9",
+              "gpa": "3.89",
+              "cumGpa": "3.78"
+            }
+          ]
+        },
+        {
+          "degreeId": "phd-cs",
+          "level": "PhD",
+          "keycloakId": "ait-2026-0001-phd",
+          "registrationNo": "st126001",
+          "previousDegree": "Master of Engineering in Computer Science, Asian Institute of Technology",
+          "yearAwarded": "2026",
+          "dateAdmitted": "2026-08-19",
+          "option": "Thesis",
+          "degreeAwarded": "Doctor of Philosophy",
+          "dateGraduation": "2030-08-31",
+          "faculty": "School of Engineering and Technology",
+          "academicProgram": "Ph.D. Computer Science",
+          "areaOfSpecialization": "Federated Systems and Verifiable Credentials",
+          "notes": "-",
+          "issueDate": "2026-09-17",
+          "thesisTitle": "(in progress)",
+          "thesisGrade": "-",
+          "programCommittee": "Prof. Kittipong Wongsathan (Chair)\nDr. Priya Ramaswamy\nDr. Nathas Tirawattanakul",
+          "courseworkCredits": "12.0",
+          "thesisCredits": "0.0",
+          "totalCredits": "12.0",
+          "thesisExamination": "Not yet scheduled",
+          "courses": [
+            {
+              "term": "August Semester 2026",
+              "courses": [
+                { "no": "CS701", "title": "Advanced Distributed Systems", "lab": "0", "lec": "45", "credits": "3", "grade": "A" },
+                { "no": "CS702", "title": "Research Methods in Computer Science", "lab": "0", "lec": "30", "credits": "3", "grade": "A-" }
+              ],
+              "credits": "6",
+              "gpa": "3.83",
+              "cumGpa": "3.83"
+            },
+            {
+              "term": "January Semester 2027",
+              "courses": [
+                { "no": "CS703", "title": "Formal Verification", "lab": "0", "lec": "45", "credits": "3", "grade": "A" },
+                { "no": "CS704", "title": "Selected Topics in Trust and Identity", "lab": "0", "lec": "30", "credits": "3", "grade": "A" }
+              ],
+              "credits": "6",
+              "gpa": "4.00",
+              "cumGpa": "3.92"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ait-2026-0002",
+      "role": "student",
+      "displayName": "Alex Tester (M.Eng Structural Engineering)",
+      "fullName": "Alex Tester",
+      "dateOfBirth": "1999-11-02",
+      "country": "United States",
+      "degrees": [
+        {
+          "degreeId": "meng-struct",
+          "level": "Masters",
+          "keycloakId": "ait-2026-0002",
+          "registrationNo": "st125002",
+          "previousDegree": "B.Eng Civil Engineering, Purdue University",
+          "yearAwarded": "2022",
+          "dateAdmitted": "2024-08-19",
+          "option": "Non-Thesis",
+          "degreeAwarded": "Master of Engineering",
+          "dateGraduation": "2026-08-31",
+          "faculty": "School of Engineering and Technology",
+          "academicProgram": "M.Eng Structural Engineering",
+          "areaOfSpecialization": "Earthquake Engineering",
+          "notes": "-",
+          "issueDate": "2026-09-17",
+          "thesisTitle": "N/A (Non-Thesis Option)",
+          "thesisGrade": "N/A",
+          "programCommittee": "Prof. Somchai Boonrat (Chair)\nDr. Nathas Tirawattanakul",
+          "courseworkCredits": "36.0",
+          "thesisCredits": "0.0",
+          "totalCredits": "36.0",
+          "thesisExamination": "N/A",
+          "courses": [
+            {
+              "term": "August Semester 2024",
+              "courses": [
+                { "no": "CE501", "title": "Structural Analysis", "lab": "0", "lec": "45", "credits": "3", "grade": "A-" },
+                { "no": "CE502", "title": "Finite Element Methods", "lab": "45", "lec": "30", "credits": "3", "grade": "B+" },
+                { "no": "CE503", "title": "Earthquake Engineering", "lab": "0", "lec": "45", "credits": "3", "grade": "A" }
+              ],
+              "credits": "9",
+              "gpa": "3.56",
+              "cumGpa": "3.56"
+            },
+            {
+              "term": "January Semester 2025",
+              "courses": [
+                { "no": "CE504", "title": "Bridge Design", "lab": "45", "lec": "30", "credits": "3", "grade": "B+" },
+                { "no": "CE505", "title": "Steel Structure Design", "lab": "0", "lec": "45", "credits": "3", "grade": "A-" },
+                { "no": "CE506", "title": "Geotechnical Earthquake Engineering", "lab": "0", "lec": "45", "credits": "3", "grade": "B+" }
+              ],
+              "credits": "9",
+              "gpa": "3.44",
+              "cumGpa": "3.50"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ait-2026-0003",
+      "role": "student",
+      "displayName": "Priya Sharma (MBA)",
+      "fullName": "Priya Sharma",
+      "dateOfBirth": "2001-06-21",
+      "country": "India",
+      "degrees": [
+        {
+          "degreeId": "mba",
+          "level": "Masters",
+          "keycloakId": "ait-2026-0003",
+          "registrationNo": "st125003",
+          "previousDegree": "B.Com, University of Delhi",
+          "yearAwarded": "2024",
+          "dateAdmitted": "2025-01-13",
+          "option": "Non-Thesis",
+          "degreeAwarded": "Master of Business Administration",
+          "dateGraduation": "2026-12-31",
+          "faculty": "School of Management",
+          "academicProgram": "MBA",
+          "areaOfSpecialization": "Marketing Analytics",
+          "notes": "-",
+          "issueDate": "2026-09-17",
+          "thesisTitle": "N/A (Non-Thesis Option)",
+          "thesisGrade": "N/A",
+          "programCommittee": "Prof. Ratana Chaiyasit (Chair)\nDr. Warit Aksornsri",
+          "courseworkCredits": "36.0",
+          "thesisCredits": "0.0",
+          "totalCredits": "36.0",
+          "thesisExamination": "N/A",
+          "courses": [
+            {
+              "term": "January Semester 2025",
+              "courses": [
+                { "no": "MBA501", "title": "Corporate Finance", "lab": "0", "lec": "45", "credits": "3", "grade": "A" },
+                { "no": "MBA502", "title": "Strategic Management", "lab": "0", "lec": "45", "credits": "3", "grade": "A" },
+                { "no": "MBA503", "title": "Marketing Analytics", "lab": "15", "lec": "30", "credits": "3", "grade": "A-" }
+              ],
+              "credits": "9",
+              "gpa": "3.89",
+              "cumGpa": "3.89"
+            },
+            {
+              "term": "August Semester 2025",
+              "courses": [
+                { "no": "MBA504", "title": "Operations Management", "lab": "0", "lec": "45", "credits": "3", "grade": "A" },
+                { "no": "MBA505", "title": "Organizational Behavior", "lab": "0", "lec": "45", "credits": "3", "grade": "A-" },
+                { "no": "MBA506", "title": "Digital Marketing", "lab": "15", "lec": "30", "credits": "3", "grade": "A" }
+              ],
+              "credits": "9",
+              "gpa": "3.89",
+              "cumGpa": "3.89"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ait-2026-0004",
+      "role": "student",
+      "displayName": "Kenji Watanabe (Ph.D. Environmental Engineering)",
+      "fullName": "Kenji Watanabe",
+      "dateOfBirth": "2000-09-08",
+      "country": "Japan",
+      "degrees": [
+        {
+          "degreeId": "phd-envman",
+          "level": "PhD",
+          "keycloakId": "ait-2026-0004",
+          "registrationNo": "st125004",
+          "previousDegree": "B.Eng Environmental Engineering, Tohoku University",
+          "yearAwarded": "2023",
+          "dateAdmitted": "2024-08-19",
+          "option": "Thesis",
+          "degreeAwarded": "Doctor of Philosophy",
+          "dateGraduation": "2026-08-31",
+          "faculty": "School of Environment, Resources and Development",
+          "academicProgram": "Ph.D. Environmental Engineering and Management",
+          "areaOfSpecialization": "Water and Wastewater Treatment",
+          "notes": "-",
+          "issueDate": "2026-09-17",
+          "thesisTitle": "Low-Cost Wastewater Treatment for Rural Southeast Asia",
+          "thesisGrade": "A-",
+          "programCommittee": "Prof. Malee Srisuk (Chair)\nDr. Chalermchai Thongwattana",
+          "courseworkCredits": "24.0",
+          "thesisCredits": "22.0",
+          "totalCredits": "46.0",
+          "thesisExamination": "Passed",
+          "courses": [
+            {
+              "term": "August Semester 2024",
+              "courses": [
+                { "no": "EV601", "title": "Water Supply Engineering", "lab": "45", "lec": "30", "credits": "3", "grade": "A" },
+                { "no": "EV602", "title": "Wastewater Treatment", "lab": "45", "lec": "30", "credits": "3", "grade": "A" },
+                { "no": "EV603", "title": "Environmental Impact Assessment", "lab": "0", "lec": "45", "credits": "3", "grade": "B+" }
+              ],
+              "credits": "9",
+              "gpa": "3.78",
+              "cumGpa": "3.78"
+            },
+            {
+              "term": "January Semester 2025",
+              "courses": [
+                { "no": "EV604", "title": "Solid Waste Management", "lab": "0", "lec": "45", "credits": "3", "grade": "A-" },
+                { "no": "EV605", "title": "Air Pollution Control", "lab": "45", "lec": "30", "credits": "3", "grade": "B+" }
+              ],
+              "credits": "6",
+              "gpa": "3.50",
+              "cumGpa": "3.67"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ait-2026-0005",
+      "role": "student",
+      "displayName": "Fatima Al-Rashid (M.Eng + Ph.D. Geoinformatics)",
+      "fullName": "Fatima Al-Rashid",
+      "dateOfBirth": "2001-01-27",
+      "country": "Jordan",
+      "degrees": [
+        {
+          "degreeId": "meng-geo",
+          "level": "Masters",
+          "keycloakId": "ait-2026-0005",
+          "registrationNo": "st125005",
+          "previousDegree": "B.Sc Surveying Engineering, University of Jordan",
+          "yearAwarded": "2024",
+          "dateAdmitted": "2025-01-13",
+          "option": "Thesis",
+          "degreeAwarded": "Master of Engineering",
+          "dateGraduation": "2026-08-31",
+          "faculty": "School of Engineering and Technology",
+          "academicProgram": "M.Eng Geoinformatics",
+          "areaOfSpecialization": "Remote Sensing",
+          "notes": "-",
+          "issueDate": "2026-09-17",
+          "thesisTitle": "Remote Sensing-Based Flood Mapping for Early Warning Systems in the Lower Mekong Basin",
+          "thesisGrade": "A",
+          "programCommittee": "Prof. Kittipong Wongsathan (Chair)\nDr. Malee Srisuk",
+          "courseworkCredits": "24.0",
+          "thesisCredits": "22.0",
+          "totalCredits": "46.0",
+          "thesisExamination": "Passed",
+          "courses": [
+            {
+              "term": "January Semester 2025",
+              "courses": [
+                { "no": "GI501", "title": "Principles of Remote Sensing", "lab": "45", "lec": "30", "credits": "3", "grade": "A" },
+                { "no": "GI502", "title": "Geographic Information Systems", "lab": "45", "lec": "30", "credits": "3", "grade": "A-" },
+                { "no": "GI503", "title": "Digital Image Processing", "lab": "45", "lec": "30", "credits": "3", "grade": "B+" }
+              ],
+              "credits": "9",
+              "gpa": "3.56",
+              "cumGpa": "3.56"
+            },
+            {
+              "term": "August Semester 2025",
+              "courses": [
+                { "no": "GI504", "title": "Spatial Database Systems", "lab": "45", "lec": "30", "credits": "3", "grade": "A" },
+                { "no": "GI505", "title": "UAV Photogrammetry", "lab": "45", "lec": "15", "credits": "3", "grade": "A" }
+              ],
+              "credits": "6",
+              "gpa": "4.00",
+              "cumGpa": "3.73"
+            }
+          ]
+        },
+        {
+          "degreeId": "phd-geo",
+          "level": "PhD",
+          "keycloakId": "ait-2026-0005-phd",
+          "registrationNo": "st126005",
+          "previousDegree": "Master of Engineering in Geoinformatics, Asian Institute of Technology",
+          "yearAwarded": "2026",
+          "dateAdmitted": "2026-08-19",
+          "option": "Thesis",
+          "degreeAwarded": "Doctor of Philosophy",
+          "dateGraduation": "2030-08-31",
+          "faculty": "School of Engineering and Technology",
+          "academicProgram": "Ph.D. Geoinformatics",
+          "areaOfSpecialization": "Remote Sensing and Disaster Risk Modeling",
+          "notes": "-",
+          "issueDate": "2026-09-17",
+          "thesisTitle": "(in progress)",
+          "thesisGrade": "-",
+          "programCommittee": "Prof. Kittipong Wongsathan (Chair)\nDr. Malee Srisuk",
+          "courseworkCredits": "12.0",
+          "thesisCredits": "0.0",
+          "totalCredits": "12.0",
+          "thesisExamination": "Not yet scheduled",
+          "courses": [
+            {
+              "term": "August Semester 2026",
+              "courses": [
+                { "no": "GI701", "title": "Advanced Remote Sensing Analytics", "lab": "45", "lec": "30", "credits": "3", "grade": "A" },
+                { "no": "GI702", "title": "Research Methods in Geoinformatics", "lab": "0", "lec": "30", "credits": "3", "grade": "A-" }
+              ],
+              "credits": "6",
+              "gpa": "3.83",
+              "cumGpa": "3.83"
+            },
+            {
+              "term": "January Semester 2027",
+              "courses": [
+                { "no": "GI703", "title": "Disaster Risk Modeling", "lab": "45", "lec": "30", "credits": "3", "grade": "A" },
+                { "no": "GI704", "title": "Selected Topics in Geospatial AI", "lab": "0", "lec": "30", "credits": "3", "grade": "A" }
+              ],
+              "credits": "6",
+              "gpa": "4.00",
+              "cumGpa": "3.92"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

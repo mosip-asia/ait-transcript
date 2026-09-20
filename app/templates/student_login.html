@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}Student login | AIT Transcript Demo{% endblock %}
+{% block content %}
+<p class="portal-tag">Student portal</p>
+<h1>Sign in as a student</h1>
+<p class="subtitle">Choose a demo student persona to request your transcript verifiable credential.</p>
+{% if error %}
+<p class="error">{{ error }}</p>
+{% endif %}
+<div class="card">
+  <form method="post" action="/student/login">
+    <label for="persona_id">Student persona</label>
+    <select name="persona_id" id="persona_id" required>
+      <option value="">Select</option>
+      {% for s in students %}
+      <option value="{{ s.id }}">{{ s.displayName }}</option>
+      {% endfor %}
+    </select>
+    <button type="submit" class="btn">Continue</button>
+  </form>
+</div>
+{% endblock %}

@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>$titleName</title>
+  <style>
+    @page { size: A4 portrait; margin: 10mm; }
+    body {
+      margin: 0;
+      font-family: "Arial Narrow", Arial, Helvetica, sans-serif;
+      color: #000;
+      font-size: 10px;
+      position: relative;
+    }
+    table.grid { width: 100%; border-collapse: collapse; }
+    table.grid td { border: 1px solid #000; padding: 3px 5px; vertical-align: top; }
+    .label { font-weight: 700; font-size: 9px; }
+    /* Flush under student grid; table height is set in courseTableHtml (iText ignores % grow). */
+    .courses-slot { margin: 0; padding: 0; }
+    .sheet { position: relative; z-index: 1; }
+  </style>
+</head>
+<body>
+#macro(claimValue $claimName)
+#set($__claim = $rowProperties.get($claimName))
+#if($__claim && $__claim.size() > 0)
+#foreach($__entry in $__claim.entrySet())$__entry.value#break#end
+#end
+#end
+<div class="sheet">
+  <!-- Equal side columns so the title is centered on the page. -->
+  <table style="width:100%; margin-bottom: 4px; border-collapse: collapse; table-layout: fixed;">
+    <tr>
+      <td style="width:88px; vertical-align: middle;">
+        #if ($logoUrl)
+        <img src="$logoUrl" alt="AIT logo" style="height:56px; width: auto;" />
+        #end
+      </td>
+      <td style="text-align:center; vertical-align: middle;">
+        <div style="font-size:14px; font-weight:700; letter-spacing: 0.02em;">ASIAN INSTITUTE OF TECHNOLOGY</div>
+        <div style="font-size:12px; font-weight:700; margin-top: 2px;">OFFICIAL TRANSCRIPT</div>
+      </td>
+      <td style="width:88px; text-align:right; vertical-align: top; font-size: 10px;">
+        Issue Date:<br/>#claimValue("issueDate")
+      </td>
+    </tr>
+  </table>
+
+  <table class="grid" style="margin-bottom: 0;">
+    <tr>
+      <td colspan="2"><span class="label">Name</span><br/>#claimValue("fullName")</td>
+      <td colspan="2"><span class="label">Previous Degree(s)/Institution</span><br/>#claimValue("previousDegree")</td>
+      <td><span class="label">Year Awarded</span><br/>#claimValue("yearAwarded")</td>
+    </tr>
+    <tr>
+      <td><span class="label">Date of Birth</span><br/>#claimValue("dateOfBirth")</td>
+      <td><span class="label">Country</span><br/>#claimValue("country")</td>
+      <td colspan="2"><span class="label">Date Admitted to AIT</span><br/>#claimValue("dateAdmitted")</td>
+      <td><span class="label">Option</span><br/>#claimValue("option")</td>
+    </tr>
+    <tr>
+      <td colspan="2"><span class="label">Registration No.</span><br/>#claimValue("registrationNo")</td>
+      <td colspan="3"><span class="label">Degree Awarded</span><br/>#claimValue("degreeAwarded")</td>
+    </tr>
+    <tr>
+      <td colspan="3"><span class="label">Faculty/School</span><br/>#claimValue("faculty")</td>
+      <td colspan="2"><span class="label">Date of Graduation / Completion</span><br/>#claimValue("dateGraduation")</td>
+    </tr>
+    <tr>
+      <td colspan="3"><span class="label">Academic Program</span><br/>#claimValue("academicProgram")</td>
+      <td colspan="2"><span class="label">Area of Specialization</span><br/>#claimValue("areaOfSpecialization")</td>
+    </tr>
+    <tr>
+      <td colspan="5"><span class="label">Notes</span><br/>#claimValue("notes")</td>
+    </tr>
+  </table>
+
+  <div class="courses-slot">
+    #claimValue("courseTableHtml")
+  </div>
+
+  <table class="grid" style="margin-top: 0;">
+    <tr>
+      <td><span class="label">Title of Thesis</span><br/>#claimValue("thesisTitle")</td>
+      <td style="width:25%;"><span class="label">Grade</span><br/>#claimValue("thesisGrade")</td>
+    </tr>
+    <tr>
+      <td colspan="2"><span class="label">Program Committee</span><br/>
+        <div style="white-space: pre-wrap;">#claimValue("programCommittee")</div>
+      </td>
+    </tr>
+  </table>
+
+  <div style="margin-top: 10px; text-align: center;">
+    <img src="data:image/png;base64,$qrCodeImage" alt="Verification QR code" style="width: 96px; height: 96px;" />
+  </div>
+</div>
+</body>
+</html>

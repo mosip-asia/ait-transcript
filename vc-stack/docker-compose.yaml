@@ -1,0 +1,250 @@
+services:
+  database:
+    image: 'postgres:15'
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+    volumes:
+      - ./certify_init.sql:/docker-entrypoint-initdb.d/certify_init.sql
+      - ./mimoto_init.sql:/docker-entrypoint-initdb.d/mimoto_init.sql
+      - ./verify_init.sql:/docker-entrypoint-initdb.d/verify_init.sql
+    networks:
+      - network
+    ports:
+      - "6440:5432"
+
+  certify:
+    image: injistack/inji-certify-with-plugins:0.14.0
+    user: root
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - 9090:8090
+    environment:
+      - container_user=mosip
+      - active_profile_env=default, csvdp-student
+      - SPRING_CONFIG_NAME=certify
+      - SPRING_CONFIG_LOCATION=/home/mosip/config/
+      - enable_certify_artifactory=false
+      - download_hsm_client=false
+      - mosip_certify_domain_url=${CERTIFY_PUBLIC_BASE_URL:-http://certify-nginx}
+      # Keycloak's --hostname-url=http://keycloak:8080 (see keycloak-server service) makes every
+      # token it issues carry iss=http://keycloak:8080/realms/inji, regardless of which URL the
+      # browser used to log in (that's rewritten separately by keycloak-nginx's sub_filter for
+      # localhost:9080). Certify's resource-server issuer-uri must match that iss exactly or JWT
+      # validation fails — so it uses the same KEYCLOAK_DOCKER_AUTH_SERVER as the authorization URL,
+      # not KEYCLOAK_PUBLIC_BASE_URL.
+      - MOSIP_CERTIFY_AUTHORIZATION_URL=${KEYCLOAK_DOCKER_AUTH_SERVER:-http://keycloak:8080}/realms/inji
+      - MOSIP_CERTIFY_AUTHN_ISSUER_URI=${KEYCLOAK_DOCKER_AUTH_SERVER:-http://keycloak:8080}/realms/inji
+      - MOSIP_CERTIFY_AUTHN_JWK_SET_URI=${KEYCLOAK_INTERNAL_BASE_URL:-http://host.docker.internal:9080}/realms/inji/protocol/openid-connect/certs
+      - MOSIP_CERTIFY_AUTHN_ALLOWED_AUDIENCES={ 'wallet-demo', 'http://certify-nginx:80/v1/certify/issuance/credential', 'http://certify-nginx/v1/certify/issuance/credential', '${CERTIFY_PUBLIC_BASE_URL:-http://certify-nginx}/v1/certify/issuance/credential' }
+    volumes:
+      - ./config/certify-default.properties:/home/mosip/config/certify-default.properties
+      - ./config/certify-csvdp-student.properties:/home/mosip/config/certify-csvdp-student.properties
+      - ./data/CERTIFY_PKCS12:/home/inji/CERTIFY_PKCS12
+      - ./config/student_identity_data.csv:/home/mosip/config/student_identity_data.csv
+      - ./config/vp_request_config.json:/home/mosip/config/vp_request_config.json
+    networks:
+      - network
+    depends_on:
+      - database
+
+  certify-nginx:
+    image: nginx:stable
+    ports:
+      - 9091:80
+    volumes:
+      - ./certify-nginx.conf:/etc/nginx/conf.d/default.conf
+      - ./config:/config/server:ro
+    networks:
+      - network
+    depends_on:
+      - certify
+    restart: unless-stopped
+
+  mimoto-service:
+    container_name: 'mimoto-service'
+    image: injistack/mimoto:0.21.0
+    user: root
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - '9099:8099'
+    environment:
+      - container_user=mosip
+      - active_profile_env=default
+      - SPRING_CONFIG_NAME=mimoto
+      - SPRING_CONFIG_LOCATION=/home/mosip/
+      - SPRING_CLOUD_BOOTSTRAP_LOCATION=/home/mosip/mimoto-bootstrap.properties
+      - oidc_p12_password=xy4gh6swa2i
+      - WALLET_BINDING_PARTNER_API_KEY=dummywalletbindingpartnerapikey
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://database:5432/inji_mimoto
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - GOOGLE_OAUTH_CLIENT_ID=clientId
+      - GOOGLE_OAUTH_CLIENT_SECRET=clientSecret
+      - SPRING_CLOUD_LOADBALANCER_ENABLED=false
+      - SPRING_CLOUD_DISCOVERY_ENABLED=false
+    networks:
+      - network
+    volumes:
+      - ./config/mimoto-default.properties:/home/mosip/mimoto-default.properties
+      - ./config/mimoto-bootstrap.properties:/home/mosip/mimoto-bootstrap.properties
+      - ./config/mimoto-issuers-config.json:/home/mosip/mimoto-issuers-config.json
+      - ./config/mimoto-trusted-verifiers.json:/home/mosip/mimoto-trusted-verifiers.json
+      - ./certs/oidckeystore.p12:/home/mosip/certs/oidckeystore.p12
+    depends_on:
+      - database
+      - certify-nginx
+    restart: unless-stopped
+
+  inji-web:
+    container_name: 'inji-web'
+    image: injistack/inji-web:0.16.0
+    ports:
+      - '4004:3004'
+    environment:
+      - DEFAULT_LANG=en
+      - MIMOTO_URL=http://localhost:4004/v1/mimoto
+    volumes:
+      - ./config/mimoto-default.properties:/home/mosip/mimoto-default.properties
+      - ./config/mimoto-issuers-config.json:/home/mosip/mimoto-issuers-config.json
+      - ./config/mimoto-trusted-verifiers.json:/home/mosip/mimoto-trusted-verifiers.json
+      - ./config/credential-template.html:/home/mosip/credential-template.html
+      - ./config/AITUniversity-ait-transcript-template.html:/home/mosip/AITUniversity-ait-transcript-template.html
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf
+    depends_on:
+      - mimoto-service
+    networks:
+      - network
+
+  keycloak-server:
+    container_name: keycloak-server
+    image: quay.io/keycloak/keycloak:24.0
+    command:
+      [
+        "start-dev",
+        "--import-realm",
+        "--hostname-strict=true",
+        "--hostname-url=${KEYCLOAK_DOCKER_AUTH_SERVER:-http://keycloak:8080}",
+        "--hostname-port=9080",
+        "--hostname-admin-url=${KEYCLOAK_PUBLIC_BASE_URL:-http://localhost:9080}",
+        "--proxy=edge",
+        "--proxy-headers=xforwarded",
+      ]
+    environment:
+      - KEYCLOAK_ADMIN=admin
+      - KEYCLOAK_ADMIN_PASSWORD=admin
+    volumes:
+      - ./config/keycloak-realm.json:/opt/keycloak/data/import/realm.json:ro
+    networks:
+      - network
+
+  keycloak:
+    container_name: keycloak
+    image: nginx:stable
+    ports:
+      - "9080:8080"
+    volumes:
+      - ./keycloak-nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - keycloak-server
+    restart: unless-stopped
+    networks:
+      - network
+
+  verify-service:
+    container_name: verify-service
+    image: injistack/inji-verify-service:0.17.0
+    user: root
+    ports:
+      - "9095:8080"
+    environment:
+      - active_profile_env=default
+      - DATABASE_HOST=database
+      - DATABASE_PORT=5432
+      - DATABASE_NAME=inji_verify
+      - DATABASE_SCHEMA=verify
+      - DATABASE_USERNAME=postgres
+      - DATABASE_PASSWORD=postgres
+      - INJI_VP_REQUEST_LONG_POLLING_TIMEOUT=55000
+      - INJI_VP_SUBMISSION_BASE_URL=${INJI_VERIFY_PUBLIC_BASE_URL:-http://localhost:9095}/v1/verify
+      - INJI_DID_VERIFY_URI=${INJI_VERIFY_DID_URI:-did:web:localhost%3A9095:v1:verify}
+      - INJI_DID_VERIFY_PUBLIC_KEY_URI=${INJI_VERIFY_DID_PUBLIC_KEY_URI:-did:web:localhost%3A9095:v1:verify#key-0}
+      - INJI_KEYSTORE_FILE_PASS=mosip
+      - INJI_VERIFY_REDIRECT_URI=${INJI_VERIFY_REDIRECT_URI:-http://localhost:4007}
+      - INJI_VERIFY_CLAIMS_WITH_META_DATA=_sd,_sd_alg,iss,cnf,sub,aud,exp,nbf,iat,cti
+    depends_on:
+      - database
+    networks:
+      - network
+
+  verify-ui:
+    container_name: verify-ui
+    image: injistack/inji-verify-ui:0.17.0
+    ports:
+      - "4007:8000"
+    environment:
+      - DEFAULT_TITLE=Inji Verify
+      - DEFAULT_LANG=en
+      - INTERNET_CONNECTIVITY_CHECK_ENDPOINT=https://dns.google/
+      - INTERNET_CONNECTIVITY_CHECK_TIMEOUT=10000
+      - OVP_QR_HEADER=INJI_OVP://payload=
+      - VERIFIABLE_CLAIMS_CONFIG_URL=/assets/config.json
+      - VP_SUBMISSION_SUPPORTED=false
+      - CLIENT_ID=inji-verify-ui
+      - CLIENT_ID_DID=${INJI_VERIFY_DID_URI:-did:web:localhost%3A9095:v1:verify}
+      - DISPLAY_TIMEOUT=120000
+      - VERIFY_SERVICE_API_URL=/v1/verify
+    volumes:
+      - ./config/verify-config.json:/usr/share/nginx/html/assets/config.json
+    depends_on:
+      - verify-service
+    networks:
+      - network
+
+  public-gateway:
+    container_name: public-gateway
+    image: nginx:stable
+    ports:
+      - "9098:80"
+    volumes:
+      - ./public-gateway-nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - mimoto-service
+      - certify-nginx
+      - keycloak
+      - verify-service
+    restart: unless-stopped
+    networks:
+      - network
+
+  demo-app:
+    container_name: demo-app
+    build:
+      context: ..
+      dockerfile: app/Dockerfile
+    ports:
+      - "4100:4100"
+    environment:
+      # Persisted via bind mount below (see README.md).
+      - AIT_DEMO_DB=/demo/.demo-state/demo_requests.db
+    volumes:
+      - ../app:/demo/app
+      - ../data:/demo/data
+      - ../.demo-state:/demo/.demo-state
+      - ../vc-stack/config:/demo/vc-stack/config
+    networks:
+      - network
+    # Server-to-server calls to Certify's ledger-search/credentials/status (registrar VC lifecycle);
+    # student-facing wallet/verify links are still browser-only deep links to localhost:4004/4007.
+
+networks:
+  network:
+    name: vc_stack_network
+    external: true
+
+volumes:
+  cache:
+    driver: local
+  postgres-data:

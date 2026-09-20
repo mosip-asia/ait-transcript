@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% from "_macros.html" import icon %}
+{% block title %}Registrar login | AIT Transcript Demo{% endblock %}
+{% block content %}
+<p class="portal-tag">Registrar portal</p>
+<div class="page-header">
+  {{ icon('clipboard-list', 28) }}
+  <h1>Sign in as registrar</h1>
+</div>
+<p class="subtitle">Review and approve student transcript VC requests.</p>
+{% if error %}
+<p class="error">{{ error }}</p>
+{% endif %}
+<div class="card">
+  <form method="post" action="/registrar/login">
+    <label for="persona_id">{{ icon('user', 14) }} Registrar persona</label>
+    <select name="persona_id" id="persona_id" required>
+      <option value="">Select</option>
+      {% for r in registrars %}
+      <option value="{{ r.id }}">{{ r.displayName }}</option>
+      {% endfor %}
+    </select>
+    <button type="submit" class="btn">Continue</button>
+  </form>
+</div>
+{% endblock %}

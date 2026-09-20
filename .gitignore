@@ -1,0 +1,20 @@
+__pycache__/
+*.pyc
+vc-stack/config/student_identity_data.csv
+vc-stack/.env
+vc-stack/certs/
+vc-stack/data/
+app/*.db
+.demo-state/*
+!.demo-state/.gitkeep
+.DS_Store
+.claude/
+.venv/
+venv/
+.env
+.pytest_cache/
+
+# local-only notes, not shared
+/AGENTS.md
+/PLAN.md
+/wiki/log.md

@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}AIT Transcript VC Demo{% endblock %}</title>
+  <style>
+    :root {
+      --bg: #f4f6f8;
+      --card: #fff;
+      --border: #d8dee4;
+      --text: #1a1f24;
+      --muted: #5c6570;
+      --accent: #0b5cab;
+      --accent-hover: #094a8f;
+      --danger: #b42318;
+      --ok: #0d7a3f;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+    }
+    .wrap { max-width: 900px; margin: 0 auto; padding: 2rem 1.25rem; }
+    h1 { font-size: 1.5rem; margin: 0 0 0.5rem; }
+    .subtitle { color: var(--muted); margin-bottom: 1.5rem; }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1.25rem 1.5rem;
+      margin-bottom: 1rem;
+    }
+    label { display: block; font-weight: 600; margin-bottom: 0.5rem; }
+    code { background: var(--bg); border: 1px solid var(--border); border-radius: 4px; padding: 0.15rem 0.4rem; }
+    select, button, .btn {
+      font: inherit;
+      padding: 0.5rem 0.75rem;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+    }
+    select { width: 100%; max-width: 100%; }
+    .btn {
+      display: inline-block;
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      cursor: pointer;
+      text-decoration: none;
+      margin-top: 0.75rem;
+    }
+    .btn:hover { background: var(--accent-hover); }
+    .btn-secondary { background: var(--muted); }
+    .btn-danger { background: var(--danger); }
+    .btn-ghost { background: var(--card); color: var(--muted); border: 1px solid var(--border); }
+    .btn-ghost:hover { background: var(--bg); color: var(--text); }
+    .btn-small { padding: 0.35rem 0.6rem; font-size: 0.9rem; margin-top: 0; }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .error { color: var(--danger); margin-bottom: 1rem; }
+    .toast {
+      position: fixed;
+      top: 1rem;
+      right: 1rem;
+      max-width: 320px;
+      background: var(--ok);
+      color: #fff;
+      padding: 0.75rem 1rem;
+      border-radius: 8px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+      font-size: 0.9rem;
+      z-index: 1000;
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+      animation: toast-in 0.2s ease, toast-out 0.3s ease 4.7s forwards;
+    }
+    @keyframes toast-in { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: none; } }
+    @keyframes toast-out { to { opacity: 0; transform: translateY(-8px); } }
+    .badge {
+      display: inline-block;
+      padding: 0.15rem 0.5rem;
+      border-radius: 4px;
+      font-size: 0.85rem;
+      font-weight: 600;
+    }
+    .badge-pending { background: #fff3cd; color: #856404; }
+    .badge-approved { background: #d4edda; color: var(--ok); }
+    .badge-rejected { background: #f8d7da; color: var(--danger); }
+    summary { cursor: pointer; list-style: none; }
+    summary::-webkit-details-marker { display: none; }
+    .card > summary {
+      font-size: 1.25rem;
+      font-weight: 700;
+    }
+    .card > summary .subtitle {
+      display: block;
+      font-size: 0.8rem;
+      font-weight: 400;
+      margin: 0.15rem 0 0;
+    }
+    .history-toggle {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      color: var(--muted);
+      font-size: 0.85rem;
+      font-weight: 600;
+    }
+    .history-toggle:hover { color: var(--text); }
+    .vc-status-row { display: flex; align-items: center; flex-wrap: wrap; gap: 0.5rem 0.75rem; margin: 0 0 0.75rem; }
+    .vc-status-row .subtitle { margin: 0; }
+    .credential-id { font-size: 0.75rem; word-break: break-all; }
+    dl { margin: 0; }
+    dt { font-weight: 600; color: var(--muted); font-size: 0.85rem; }
+    dd { margin: 0 0 0.75rem; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.95rem; }
+    th, td { text-align: left; padding: 0.5rem; border-bottom: 1px solid var(--border); }
+    .actions form { display: inline; }
+    .portal-tag { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); }
+    .icon { flex-shrink: 0; vertical-align: -0.15em; }
+    .badge { display: inline-flex; align-items: center; gap: 0.3rem; }
+    .btn { display: inline-flex; align-items: center; gap: 0.4rem; }
+    .page-header { display: flex; align-items: center; gap: 0.6rem; margin-bottom: 0.25rem; }
+    .page-header .icon { color: var(--accent); width: 20px; height: 20px; }
+    .page-header h1 { margin: 0; }
+    .section-heading {
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+      margin: 1.25rem 0 0.6rem;
+      padding-top: 0.9rem;
+      border-top: 1px solid var(--border);
+      font-size: 0.8rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--muted);
+    }
+    .section-heading .icon { color: var(--accent); }
+    .section-heading:first-child { border-top: none; padding-top: 0; margin-top: 0; }
+    .info-grid { display: grid; grid-template-columns: auto 1fr; column-gap: 0.75rem; row-gap: 0.4rem; align-items: baseline; margin: 0 0 0.5rem; }
+    .info-grid dt { display: flex; align-items: center; gap: 0.35rem; margin: 0; }
+    .info-grid dd { margin: 0; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    {% block content %}{% endblock %}
+  </div>
+</body>
+</html>
