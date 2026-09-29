@@ -541,15 +541,18 @@ validate() {
     || die "ait-transcript issuer metadata context mismatch: ${student_metadata_context:-<empty>}" 2
 
   if [[ "$MODE" == "b" ]]; then
-    local kc_iss expected_kc_iss auth_endpoint
+    local kc_iss expected_kc_iss auth_endpoint expected_auth_prefix
     kc_iss=$(curl -sf http://localhost:9080/realms/inji/.well-known/openid-configuration | jq -r '.issuer')
     expected_kc_iss="http://keycloak:8080/realms/inji"
     [[ "$kc_iss" == "$expected_kc_iss" ]] && ok "keycloak realm: $kc_iss (browser :9080, token aud via keycloak:8080)" || die "keycloak issuer wrong: $kc_iss (expected $expected_kc_iss)" 2
+    # The browser-facing Keycloak base: KEYCLOAK_PUBLIC_BASE_URL from .env on a
+    # public deploy, http://localhost:9080 locally (keycloak_expected_issuer).
+    expected_auth_prefix="$(keycloak_expected_issuer)/"
     auth_endpoint=$(curl -sS http://localhost:4004/v1/mimoto/issuers/AITUniversity/configuration | jq -r '.response.authorization_endpoint // empty')
     [[ -n "$auth_endpoint" ]] \
-      && [[ "$auth_endpoint" == http://localhost:9080/* ]] \
+      && [[ "$auth_endpoint" == "$expected_auth_prefix"* ]] \
       && ok "mimoto issuer configuration auth URL is browser-reachable ($auth_endpoint)" \
-      || die "mimoto authorization_endpoint must use http://localhost:9080 (got: ${auth_endpoint:-<empty>})" 2
+      || die "mimoto authorization_endpoint must start with $expected_auth_prefix (got: ${auth_endpoint:-<empty>})" 2
   fi
 
   # Final DID consistency check — every row in credential_config must match the live key.
