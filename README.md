@@ -124,11 +124,11 @@ The public demo runs at https://transcript-demo.ait-vc.dpi.ait.ac.th (Mon-Fri 08
 
 - **Deploy:** Actions → **Deploy** → Run workflow, then choose the branch or tag. The run deploys exactly that commit.
 - **How it works:**
-  1. The workflow logs in to the VM as `deploy`, with the key in secret `SSH_PRIVATE_KEY`; `SSH_KNOWN_HOSTS` pins the VM's host key.
+  1. The workflow logs in to the VM as `deploy`, with the key in secret `SSH_PRIVATE_KEY`; the variable `SSH_KNOWN_HOSTS` pins the VM's host key.
   2. It copies `deploy/remote-deploy.sh` to the VM and runs it with sudo.
   3. The VM fetches that commit with the run's own `GITHUB_TOKEN` and runs `run-demo.sh`.
   4. The workflow checks `/student/login`.
-- **Secrets** (repo admins): `SSH_PRIVATE_KEY`, `SSH_KNOWN_HOSTS`, `SERVER_HOST`, `SERVER_USER`. The header of `.github/workflows/deploy.yml` explains each one.
+- **Settings** (repo admins): the secret `SSH_PRIVATE_KEY`, and the variables `SSH_KNOWN_HOSTS`, `SERVER_HOST` and `SERVER_USER`. Only the key is secret. The header of `.github/workflows/deploy.yml` explains each one.
 - **Outside office hours** the VM is off, and the workflow's pre-flight says so. The `ait-vc` README shows how to start it.
 
 ## Docs

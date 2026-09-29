@@ -8,11 +8,13 @@
 # (github.sha) with this run's own GITHUB_TOKEN, which expires when the run
 # ends. The token travels on stdin only; no PAT is stored anywhere.
 #
-# Repository secrets (Settings → Secrets and variables → Actions):
-#   SSH_PRIVATE_KEY  private half of the deploy key (ED25519, no passphrase)
-#   SSH_KNOWN_HOSTS  the VM's host keys: ait-vc output known_hosts_command
-#   SERVER_HOST      the VM's static IP: ait-vc output github_actions
-#   SERVER_USER      deploy
+# Settings → Secrets and variables → Actions:
+#   Secret    SSH_PRIVATE_KEY  private half of the deploy key (ED25519, no passphrase)
+#   Variable  SSH_KNOWN_HOSTS  the VM's public host keys: ait-vc output known_hosts_command
+#   Variable  SERVER_HOST      the VM's static IP: ait-vc output github_actions
+#   Variable  SERVER_USER      deploy
+# Only the private key is secret. The other three are public facts, kept as
+# variables so they stay readable in the logs.
 name: Deploy
 
 on:
@@ -38,25 +40,29 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Pre-flight (secrets, key, VM reachable)
+      - name: Pre-flight (settings, key, VM reachable)
         env:
           SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
-          SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
-          SERVER_HOST: ${{ secrets.SERVER_HOST }}
-          SERVER_USER: ${{ secrets.SERVER_USER }}
+          SSH_KNOWN_HOSTS: ${{ vars.SSH_KNOWN_HOSTS }}
+          SERVER_HOST: ${{ vars.SERVER_HOST }}
+          SERVER_USER: ${{ vars.SERVER_USER }}
         run: |
           set -euo pipefail
           missing=0
-          for name in SSH_PRIVATE_KEY SSH_KNOWN_HOSTS SERVER_HOST SERVER_USER; do
-            value="${!name}"
-            if [ -z "$value" ]; then
-              echo "::error::Missing repository secret $name (Settings → Secrets and variables → Actions)"
+          if [ -z "$SSH_PRIVATE_KEY" ]; then
+            echo "::error::Missing repository secret SSH_PRIVATE_KEY (Settings → Secrets and variables → Actions → Secrets)"
+            missing=1
+          else
+            echo "found secret SSH_PRIVATE_KEY (${#SSH_PRIVATE_KEY} characters)"
+          fi
+          for name in SSH_KNOWN_HOSTS SERVER_HOST SERVER_USER; do
+            if [ -z "${!name}" ]; then
+              echo "::error::Missing repository variable $name (Settings → Secrets and variables → Actions → Variables)"
               missing=1
-            else
-              echo "found $name (${#value} characters)"
             fi
           done
           [ "$missing" -eq 0 ] || exit 1
+          echo "target: $SERVER_USER@$SERVER_HOST"
 
           if [ "$SERVER_USER" = "root" ]; then
             echo "::error::SERVER_USER must not be root"
@@ -64,7 +70,8 @@ jobs:
           fi
 
           key=$(mktemp)
-          trap 'rm -f "$key"' EXIT
+          known=$(mktemp)
+          trap 'rm -f "$key" "$known"' EXIT
           printf '%s\n' "$SSH_PRIVATE_KEY" | tr -d '\r' > "$key"
           chmod 600 "$key"
           if ! fingerprint=$(ssh-keygen -y -f "$key" | ssh-keygen -lf -); then
@@ -73,11 +80,12 @@ jobs:
           fi
           echo "deploy key: $fingerprint"
 
-          if ! printf '%s\n' "$SSH_KNOWN_HOSTS" | tr -d '\r' \
-              | awk 'NF { n++; if (NF < 3 || $2 !~ /^(ssh-|ecdsa-)/) bad = 1 } END { exit (bad || n == 0) }'; then
+          printf '%s\n' "$SSH_KNOWN_HOSTS" | tr -d '\r' > "$known"
+          if ! awk 'NF { n++; if (NF < 3 || $2 !~ /^(ssh-|ecdsa-)/) bad = 1 } END { exit (bad || n == 0) }' "$known"; then
             echo "::error::SSH_KNOWN_HOSTS must hold lines like '<ip>,<host> <key-type> <key>' (ait-vc output known_hosts_command)"
             exit 1
           fi
+          ssh-keygen -lf "$known" | sed 's/^/host key: /'
 
           if ! timeout 10 bash -c "</dev/tcp/$SERVER_HOST/22" 2>/dev/null; then
             echo "::error::$SERVER_HOST:22 does not answer. The VM runs Mon-Fri 08:30-18:30 Asia/Bangkok; start it with: gcloud compute instances start transcript-demo --zone asia-southeast1-b --project ait-vc-transcript-demo"
@@ -88,7 +96,7 @@ jobs:
       - name: Set up SSH
         env:
           SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
-          SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
+          SSH_KNOWN_HOSTS: ${{ vars.SSH_KNOWN_HOSTS }}
         run: |
           set -euo pipefail
           install -d -m 700 ~/.ssh
@@ -98,8 +106,8 @@ jobs:
 
       - name: Deploy this commit on the VM
         env:
-          SERVER_HOST: ${{ secrets.SERVER_HOST }}
-          SERVER_USER: ${{ secrets.SERVER_USER }}
+          SERVER_HOST: ${{ vars.SERVER_HOST }}
+          SERVER_USER: ${{ vars.SERVER_USER }}
           REPO_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
