@@ -258,6 +258,8 @@ sync_realm_cert() {
   jq --arg b64 "$new_b64" \
     '(.clients[] | select(.clientId=="wallet-demo") | .attributes."jwt.credential.certificate") = $b64' \
     config/keycloak-realm.json > "$tmp"
+  # mktemp creates the file 0600; Keycloak (uid 1000 in its container) must read the mounted realm.
+  chmod 0644 "$tmp"
   mv "$tmp" config/keycloak-realm.json
   ok "patched keycloak-realm.json with new cert"
   warn "Keycloak re-imports the realm on boot — restart keycloak-server if it was already up"
