@@ -16,6 +16,9 @@ echo "==> Regenerate Certify CSV from data/students.json"
 docker compose build demo-app
 docker compose run --rm --no-deps demo-app python data/generate_csv.py
 
+echo "==> Render mimoto-issuers-config.json from its template"
+docker compose run --rm --no-deps demo-app python data/render_mimoto_issuers_config.py
+
 "$STACK/bootstrap.sh" "$@"
 
 echo ""

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from datetime import datetime, timezone
 from typing import Any
 
@@ -11,15 +12,18 @@ STATUS_PENDING = "pending"
 STATUS_APPROVED = "approved"
 STATUS_REJECTED = "rejected"
 
-INJI_WEB_URL = "http://localhost:4004"
-INJI_VERIFY_URL = "http://localhost:4007"
+# Same vars as vc-stack/docker-compose.yaml's demo-app service — localhost
+# defaults for local dev, set in vc-stack/.env for a public deployment.
+INJI_WEB_URL = os.environ.get("INJI_WEB_URL", "http://localhost:4004")
+INJI_VERIFY_URL = os.environ.get("INJI_VERIFY_URL", "http://localhost:4007")
+KEYCLOAK_PUBLIC_BASE_URL = os.environ.get("KEYCLOAK_PUBLIC_BASE_URL", "http://localhost:9080")
 KEYCLOAK_DEMO_PASSWORD = "inji"
 # Keycloak's browser flow has the Cookie/SSO step disabled (see vc-stack/config/
 # keycloak-realm.json's "browser-no-sso" flow), so switching to a *different* degree's
 # identity in the same tab needs an explicit sign-out first — otherwise Keycloak refuses
 # with "already authenticated as different user" rather than silently mismatching.
 KEYCLOAK_LOGOUT_URL = (
-    "http://localhost:9080/realms/inji/protocol/openid-connect/logout"
+    KEYCLOAK_PUBLIC_BASE_URL + "/realms/inji/protocol/openid-connect/logout"
     "?client_id=wallet-demo&post_logout_redirect_uri=" + INJI_WEB_URL + "/redirect"
 )
 

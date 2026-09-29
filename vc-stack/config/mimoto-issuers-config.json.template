@@ -1,0 +1,31 @@
+{
+  "issuers": [
+    {
+      "credential_issuer": "AITUniversity",
+      "issuer_id": "AITUniversity",
+      "protocol": "OpenId4VCI",
+      "display": [
+        {
+          "name": "AIT University Registrar",
+          "logo": {
+            "url": "https://ait.ac.th/wp-content/uploads/2024/09/AIT_globe.png",
+            "alt_text": "ait-logo"
+          },
+          "title": "AIT University",
+          "description": "Download your AIT credentials",
+          "language": "en"
+        }
+      ],
+      "client_id": "wallet-demo",
+      "redirect_uri": "${INJI_WEB_URL}/redirect",
+      "token_endpoint": "${INJI_WEB_URL}/v1/mimoto/get-token/AITUniversity",
+      "authorization_audience": "http://keycloak:8080/realms/inji/protocol/openid-connect/token",
+      "proxy_token_endpoint": "http://keycloak:8080/realms/inji/protocol/openid-connect/token",
+      "client_alias": "wallet-demo-client",
+      "qr_code_type": "EmbeddedVC",
+      "credential_issuer_host": "http://host.docker.internal:9091",
+      "enabled": "true",
+      "wellknown_endpoint": "http://host.docker.internal:9091/.well-known/openid-credential-issuer"
+    }
+  ]
+}

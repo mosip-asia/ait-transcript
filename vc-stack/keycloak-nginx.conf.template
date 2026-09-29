@@ -16,7 +16,7 @@ server {
     proxy_set_header X-Real-IP $remote_addr;
     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
     proxy_set_header X-Forwarded-Proto $scheme;
-    sub_filter '"authorization_endpoint":"http://keycloak:8080' '"authorization_endpoint":"http://localhost:9080';
+    sub_filter '"authorization_endpoint":"http://keycloak:8080' '"authorization_endpoint":"$KEYCLOAK_PUBLIC_BASE_URL';
     sub_filter_once off;
     sub_filter_types application/json;
   }
@@ -34,7 +34,7 @@ server {
     proxy_set_header X-Real-IP $remote_addr;
     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
     proxy_set_header X-Forwarded-Proto $scheme;
-    sub_filter '"authorization_endpoint":"http://keycloak:8080' '"authorization_endpoint":"http://localhost:9080';
+    sub_filter '"authorization_endpoint":"http://keycloak:8080' '"authorization_endpoint":"$KEYCLOAK_PUBLIC_BASE_URL';
     sub_filter_once off;
     sub_filter_types application/json;
   }
@@ -52,10 +52,12 @@ server {
     # matches) makes Keycloak self-reference that internal Docker hostname
     # in every HTML page it serves, including the login form's `action`.
     # The browser can't resolve "keycloak", so rewrite it back to
-    # localhost:9080 for HTML responses only (JSON well-known is handled
+    # KEYCLOAK_PUBLIC_BASE_URL (envsubst'd in by nginx's docker-entrypoint
+    # templating — this file lives under /etc/nginx/templates/) for HTML
+    # responses only (JSON well-known is handled
     # by the dedicated location above and must NOT get this broad rewrite,
     # or Mimoto's token_endpoint aud would break again).
-    sub_filter 'http://keycloak:8080' 'http://localhost:9080';
+    sub_filter 'http://keycloak:8080' '$KEYCLOAK_PUBLIC_BASE_URL';
     sub_filter_once off;
     sub_filter_types text/html;
   }

@@ -85,6 +85,13 @@ services:
       - GOOGLE_OAUTH_CLIENT_SECRET=clientSecret
       - SPRING_CLOUD_LOADBALANCER_ENABLED=false
       - SPRING_CLOUD_DISCOVERY_ENABLED=false
+      # Override mimoto-default.properties' localhost defaults for public
+      # deployment (Spring env vars take precedence over the properties
+      # file) — same KEYCLOAK_PUBLIC_BASE_URL / INJI_WEB_URL used elsewhere
+      # in this compose file, so there's one source of truth per concept.
+      - KEYCLOAK_EXTERNAL_URL=${KEYCLOAK_PUBLIC_BASE_URL:-http://localhost:9080}
+      - MOSIP_INJI_WEB_URL=${INJI_WEB_URL:-http://localhost:4004}
+      - MOSIP_SECURITY_ORIGINS=${INJI_WEB_URL:-http://localhost:4004}
     networks:
       - network
     volumes:
@@ -105,7 +112,7 @@ services:
       - '4004:3004'
     environment:
       - DEFAULT_LANG=en
-      - MIMOTO_URL=http://localhost:4004/v1/mimoto
+      - MIMOTO_URL=${INJI_WEB_URL:-http://localhost:4004}/v1/mimoto
     volumes:
       - ./config/mimoto-default.properties:/home/mosip/mimoto-default.properties
       - ./config/mimoto-issuers-config.json:/home/mosip/mimoto-issuers-config.json
@@ -145,8 +152,14 @@ services:
     image: nginx:stable
     ports:
       - "9080:8080"
+    environment:
+      - KEYCLOAK_PUBLIC_BASE_URL=${KEYCLOAK_PUBLIC_BASE_URL:-http://localhost:9080}
     volumes:
-      - ./keycloak-nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      # .template + /etc/nginx/templates/ so nginx's own docker-entrypoint
+      # envsubst's $KEYCLOAK_PUBLIC_BASE_URL in on container start — no
+      # custom entrypoint needed, this is the official nginx image's own
+      # templating mechanism.
+      - ./keycloak-nginx.conf.template:/etc/nginx/templates/default.conf.template:ro
     depends_on:
       - keycloak-server
     restart: unless-stopped
@@ -229,6 +242,11 @@ services:
     environment:
       # Persisted via bind mount below (see README.md).
       - AIT_DEMO_DB=/demo/.demo-state/demo_requests.db
+      # Student-facing deep links (app/requests.py) — same vars as the rest
+      # of this compose file, localhost by default for local dev.
+      - INJI_WEB_URL=${INJI_WEB_URL:-http://localhost:4004}
+      - INJI_VERIFY_URL=${INJI_VERIFY_URL:-http://localhost:4007}
+      - KEYCLOAK_PUBLIC_BASE_URL=${KEYCLOAK_PUBLIC_BASE_URL:-http://localhost:9080}
     volumes:
       - ../app:/demo/app
       - ../data:/demo/data
@@ -237,7 +255,8 @@ services:
     networks:
       - network
     # Server-to-server calls to Certify's ledger-search/credentials/status (registrar VC lifecycle);
-    # student-facing wallet/verify links are still browser-only deep links to localhost:4004/4007.
+    # student-facing wallet/verify links are still browser-only deep links, built from
+    # INJI_WEB_URL/INJI_VERIFY_URL/KEYCLOAK_PUBLIC_BASE_URL above (see app/requests.py).
 
 networks:
   network:
