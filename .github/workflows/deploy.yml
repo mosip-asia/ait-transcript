@@ -1,0 +1,145 @@
+# Deploys one commit of this repo to the public transcript demo
+# (https://transcript-demo.ait-vc.dpi.ait.ac.th). Run it by hand:
+# Actions → Deploy → Run workflow, then choose a branch or tag.
+#
+# The VM (mosip-asia/ait-vc, ait-vc-transcript-demo/) accepts SSH only with a
+# key, as user "deploy". This run copies deploy/remote-deploy.sh there and
+# runs it with sudo. The VM then fetches exactly this run's commit
+# (github.sha) with this run's own GITHUB_TOKEN, which expires when the run
+# ends. The token travels on stdin only; no PAT is stored anywhere.
+#
+# Settings → Secrets and variables → Actions:
+#   Secret    SSH_PRIVATE_KEY  private half of the deploy key (ED25519, no passphrase)
+#   Variable  SSH_KNOWN_HOSTS  the VM's public host keys: ait-vc output known_hosts_command
+#   Variable  SERVER_HOST      the VM's static IP: ait-vc output github_actions
+#   Variable  SERVER_USER      deploy
+# Only the private key is secret. The other three are public facts, kept as
+# variables so they stay readable in the logs.
+name: Deploy
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-transcript-demo
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy to the transcript demo VM
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      DEMO_URL: https://transcript-demo.ait-vc.dpi.ait.ac.th
+    steps:
+      - name: Check out this commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Pre-flight (settings, key, VM reachable)
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          SSH_KNOWN_HOSTS: ${{ vars.SSH_KNOWN_HOSTS }}
+          SERVER_HOST: ${{ vars.SERVER_HOST }}
+          SERVER_USER: ${{ vars.SERVER_USER }}
+        run: |
+          set -euo pipefail
+          missing=0
+          if [ -z "$SSH_PRIVATE_KEY" ]; then
+            echo "::error::Missing repository secret SSH_PRIVATE_KEY (Settings → Secrets and variables → Actions → Secrets)"
+            missing=1
+          else
+            echo "found secret SSH_PRIVATE_KEY (${#SSH_PRIVATE_KEY} characters)"
+          fi
+          for name in SSH_KNOWN_HOSTS SERVER_HOST SERVER_USER; do
+            if [ -z "${!name}" ]; then
+              echo "::error::Missing repository variable $name (Settings → Secrets and variables → Actions → Variables)"
+              missing=1
+            fi
+          done
+          [ "$missing" -eq 0 ] || exit 1
+          echo "target: $SERVER_USER@$SERVER_HOST"
+
+          if [ "$SERVER_USER" = "root" ]; then
+            echo "::error::SERVER_USER must not be root"
+            exit 1
+          fi
+
+          key=$(mktemp)
+          known=$(mktemp)
+          trap 'rm -f "$key" "$known"' EXIT
+          printf '%s\n' "$SSH_PRIVATE_KEY" | tr -d '\r' > "$key"
+          chmod 600 "$key"
+          if ! fingerprint=$(ssh-keygen -y -f "$key" | ssh-keygen -lf -); then
+            echo "::error::SSH_PRIVATE_KEY is not a usable OpenSSH private key without a passphrase"
+            exit 1
+          fi
+          echo "deploy key: $fingerprint"
+
+          printf '%s\n' "$SSH_KNOWN_HOSTS" | tr -d '\r' > "$known"
+          if ! awk 'NF { n++; if (NF < 3 || $2 !~ /^(ssh-|ecdsa-)/) bad = 1 } END { exit (bad || n == 0) }' "$known"; then
+            echo "::error::SSH_KNOWN_HOSTS must hold lines like '<ip>,<host> <key-type> <key>' (ait-vc output known_hosts_command)"
+            exit 1
+          fi
+          ssh-keygen -lf "$known" | sed 's/^/host key: /'
+
+          if ! timeout 10 bash -c "</dev/tcp/$SERVER_HOST/22" 2>/dev/null; then
+            echo "::error::$SERVER_HOST:22 does not answer. The VM runs Mon-Fri 08:30-18:30 Asia/Bangkok; start it with: gcloud compute instances start transcript-demo --zone asia-southeast1-b --project ait-vc-transcript-demo"
+            exit 1
+          fi
+          echo "VM reachable on $SERVER_HOST:22"
+
+      - name: Set up SSH
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          SSH_KNOWN_HOSTS: ${{ vars.SSH_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$SSH_PRIVATE_KEY" | tr -d '\r' > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          printf '%s\n' "$SSH_KNOWN_HOSTS" | tr -d '\r' > ~/.ssh/known_hosts_demo
+
+      - name: Deploy this commit on the VM
+        env:
+          SERVER_HOST: ${{ vars.SERVER_HOST }}
+          SERVER_USER: ${{ vars.SERVER_USER }}
+          REPO_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          # GitHub masks the token itself; mask the form git sends as well.
+          echo "::add-mask::$(printf 'x-access-token:%s' "$REPO_TOKEN" | base64 -w0)"
+          opts=(-i "$HOME/.ssh/deploy_key" -o IdentitiesOnly=yes -o BatchMode=yes
+                -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$HOME/.ssh/known_hosts_demo"
+                -o ConnectTimeout=15 -o ServerAliveInterval=30 -o ServerAliveCountMax=10)
+          remote="remote-deploy.${GITHUB_RUN_ID}.sh"
+          scp "${opts[@]}" deploy/remote-deploy.sh "$SERVER_USER@$SERVER_HOST:$remote"
+          # The token goes on stdin; the script reads it first and never prints it.
+          # $remote, $GITHUB_SHA and $GITHUB_REPOSITORY expand here, on the runner, on purpose.
+          # shellcheck disable=SC2029
+          printf '%s\n' "$REPO_TOKEN" | ssh "${opts[@]}" "$SERVER_USER@$SERVER_HOST" \
+            "sudo bash ./$remote $GITHUB_SHA $GITHUB_REPOSITORY; rc=\$?; rm -f ./$remote; exit \$rc"
+
+      - name: Health check
+        run: |
+          set -euo pipefail
+          url="$DEMO_URL/student/login"
+          for i in $(seq 1 30); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "$url" || true)
+            if [ "$code" = "200" ]; then
+              echo "healthy: $url returned 200"
+              exit 0
+            fi
+            echo "attempt $i/30: $url returned $code; retrying in 10 s"
+            sleep 10
+          done
+          echo "::error::$url did not return 200"
+          exit 1
+
+      - name: Remove the SSH key from the runner
+        if: always()
+        run: rm -f ~/.ssh/deploy_key ~/.ssh/known_hosts_demo

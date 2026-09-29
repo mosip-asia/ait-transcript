@@ -118,6 +118,19 @@ python3 data/test_ait_courses.py
 python3 data/test_generate_csv.py
 ```
 
+## Public demo (deploy)
+
+The public demo runs at https://transcript-demo.ait-vc.dpi.ait.ac.th (Mon-Fri 08:30-18:30 Asia/Bangkok). Its VM is defined in [mosip-asia/ait-vc](https://github.com/mosip-asia/ait-vc) (`ait-vc-transcript-demo/`).
+
+- **Deploy:** Actions → **Deploy** → Run workflow, then choose the branch or tag. The run deploys exactly that commit.
+- **How it works:**
+  1. The workflow logs in to the VM as `deploy`, with the key in secret `SSH_PRIVATE_KEY`; the variable `SSH_KNOWN_HOSTS` pins the VM's host key.
+  2. It copies `deploy/remote-deploy.sh` to the VM and runs it with sudo.
+  3. The VM fetches that commit with the run's own `GITHUB_TOKEN` and runs `run-demo.sh`.
+  4. The workflow checks `/student/login`.
+- **Settings** (repo admins): the secret `SSH_PRIVATE_KEY`, and the variables `SSH_KNOWN_HOSTS`, `SERVER_HOST` and `SERVER_USER`. Only the key is secret. The header of `.github/workflows/deploy.yml` explains each one.
+- **Outside office hours** the VM is off, and the workflow's pre-flight says so. The `ait-vc` README shows how to start it.
+
 ## Docs
 
 - [wiki/OVERVIEW.md](./wiki/OVERVIEW.md) — architecture and gotchas  
