@@ -34,6 +34,7 @@ jobs:
     timeout-minutes: 45
     env:
       DEMO_URL: https://transcript-demo.ait-vc.dpi.ait.ac.th
+      KEYCLOAK_URL: https://keycloak.transcript-demo.ait-vc.dpi.ait.ac.th
     steps:
       - name: Check out this commit
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -124,21 +125,25 @@ jobs:
           printf '%s\n' "$REPO_TOKEN" | ssh "${opts[@]}" "$SERVER_USER@$SERVER_HOST" \
             "sudo bash ./$remote $GITHUB_SHA $GITHUB_REPOSITORY; rc=\$?; rm -f ./$remote; exit \$rc"
 
-      - name: Health check
+      - name: Health check (demo app and Keycloak)
         run: |
           set -euo pipefail
-          url="$DEMO_URL/student/login"
-          for i in $(seq 1 30); do
-            code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "$url" || true)
-            if [ "$code" = "200" ]; then
-              echo "healthy: $url returned 200"
-              exit 0
-            fi
-            echo "attempt $i/30: $url returned $code; retrying in 10 s"
-            sleep 10
-          done
-          echo "::error::$url did not return 200"
-          exit 1
+          check() {
+            local url="$1" code i
+            for i in $(seq 1 30); do
+              code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "$url" || true)
+              if [ "$code" = "200" ]; then
+                echo "healthy: $url returned 200"
+                return 0
+              fi
+              echo "attempt $i/30: $url returned $code; retrying in 10 s"
+              sleep 10
+            done
+            echo "::error::$url did not return 200"
+            return 1
+          }
+          check "$DEMO_URL/student/login"
+          check "$KEYCLOAK_URL/realms/inji/.well-known/openid-configuration"
 
       - name: Remove the SSH key from the runner
         if: always()
