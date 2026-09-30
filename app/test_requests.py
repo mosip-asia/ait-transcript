@@ -369,6 +369,29 @@ def test_reissue_after_revoke_shows_awaiting_and_hides_button() -> None:
         certify_client.list_credentials = original
 
 
+def test_student_awaiting_claim_after_revoke_has_no_request_button_and_sees_refusal() -> None:
+    """Reported bug: re-issued (approved, unclaimed) after all VCs were revoked,
+    the student page still offered 'request a new one' and the click did nothing."""
+    db.reset_db()
+    c = TestClient(app)
+    sid = STUDENT_A["id"]
+    req_workflow.create_request(sid, DEGREE_A1)
+    req_workflow.approve_request(sid, DEGREE_A1)
+    original = certify_client.list_credentials
+    certify_client.list_credentials = lambda registration_no: [
+        {"credentialId": "x", "issueDate": "2000-01-01T00:00:00", "revoked": True, "revocable": True}
+    ]
+    try:
+        _login_student(c, sid)
+        html = c.get("/student").text
+        assert "Keycloak username" in html
+        assert "Request a new transcript VC" not in html
+        r = c.post("/student/request", data={"degree_id": DEGREE_A1}, follow_redirects=True)
+        assert "still awaiting the student" in r.text
+    finally:
+        certify_client.list_credentials = original
+
+
 def main() -> None:
     test_approve_sets_status_and_claim_panel()
     test_reject_no_claim_panel()
@@ -388,6 +411,7 @@ def main() -> None:
     test_multi_degree_student_gets_jump_nav_and_login_warning()
     test_registrar_reissue_button_hidden_while_awaiting_claim()
     test_reissue_after_revoke_shows_awaiting_and_hides_button()
+    test_student_awaiting_claim_after_revoke_has_no_request_button_and_sees_refusal()
     print("app/test_requests.py: all tests passed")
 
 

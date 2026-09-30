@@ -16,6 +16,10 @@
 <p class="error">Could not reach Certify: {{ certify_error }}</p>
 {% endif %}
 
+{% if action_error %}
+<p class="error">{{ action_error }}</p>
+{% endif %}
+
 {% if degree_views|length > 1 %}
 {% set claimable = degree_views | selectattr('has_wallet_access') | list %}
 {% if claimable|length > 1 %}
@@ -59,7 +63,7 @@
     <input type="hidden" name="degree_id" value="{{ degree.degreeId }}">
     <button type="submit" class="btn">Request this transcript VC again</button>
   </form>
-  {% elif transcript_request.status == 'approved' and not view.has_active_vc and transcripts %}
+  {% elif transcript_request.status == 'approved' and not view.has_active_vc and not view.needs_claim and transcripts %}
   <p style="margin-top:1rem;">Your transcript VC was revoked. You may request a new one.</p>
   <form method="post" action="/student/request">
     <input type="hidden" name="degree_id" value="{{ degree.degreeId }}">

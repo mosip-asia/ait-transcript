@@ -131,6 +131,7 @@ def student_home(request: Request):
             "student": student,
             "degree_views": degree_views,
             "certify_error": certify_error,
+            "action_error": request.query_params.get("action_error"),
         },
     )
 
@@ -151,8 +152,8 @@ def student_create_request(request: Request, degree_id: str = Form(...)) -> Redi
     if student is not None and fixtures.get_degree(student, degree_id) is not None:
         try:
             req_workflow.create_request(student_id, degree_id)
-        except req_workflow.RequestWorkflowError:
-            pass
+        except req_workflow.RequestWorkflowError as exc:
+            return _redirect(f"/student?action_error={quote(str(exc))}")
     return _redirect("/student")
 
 
