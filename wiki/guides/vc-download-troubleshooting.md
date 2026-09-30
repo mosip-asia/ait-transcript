@@ -23,6 +23,7 @@ Confirmed working end-to-end (live browser claim, two students) after all four f
 |---|---|---|
 | Browser tab dies / blank page right after clicking **Sign In** on the Keycloak login form | #1 | [Login page self-references an unreachable hostname](#1-login-page-self-references-an-unreachable-hostname) |
 | Inji Web shows a generic **"Due to technical error, we were unable to download the card"**, Mimoto logs a 404 body `<problem>No static resource .</problem>` or `{"detail":"No static resource ."}` | #2 or #3 — same symptom, different cause, check Certify logs to tell them apart | [JWT issuer mismatch](#2-jwt-issuer-mismatch-garbled-404) and [nginx path truncation](#3-nginx-drops-the-path-suffix-same-404-different-cause) |
+| Public deployment only: Mimoto logs `POST https://api…/v1/certify/issuance/credential` 404 `<instance>/v1/certify/</instance>` even though the config is fixed and deployed | #3 (`public-gateway-nginx.conf`), then #5 if the file is right | [nginx path truncation](#3-nginx-drops-the-path-suffix-same-404-different-cause) and [Deployed config never took effect](#5-deployed-proxy-config-never-took-effect) |
 | Same "technical error" screen, Mimoto logs `<VCError><error>json_processing_error</error>...` from Certify | #4 | [Unescaped HTML breaks the VC template's JSON](#4-unescaped-html-breaks-the-vc-templates-json) |
 
 **General debug loop** for any of these:
@@ -113,6 +114,8 @@ nginx's own docs are explicit that a **variable-based** `proxy_pass` target disa
 
 Unauthenticated requests hit Spring Security's default-deny rule first and got Certify's ordinary 403 (also on the same truncated path) — so the response code alone doesn't tell you which bug you're looking at; you have to check whether Certify's app log has an entry for the request at all (#2 = no entry; #3 = an entry, ending in `NoResourceFoundException`).
 
+**Same bug, second place:** [vc-stack/public-gateway-nginx.conf](../../vc-stack/public-gateway-nginx.conf) (the public deployment's `api.` gateway) had it on *every* location — `/v1/mimoto/`, `/v1/certify/`, `/.well-known/`, `/realms/`, `/v1/verify/` — so anything through that gateway lost its path. Seen from the public site as Mimoto's `POST https://api.<host>/v1/certify/issuance/credential` → 404 `<instance>/v1/certify/</instance>`, and `curl -X POST https://api.<host>/v1/certify/issuance/credential` answering `path: /v1/certify/`. Any new nginx `location` that uses a variable `proxy_pass` must have no URI part.
+
 **Fix:** drop the URI from `proxy_pass` entirely — `proxy_pass http://$certify_upstream;` — so nginx forwards the original request URI unchanged. This location's prefix and Certify's own path are identical (`/v1/certify/...` in, `/v1/certify/...` out), so no rewriting was ever needed here; the `set $certify_upstream` variable only exists to defer DNS resolution to request time (see the file's own top-of-file comment), not to rewrite paths.
 
 **Verify:**
@@ -152,6 +155,18 @@ python3 data/generate_csv.py && python3 data/test_generate_csv.py && python3 dat
 Then reproduce Certify's substitution locally against the regenerated CSV (swap in the real `vc_template` from `vc-stack/certify_init.sql`, base64-decoded) and confirm `json.loads()` succeeds on the rendered document — this is how the bug was originally isolated to line 32 without needing a live claim attempt for every iteration.
 
 **After a CSV fix, the running `certify` container must be restarted (not just have the bind-mounted file changed underneath it) if it already served requests since last start** — `MockCSVDataProviderPlugin` did not visibly pick up the on-disk change until `docker compose restart certify`, even though the file inside the container was already correct. If a CSV/template fix doesn't seem to take effect, restart `certify` before assuming the fix is wrong.
+
+## #5: Deployed proxy config never took effect
+
+**Symptom:** You fixed a bind-mounted nginx config (e.g. #3 in `public-gateway-nginx.conf`), the Deploy workflow was green, and the behaviour is unchanged. The container's `created` time in Dozzle predates the deploy.
+
+**Root cause:** The config is a bind mount. `docker compose up -d` recreates a container only when its *compose* config changes, not when a mounted file's contents do, and nginx reads its config only at start. So the new file was on disk and the old one still served. `bootstrap.sh` restarted `keycloak certify-nginx mimoto-service inji-web` but not `public-gateway`.
+
+**Fix:** `public-gateway` is now in the restart line in `compose_up()` in [vc-stack/bootstrap.sh](../../vc-stack/bootstrap.sh). Any new service that reads a mounted config must be added there too.
+
+**Verify:** after a deploy, the container's `created`/start time is recent, and a request that used to hit the old behaviour changes (for #3, the `path` in Certify's error is the full path).
+
+---
 
 ## Related
 
