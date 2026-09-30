@@ -170,6 +170,11 @@ services:
     container_name: verify-service
     image: injistack/inji-verify-service:0.17.0
     user: root
+    # The issued VC's JSON-LD context is http://host.docker.internal:9091/... (see
+    # bootstrap.sh LOCAL_STUDENT_CONTEXT_URL). Docker Desktop resolves that name by
+    # itself; on Linux (the GCP VM) it needs this mapping or verification fails.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     ports:
       - "9095:8080"
     environment:
