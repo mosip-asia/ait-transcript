@@ -1,6 +1,6 @@
-# AIT Transcript VC Journey Demo
+# AIT Transcript VC Journey
 
-Local Docker-only walkthrough: student requests a transcript VC, registrar approves in the demo app, student claims into **Inji Web**, presents to **Inji Verify**. Scope and acceptance criteria: [PRD.md](./PRD.md).
+Local Docker-only walkthrough: student requests a transcript VC, registrar approves in the app, student claims into **Inji Web**, presents to **Inji Verify**.
 
 ```mermaid
 flowchart LR
@@ -22,9 +22,9 @@ Full service and port topology: [wiki/architecture/vc-stack.md](./wiki/architect
 - `jq`, `curl`, `awk` on the host (used by the setup scripts, not just inside containers). `curl`/`awk` ship with macOS/Linux; `jq` may need `brew install jq`.
 - **Windows:** run everything inside WSL2, not Git Bash — enable Docker Desktop's WSL integration, clone the repo into the WSL filesystem (not `/mnt/c/...`), and `sudo apt install jq` if it's missing. Git Bash mangles absolute paths in bind-mount arguments (e.g. the keystore step's `-v "$PWD/certs:/certs"`), which silently breaks the mount.
 
-Keycloak admin console: **`http://localhost:9080/admin/`** (admin / admin). Inji Web student login uses **`http://localhost:9080`** (no `/etc/hosts` required).
+## Local development
 
-## One-command startup
+### Start the stack
 
 From the repo root:
 
@@ -59,30 +59,7 @@ docker compose -f vc-stack/docker-compose.yaml up -d demo-app
 
 The demo app calls Certify server-to-server (`ledger-search`, status list, revoke — see [wiki/concepts/vc-revocation.md](./wiki/concepts/vc-revocation.md)) but never Mimoto or Keycloak; for claiming and verifying it only renders links to **http://localhost:4004** and **http://localhost:4007** for the presenter’s browser.
 
-## URLs (this repo)
-
-| Service | URL |
-|---|---|
-| Demo app — student | http://localhost:4100/student/login |
-| Demo app — registrar | http://localhost:4100/registrar/login |
-| Inji Web | http://localhost:4004 |
-| Inji Verify | http://localhost:4007 |
-| Keycloak admin | http://localhost:9080 (admin / admin) |
-
-Mock student Keycloak login (after registrar approval in the demo app): username = student `id` from `data/students.json` (e.g. `ait-2026-0001`), password **`inji`**.
-
-## Stakeholder walkthrough (PRD §9)
-
-After `./run-demo.sh` (no further terminal steps):
-
-1. Open **http://localhost:4100/student/login** → pick a student → **Request my transcript VC**.
-2. Open **http://localhost:4100/registrar/login** → approve that request.
-3. Reload the student tab → use **Claim your credential** → Inji Web → AIT University → **AIT Transcript** → Keycloak login.
-4. Download/open the credential PDF — layout must match `design/pdf-ait-transcript-template.html` (presenter visual check).
-5. From the student portal, open **Inji Verify** → present the credential → verification succeeds.
-6. Repeat with a second student persona.
-
-## Tests
+## Local testing
 
 Stack smoke (Inji services must be up):
 
@@ -97,7 +74,7 @@ python3 vc-stack/test_inji_web_vc_readiness.py
 python3 vc-stack/test_inji_web_vc_readiness.py --live
 ```
 
-Guards regressions that broke issuer list, Keycloak login, or same-origin token/download (`:4004` vs `:9099`). Full OAuth + PDF is still manual (PRD §9).
+Guards regressions that broke issuer list, Keycloak login, or same-origin token/download (`:4004` vs `:9099`). Full OAuth + PDF is still manual.
 
 Demo app logic (host Python **or** inside the demo image):
 
@@ -118,18 +95,96 @@ python3 data/test_ait_courses.py
 python3 data/test_generate_csv.py
 ```
 
-## Public demo (deploy)
+## Deploying to GCP
 
-The public demo runs at https://transcript-demo.ait-vc.dpi.ait.ac.th (Mon-Fri 08:30-18:30 Asia/Bangkok). Its VM is defined in [mosip-asia/ait-vc](https://github.com/mosip-asia/ait-vc) (`ait-vc-transcript-demo/`).
+The demo also runs as a public deployment on a GCE VM behind Caddy (TLS), reachable without any local setup. The VM, DNS and firewall are defined in [mosip-asia/ait-vc](https://github.com/mosip-asia/ait-vc) (`ait-vc-transcript-demo/`); this repo only holds the app and the deploy workflow.
 
-- **Deploy:** Actions → **Deploy** → Run workflow, then choose the branch or tag. The run deploys exactly that commit.
-- **How it works:**
-  1. The workflow logs in to the VM as `deploy`, with the key in secret `SSH_PRIVATE_KEY`; the variable `SSH_KNOWN_HOSTS` pins the VM's host key.
-  2. It copies `deploy/remote-deploy.sh` to the VM and runs it with sudo.
-  3. The VM fetches that commit with the run's own `GITHUB_TOKEN` and runs `run-demo.sh`.
-  4. The workflow checks `/student/login`.
-- **Settings** (repo admins): the secret `SSH_PRIVATE_KEY`, and the variables `SSH_KNOWN_HOSTS`, `SERVER_HOST` and `SERVER_USER`. Only the key is secret. The header of `.github/workflows/deploy.yml` explains each one.
-- **Outside office hours** the VM is off, and the workflow's pre-flight says so. The `ait-vc` README shows how to start it.
+The VM is off outside Mon-Fri 08:30-18:30 Asia/Bangkok; the workflow's pre-flight says so if you deploy then.
+
+### GCP infrastructure
+
+Everything below is defined in Terraform in [mosip-asia/ait-vc](https://github.com/mosip-asia/ait-vc), not in this repo. Two roots are involved: `ait-vc-mgmt/terraform` (the project envelope and the DNS zone) and `ait-vc-transcript-demo/terraform` (the workload).
+
+| GCP service | What it does here | Terraform |
+|---|---|---|
+| **Resource Manager, Billing** | Project `ait-vc-transcript-demo`, billing link, deletion lien. Only the Compute and IAM APIs are enabled. | `ait-vc-mgmt`: `prj-transcript-demo.tf` |
+| **Compute Engine: VM** | One `e2-standard-2` (Debian 12, 30 GB `pd-balanced`, Shielded VM) in `asia-southeast1-b` running the whole Docker Compose stack. Its startup script installs Docker, Caddy and Dozzle and restarts the stack on every boot. | `compute.tf`, `startup.sh.tpl` |
+| **Compute Engine: instance schedule** | Starts the VM 08:30 and stops it 18:30, Mon-Fri Asia/Bangkok, to save cost. | `schedule.tf` |
+| **VPC, static IP, firewall** | A dedicated VPC and subnet, a permanent static external IP, and firewall rules for ports 80/443 (web), 22 (key-only SSH for GitHub runners) and 22 via IAP. Container ports stay closed. | `network.tf` |
+| **Cloud DNS** | A records for the apex and `*.` wildcard pointing at the static IP, in the zone owned by `ait-vc-mgmt`. | `dns.tf` |
+| **IAM, OS Login, IAP** | The VM's service account holds no roles. Operators listed in `admin_users` get OS Login admin and IAP tunnel access. | `compute.tf` |
+| **Cloud Storage** | Holds the Terraform state (`gs://ait-vc-dpi-ait-ac-th-tfstate`). Not used at runtime. | `backends.tf` |
+
+Not GCP services, but on the VM: **Caddy** terminates TLS (automatic Let's Encrypt certificates) and blocks the admin paths, and **Dozzle** shows container logs behind basic auth.
+
+Change the VM, schedule, network or DNS by editing that Terraform in the `ait-vc` repo. A change to this repo's code never touches them; it only needs a [deploy](#deploy-a-change).
+
+### Deploy a change
+
+A deploy is manual and ships exactly one commit; nothing on the VM pulls code by itself.
+
+```mermaid
+sequenceDiagram
+  actor Dev
+  participant GH as GitHub Actions runner
+  participant VM as GCP VM (as deploy user)
+  participant Stack as Docker Compose stack
+  Dev->>GH: Run workflow (branch or tag)
+  GH->>VM: Pre-flight: SSH port 22 answers?
+  GH->>VM: scp deploy/remote-deploy.sh
+  GH->>VM: ssh + sudo, run's GITHUB_TOKEN on stdin
+  VM->>VM: git fetch that one commit into /opt/ait-transcript-demo
+  VM->>VM: copy app.env to vc-stack/.env
+  VM->>Stack: run-demo.sh (build, CSV, bootstrap, up -d, restart proxies)
+  GH->>Stack: Health check: /student/login and Keycloak return 200
+  GH-->>Dev: Green or red
+```
+
+1. Push your branch to GitHub (`mosip-asia/ait-transcript-demo`).
+2. **Actions → Deploy → Run workflow**, choose the branch or tag.
+3. The workflow logs in to the VM as `deploy`, runs `deploy/remote-deploy.sh` (fetch that commit into `/opt/ait-transcript-demo`, copy the VM's `app.env` to `vc-stack/.env`, run `run-demo.sh`), then health-checks `/student/login` and Keycloak's `openid-configuration`. Green means both returned 200.
+4. Check the change on the [public URLs](#accessing-the-demo-on-gcp). Logs: Dozzle, or `docker logs <container>` over SSH.
+
+## Accessing the demo locally
+
+Keycloak admin console: **`http://localhost:9080/admin/`** (admin / admin). Inji Web student login uses **`http://localhost:9080`** (no `/etc/hosts` required).
+
+### Local URLs
+
+| Service | URL |
+|---|---|
+| Student portal | http://localhost:4100/student/login |
+| Registrar portal | http://localhost:4100/registrar/login |
+| Inji Web | http://localhost:4004 |
+| Inji Verify | http://localhost:4007 |
+| Keycloak admin | http://localhost:9080 (admin / admin) |
+
+### Stakeholder walkthrough
+
+After `./run-demo.sh` (no further terminal steps):
+
+1. Open **http://localhost:4100/student/login** → pick a student → **Request my transcript VC**.
+2. Open **http://localhost:4100/registrar/login** → approve that request.
+3. Reload the student tab → use **Claim your credential** → Inji Web → AIT University → **AIT Transcript** → Keycloak login.
+4. Download/open the credential PDF — layout must match `design/pdf-ait-transcript-template.html` (presenter visual check).
+5. From the student portal, open **Inji Verify** → present the credential → verification succeeds.
+6. Repeat with a second student persona.
+
+## Accessing the demo on GCP
+
+**Availability:** the VM runs **Mon-Fri 08:30-18:30 Asia/Bangkok** and is off otherwise, so outside those hours the URLs time out.
+
+### Public URLs
+
+| Service | URL |
+|---|---|
+| Student portal | https://transcript-demo.ait-vc.dpi.ait.ac.th/student/login |
+| Registrar portal | https://transcript-demo.ait-vc.dpi.ait.ac.th/registrar/login |
+| Inji Web | https://wallet.transcript-demo.ait-vc.dpi.ait.ac.th |
+| Inji Verify | https://verify.transcript-demo.ait-vc.dpi.ait.ac.th |
+| API gateway (Certify, Mimoto, Verify, Keycloak realms) | https://api.transcript-demo.ait-vc.dpi.ait.ac.th |
+| Keycloak (student logins, realm `inji`) | https://keycloak.transcript-demo.ait-vc.dpi.ait.ac.th |
+| Container logs (Dozzle, basic auth) | https://logs.transcript-demo.ait-vc.dpi.ait.ac.th |
 
 ## Docs
 
