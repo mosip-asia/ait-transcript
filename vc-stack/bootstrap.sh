@@ -359,8 +359,8 @@ compose_up() {
     ensure_certify_nginx_up
     # nginx resolves upstream hostnames at start; recreating keycloak-server/certify
     # changes container IPs and leaves stale upstreams until these proxies restart.
-    docker compose restart keycloak certify-nginx mimoto-service inji-web
-    ok "refreshed Keycloak/Certify nginx upstreams and Mimoto/Inji Web"
+    docker compose restart keycloak certify-nginx mimoto-service inji-web public-gateway
+    ok "refreshed Keycloak/Certify nginx upstreams, public gateway, Mimoto and Inji Web"
   fi
 }
 
