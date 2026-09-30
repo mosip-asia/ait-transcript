@@ -104,15 +104,9 @@ def student_home(request: Request):
             certify_error = str(exc)
         transcript_request = req_workflow.get_request(student_id, degree_id)
         has_active_vc = any(not t["revoked"] for t in transcripts)
-        # Approved, no active VC, and never issued at all — the one state where
-        # there's actually something left to claim. Excludes "approved but the
-        # VC was since revoked" (that's a re-request, not a claim).
-        needs_claim = bool(
-            transcript_request
-            and transcript_request["status"] == req_workflow.STATUS_APPROVED
-            and not has_active_vc
-            and not transcripts
-        )
+        # Approved and not yet claimed: the one state where there's something left
+        # to claim. A VC issued before the approval (since revoked) doesn't count.
+        needs_claim = req_workflow.is_awaiting_claim(transcript_request, transcripts) and not has_active_vc
         degree_views.append(
             {
                 "degree": degree,
@@ -221,6 +215,7 @@ def registrar_home(request: Request):
             "transcripts": [],
             "active_vc": None,
             "request": req_workflow.get_request(s["id"], d["degreeId"]),
+            "awaiting_claim": False,
         }
         for s in students
         for d in fixtures.list_degrees(s)
@@ -237,6 +232,7 @@ def registrar_home(request: Request):
                     vc["revoke_pending"] = req_workflow.is_revoke_pending(vc["credentialId"])
             row["transcripts"] = vcs
             row["active_vc"] = next((v for v in vcs if not v["revoked"]), None)
+            row["awaiting_claim"] = req_workflow.is_awaiting_claim(row["request"], vcs)
     except certify_client.CertifyUnavailableError as exc:
         certify_error = str(exc)
 

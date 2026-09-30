@@ -83,7 +83,7 @@
     <details style="padding:0.75rem 0 0.75rem 1.25rem;border-left:2px solid var(--border);">
       <summary><strong>{{ icon('cap', 15) }} {{ degree.level }}: {{ degree.academicProgram }}</strong></summary>
       {% set req = row.request %}
-      {% set awaiting_claim = req and req.status == 'approved' and not vcs %}
+      {% set awaiting_claim = row.awaiting_claim %}
       {% set pending_request = req and req.status == 'pending' %}
       <div style="margin-top:0.75rem;">
       {% if vcs %}
@@ -132,6 +132,9 @@
       {% else %}
       <p class="subtitle" style="margin:0.5rem 0;">No transcript VCs issued yet.</p>
       {% endif %}
+      {% endif %}
+      {% if awaiting_claim and vcs %}
+      <p class="subtitle" style="margin:0.5rem 0;">New transcript approved. It appears in the table above once the student claims it in Inji Web.</p>
       {% endif %}
       {% if pending_request %}
       <p class="subtitle" style="margin:0.5rem 0 0;">A request is already pending. Approve or reject it above.</p>

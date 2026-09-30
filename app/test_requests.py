@@ -245,7 +245,7 @@ def test_revoked_student_can_request_new_one() -> None:
 
     original = certify_client.list_credentials
     certify_client.list_credentials = lambda registration_no: [
-        {"credentialId": "x", "issueDate": "2026-01-01", "revoked": True, "revocable": True}
+        {"credentialId": "x", "issueDate": "2999-01-01", "revoked": True, "revocable": True}
     ]
     try:
         _login_student(c, sid)
@@ -343,6 +343,32 @@ def test_registrar_reissue_button_hidden_while_awaiting_claim() -> None:
     assert len(history) == 1
 
 
+def test_reissue_after_revoke_shows_awaiting_and_hides_button() -> None:
+    """Reported bug: with every VC revoked, 'Issue without request' seemed to do
+    nothing (the button stayed, no feedback) and each click added another approval."""
+    original = certify_client.list_credentials
+    try:
+        db.reset_db()
+        c_reg = TestClient(app)
+        sid = STUDENT_A["id"]
+        c_reg.post("/registrar/login", data={"persona_id": "registrar-001"}, follow_redirects=True)
+        certify_client.list_credentials = lambda registration_no: [
+            {"credentialId": "x", "issueDate": "2000-01-01T00:00:00", "revoked": True, "revocable": True}
+        ]
+        c_reg.post(f"/registrar/students/{sid}/{DEGREE_A1}/reissue", follow_redirects=True)
+        html = c_reg.get("/registrar").text
+        assert "New transcript approved" in html
+        c_reg.post(f"/registrar/students/{sid}/{DEGREE_A1}/reissue", follow_redirects=True)
+        assert len(req_workflow.list_request_history(sid, DEGREE_A1)) == 1
+        # Once the student claims (a VC issued after the approval), it's no longer awaiting.
+        certify_client.list_credentials = lambda registration_no: [
+            {"credentialId": "y", "issueDate": "2999-01-01T00:00:00", "revoked": False, "revocable": True}
+        ]
+        assert "New transcript approved" not in c_reg.get("/registrar").text
+    finally:
+        certify_client.list_credentials = original
+
+
 def main() -> None:
     test_approve_sets_status_and_claim_panel()
     test_reject_no_claim_panel()
@@ -361,6 +387,7 @@ def main() -> None:
     test_student_sees_full_request_history()
     test_multi_degree_student_gets_jump_nav_and_login_warning()
     test_registrar_reissue_button_hidden_while_awaiting_claim()
+    test_reissue_after_revoke_shows_awaiting_and_hides_button()
     print("app/test_requests.py: all tests passed")
 
 

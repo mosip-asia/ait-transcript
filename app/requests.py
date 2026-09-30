@@ -37,6 +37,21 @@ class RequestWorkflowError(Exception):
     """Invalid or duplicate workflow transition."""
 
 
+def _as_utc(value: str) -> datetime:
+    dt = datetime.fromisoformat(value)
+    return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+
+
+def is_awaiting_claim(req: dict[str, Any] | None, transcripts: list[dict[str, Any]]) -> bool:
+    """Approved, and no VC issued since that approval, i.e. still waiting on the
+    student. A VC issued earlier (say, one since revoked) doesn't count as the claim."""
+    if not req or req["status"] != STATUS_APPROVED:
+        return False
+    decided = _as_utc(req["decided_at"])
+    # ponytail: a VC with no issueDate counts as issued (old any-VC behaviour)
+    return not any(not t.get("issueDate") or _as_utc(t["issueDate"]) >= decided for t in transcripts)
+
+
 def _utc_now_iso() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
 
@@ -84,7 +99,7 @@ def create_request(student_id: str, degree_id: str) -> dict[str, Any]:
         transcripts = certify_client.list_credentials(degree["registrationNo"])
         if any(not t["revoked"] for t in transcripts):
             raise RequestWorkflowError("student already holds an active transcript VC. Revoke it first")
-        if existing is not None and existing["status"] == STATUS_APPROVED and not transcripts:
+        if is_awaiting_claim(existing, transcripts):
             raise RequestWorkflowError("an earlier approval is still awaiting the student's claim")
 
     created_at = _utc_now_iso()
