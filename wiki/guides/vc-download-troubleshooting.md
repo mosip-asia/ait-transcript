@@ -162,7 +162,7 @@ Then reproduce Certify's substitution locally against the regenerated CSV (swap 
 
 **Root cause:** The config is a bind mount. `docker compose up -d` recreates a container only when its *compose* config changes, not when a mounted file's contents do, and nginx reads its config only at start. So the new file was on disk and the old one still served. `bootstrap.sh` restarted `keycloak certify-nginx mimoto-service inji-web` but not `public-gateway`.
 
-**Fix:** `public-gateway` is now in the restart line in `compose_up()` in [vc-stack/bootstrap.sh](../../vc-stack/bootstrap.sh). Any new service that reads a mounted config must be added there too.
+**Fix:** `public-gateway` is now in the restart line in `compose_up()` in [vc-stack/bootstrap.sh](../../vc-stack/bootstrap.sh). Any new service that reads a mounted config must be added there too. The same goes for any nginx that proxies a service Compose may recreate: `verify-ui` resolves `verify-service` once at start, so recreating `verify-service` (e.g. after adding `extra_hosts`) left `/v1/verify` on `verify-ui` returning errors until it was restarted, and the deploy failed at bootstrap's `verify-ui proxy` check (`curl` exit 22).
 
 **Verify:** after a deploy, the container's `created`/start time is recent, and a request that used to hit the old behaviour changes (for #3, the `path` in Certify's error is the full path).
 

@@ -351,15 +351,16 @@ compose_up() {
   if [[ "$MODE" == "a" ]]; then
     docker compose up -d database certify certify-nginx mimoto-service inji-web verify-service verify-ui
     ensure_certify_nginx_up
-    docker compose restart mimoto-service inji-web
+    docker compose restart mimoto-service inji-web verify-ui
     ok "started Mode A services (keycloak-* skipped)"
   else
     docker compose up -d
     ok "started full Mode B stack"
     ensure_certify_nginx_up
     # nginx resolves upstream hostnames at start; recreating keycloak-server/certify
-    # changes container IPs and leaves stale upstreams until these proxies restart.
-    docker compose restart keycloak certify-nginx mimoto-service inji-web public-gateway
+    # changes container IPs and leaves stale upstreams until these proxies restart
+    # (verify-ui proxies /v1/verify to verify-service, which any config change recreates).
+    docker compose restart keycloak certify-nginx mimoto-service inji-web public-gateway verify-ui
     ok "refreshed Keycloak/Certify nginx upstreams, public gateway, Mimoto and Inji Web"
   fi
 }
