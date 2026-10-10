@@ -289,7 +289,7 @@ def registrar_revoke_transcript(
                 if row["credentialId"] == credential_id:
                     certify_client.revoke_credential(row)
                     req_workflow.mark_revoke_requested(credential_id)
-                    notice = "Revoke submitted. Certify batches status-list updates, so it can take up to a minute to show as Revoked below. Refresh to check."
+                    notice = "Revoke submitted. Certify batches status-list updates, so it can take about 10 seconds to show as Revoked below. Refresh to check."
                     return _redirect(f"/registrar?notice={quote(notice)}")
         except certify_client.CertifyUnavailableError as exc:
             return _redirect(f"/registrar?action_error={quote(str(exc))}")

@@ -70,7 +70,7 @@
 
 <div class="card">
   <h2 class="section-heading">{{ icon('shield-check', 15) }} Student transcripts</h2>
-  <p class="subtitle" style="margin-top:0;">A revoke can take up to a minute to show here. Certify batches status-list updates.</p>
+  <p class="subtitle" style="margin-top:0;">A revoke can take about 10 seconds to show here. Certify batches status-list updates.</p>
   {% for student_id, group in student_degree_rows|groupby('student.id') %}
   {% set group = group|list %}
   {% set s = group[0].student %}
@@ -110,10 +110,10 @@
             </td>
             <td class="actions">
               {% if not vc.revoked and vc.revocable and vc.revoke_pending %}
-              <button type="button" class="btn btn-small btn-danger" disabled title="Revoke submitted, waiting on Certify's status-list batch job, can take up to a minute">{{ icon('clock', 13) }} Revoking…</button>
+              <button type="button" class="btn btn-small btn-danger" disabled title="Revoke submitted, waiting on Certify's status-list batch job, can take about 10 seconds">{{ icon('clock', 13) }} Revoking…</button>
               {% elif not vc.revoked and vc.revocable %}
               <form method="post" action="/registrar/students/{{ s.id }}/{{ degree.degreeId }}/transcripts/revoke"
-                    onsubmit="if (!confirm('Revoke this transcript VC for {{ s.fullName }} ({{ degree.level }}: {{ degree.academicProgram }})? This cannot be undone, and can take up to a minute to show as Revoked here.')) return false;
+                    onsubmit="if (!confirm('Revoke this transcript VC for {{ s.fullName }} ({{ degree.level }}: {{ degree.academicProgram }})? This cannot be undone, and can take about 10 seconds to show as Revoked here.')) return false;
                               var btn = this.querySelector('button'); btn.disabled = true; btn.textContent = 'Revoking…';">
                 <input type="hidden" name="credential_id" value="{{ vc.credentialId }}">
                 <button type="submit" class="btn btn-small btn-danger">{{ icon('trash', 13) }} Revoke</button>
