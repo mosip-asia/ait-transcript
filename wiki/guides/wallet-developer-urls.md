@@ -62,7 +62,7 @@ Nothing else is exposed or needed. Do not use the Docker names that may appear i
 
 Verified end to end on a physical iPhone through TestFlight. **Android has not been tried.**
 
-**Shortcut:** steps 1 to 5 below are packaged as a patch. `BUNDLE_ID=com.yourorg.aitwallet TEAM_ID=ABCDE12345 ./wallet/apply.sh my-wallet` (both required; see [wallet/README.md](../../wallet/README.md)) clones v0.22.1 and applies them; continue at step 6. The steps remain here so you can see, and adapt, what changed.
+**Shortcut:** steps 1 to 5 below are packaged as a patch. `BUNDLE_ID=com.yourorg.aitwallet TEAM_ID=ABCDE12345 ./wallet/apply.sh ios my-wallet` (both required; see [wallet/README.md](../../wallet/README.md)) clones v0.22.1 and applies them; continue at step 6. The steps remain here so you can see, and adapt, what changed.
 
 **Prerequisites:** macOS with Xcode 27, Node **20** (RN 0.74 does not take Node 26), CocoaPods >= 1.12 (`brew install cocoapods node@20`; put `/opt/homebrew/opt/node@20/bin` first on `PATH` and set `LANG=en_US.UTF-8`), and an Apple Developer account for a device build or TestFlight. v0.22.1 does **not** run in the iOS Simulator (its MLKit/MLImage pods have no usable arm64 simulator slice), so use a real iPhone.
 
