@@ -27,3 +27,4 @@ This repo is standalone — it does not run against or modify the upstream `inji
 ### Guides
 
 - [VC download troubleshooting](./guides/vc-download-troubleshooting.md) — the four layered bugs (Keycloak login page, JWT issuer, nginx path truncation, JSON escaping) that block Inji Web VC download, how to tell them apart, and how each was fixed.
+- [Wallet developer URLs](./guides/wallet-developer-urls.md) — the endpoints, settings and flow for building your own wallet on Inji Wallet against the GCP demo.

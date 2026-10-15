@@ -1,3 +1,12 @@
+# Keycloak's issuer is pinned to the Docker-internal http://keycloak:8080 (Mimoto's JWT aud and Certify's
+# issuer-uri need it), but RFC 8414 clients must see an issuer equal to the URL they fetched the metadata
+# from: the Inji iOS wallet rejects "Issuer mismatch" otherwise. So only requests that arrive under a public
+# hostname get the public issuer; Mimoto's (Host: keycloak) stays untouched.
+map $host $kc_issuer_base {
+  keycloak  "http://keycloak:8080";
+  default   "$KEYCLOAK_PUBLIC_BASE_URL";
+}
+
 server {
   listen 8080;
   server_name _;
@@ -17,6 +26,7 @@ server {
     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
     proxy_set_header X-Forwarded-Proto $scheme;
     sub_filter '"authorization_endpoint":"http://keycloak:8080' '"authorization_endpoint":"$KEYCLOAK_PUBLIC_BASE_URL';
+    sub_filter '"issuer":"http://keycloak:8080' '"issuer":"$kc_issuer_base';
     sub_filter_once off;
     sub_filter_types application/json;
   }
