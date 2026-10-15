@@ -16,6 +16,7 @@ This repo is standalone — it does not run against or modify the upstream `inji
 ### Architecture
 
 - [Local stack](./architecture/vc-stack.md) — the vendored Docker Compose topology (Certify, Mimoto, Keycloak, Inji Web, Inji Verify, Postgres) and how it differs from `inji/vc-stack`.
+- [Inji mobile wallet](./architecture/inji-mobile-wallet.md) — which URLs the phone app needs, why the stack's internal hostnames break it, how the `api.` gateway serves it separate copies without touching Inji Web, and what is still open.
 
 ### Concepts
 
