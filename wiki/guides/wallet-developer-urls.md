@@ -58,6 +58,79 @@ Nothing else is exposed or needed. Do not use the Docker names that may appear i
 - Presenting a credential from the app to Inji Verify (OpenID4VP) is not enabled; verify by QR in the browser.
 - The VM runs Mon-Fri 08:30-18:30 Asia/Bangkok only.
 
+## Building the wallet (iOS, Inji Wallet v0.22.1)
+
+Verified end to end on a physical iPhone through TestFlight. **Android has not been tried.**
+
+**Prerequisites:** macOS with Xcode 27, Node **20** (RN 0.74 does not take Node 26), CocoaPods >= 1.12 (`brew install cocoapods node@20`; put `/opt/homebrew/opt/node@20/bin` first on `PATH` and set `LANG=en_US.UTF-8`), and an Apple Developer account for a device build or TestFlight. v0.22.1 does **not** run in the iOS Simulator (its MLKit/MLImage pods have no usable arm64 simulator slice), so use a real iPhone.
+
+1. `git clone --branch v0.22.1 https://github.com/inji/inji-wallet.git`
+2. **`.env`**: set `MIMOTO_HOST`, `ESIGNET_HOST` and `OBSRV_HOST` to `https://api.transcript-demo.ait-vc.dpi.ait.ac.th` (see above). The Metro cache keeps old values: clear it after changing them.
+3. **Signing** (`ios/Inji.xcodeproj`, Debug and Release): your own `PRODUCT_BUNDLE_IDENTIFIER` and `DEVELOPMENT_TEAM`, `CODE_SIGN_STYLE = Automatic`, `CODE_SIGN_IDENTITY = "Apple Development"` (Xcode re-signs for the App Store at export). Point `CODE_SIGN_ENTITLEMENTS` at an empty `<dict/>` plist: the upstream file needs iCloud, Push and Sign in with Apple on your App ID, none of which this flow uses. Keep the `io.mosip.residentapp.inji` URL scheme in `Info.plist`.
+4. **Xcode 27 build fixes:**
+   - Raise the deployment target to **15.0**: `IPHONEOS_DEPLOYMENT_TARGET` in the project and in the Podfile (`platform :ios, ... '15.0'` and the `post_install` line that forced `14.0`). Xcode 27 rejects anything lower.
+   - In the Podfile `post_install` loop that sets build settings, add `SWIFT_ENABLE_EXPLICIT_MODULES = 'NO'` and `CLANG_ENABLE_EXPLICIT_MODULES = 'NO'` (the legacy C crypto pods fail to build otherwise).
+   - `node_modules/expo-localization/ios/LocalizationModule.swift`: add `@unknown default: return "unknown"` to the `getUnicodeCalendarIdentifier` switch, then `npx patch-package expo-localization` so the patch survives `npm install`.
+5. **iOS 27 scene lifecycle** (without this the app is killed at launch: `___UIApplicationEvaluateRuntimeIssueForNoSceneLifecycleAdoption`). Add to `Info.plist`:
+
+   ```xml
+   <key>UIApplicationSceneManifest</key>
+   <dict>
+     <key>UIApplicationSupportsMultipleScenes</key><false/>
+     <key>UISceneConfigurations</key>
+     <dict>
+       <key>UIWindowSceneSessionRoleApplication</key>
+       <array><dict>
+         <key>UISceneConfigurationName</key><string>Default Configuration</string>
+         <key>UISceneDelegateClassName</key><string>SceneDelegate</string>
+       </dict></array>
+     </dict>
+   </dict>
+   ```
+
+   and add `ios/Inji/SceneDelegate.h` / `.mm` to the Inji target (RN 0.74 still creates the window in `AppDelegate`, so the scene only adopts it and forwards URLs):
+
+   ```objc
+   // SceneDelegate.h
+   #import <UIKit/UIKit.h>
+   @interface SceneDelegate : UIResponder <UIWindowSceneDelegate>
+   @property (strong, nonatomic) UIWindow *window;
+   @end
+
+   // SceneDelegate.mm
+   #import "SceneDelegate.h"
+   #import "AppDelegate.h"
+   @implementation SceneDelegate
+   - (AppDelegate *)appDelegate { return (AppDelegate *)UIApplication.sharedApplication.delegate; }
+   - (void)scene:(UIScene *)scene willConnectToSession:(UISceneSession *)session options:(UISceneConnectionOptions *)connectionOptions {
+     if (![scene isKindOfClass:[UIWindowScene class]]) return;
+     UIWindow *window = [self appDelegate].window;   // created by RCTAppDelegate
+     window.windowScene = (UIWindowScene *)scene;
+     self.window = window;
+     [window makeKeyAndVisible];
+     for (UIOpenURLContext *c in connectionOptions.URLContexts)
+       [[self appDelegate] application:UIApplication.sharedApplication openURL:c.URL options:@{}];
+     for (NSUserActivity *a in connectionOptions.userActivities)
+       [[self appDelegate] application:UIApplication.sharedApplication continueUserActivity:a restorationHandler:^(NSArray<id<UIUserActivityRestoring>> *_Nullable r) {}];
+   }
+   - (void)scene:(UIScene *)scene openURLContexts:(NSSet<UIOpenURLContext *> *)URLContexts {
+     for (UIOpenURLContext *c in URLContexts)
+       [[self appDelegate] application:UIApplication.sharedApplication openURL:c.URL options:@{}];
+   }
+   - (void)scene:(UIScene *)scene continueUserActivity:(NSUserActivity *)a {
+     [[self appDelegate] application:UIApplication.sharedApplication continueUserActivity:a restorationHandler:^(NSArray<id<UIUserActivityRestoring>> *_Nullable r) {}];
+   }
+   @end
+   ```
+
+   Links that cold-start the app now arrive on the scene; this forwards them, but a cold-start deep link is untested.
+6. `npm install`, then `cd ios && pod install` (the TensorFlow pod is a large git clone; rerun if the network resets it), then build or archive with `-allowProvisioningUpdates`. The repo's Talisman pre-commit hook flags `Podfile.lock`, `project.pbxproj` and `Info.plist` as secrets (hex ids); copy the checksums it prints into `.talismanrc`.
+7. **TestFlight:** create the App Store Connect record for your bundle id (the App ID must already exist: an archive plus `xcodebuild -exportArchive` with `method = app-store-connect` and `signingStyle = automatic` registers it), then export with `destination = upload`. Each upload needs a higher `CFBundleVersion`.
+
+### Where a failed download stopped
+
+If the app only says the download failed, the request order on the platform tells you which step broke (maintainers can read it in Dozzle): `allProperties` -> `issuers` -> `/.well-known/openid-credential-issuer` -> Keycloak `/.well-known/oauth-authorization-server` -> the login page (`openid-connect/auth`) -> `POST get-token/AITUniversity` -> `POST issuance/credential`. Stopping after the discovery document means the library rejected it (the iOS one checks that `issuer` equals the URL it fetched). Stopping before it means the host, a stale cache or the metadata.
+
 ## Test students
 
 Mock students are defined in [data/students.json](../../data/students.json). Ask the demo owner for the shared test password rather than copying one into a wallet repo.
