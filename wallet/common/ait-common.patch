@@ -1,0 +1,20 @@
+diff --git a/.env b/.env
+index 01387a6..28d9ec1 100644
+--- a/.env
++++ b/.env
+@@ -1,12 +1,11 @@
+ # after making changes to the env file, ensure to start the bundler (or the project) with a --reset-cache
+ # eg . npm build android:newlogic --reset-cache
+ 
+-#MIMOTO_HOST=http://mock.mimoto.newlogic.dev
+-MIMOTO_HOST=https://api.qa-inji1.mosip.net
++MIMOTO_HOST=https://api.transcript-demo.ait-vc.dpi.ait.ac.th
+ 
+-ESIGNET_HOST=https://esignet.qa-inji.mosip.net
++ESIGNET_HOST=https://api.transcript-demo.ait-vc.dpi.ait.ac.th
+ 
+-OBSRV_HOST = https://dataset-api.telemetry.mosip.net
++OBSRV_HOST=https://api.transcript-demo.ait-vc.dpi.ait.ac.th
+ 
+ #Application Theme can be ( gradient | purple )
+ APPLICATION_THEME=gradient
