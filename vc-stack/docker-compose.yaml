@@ -228,6 +228,8 @@ services:
       - "9098:80"
     volumes:
       - ./public-gateway-nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./config/public-gateway-mobile.conf:/etc/nginx/mobile/public-gateway-mobile.conf:ro
+      - ./config/mimoto-issuers-mobile.json:/etc/nginx/mobile/mimoto-issuers-mobile.json:ro
     depends_on:
       - mimoto-service
       - certify-nginx
@@ -252,6 +254,9 @@ services:
       - INJI_WEB_URL=${INJI_WEB_URL:-http://localhost:4004}
       - INJI_VERIFY_URL=${INJI_VERIFY_URL:-http://localhost:4007}
       - KEYCLOAK_PUBLIC_BASE_URL=${KEYCLOAK_PUBLIC_BASE_URL:-http://localhost:9080}
+      # Only data/render_mimoto_issuers_config.py reads these two (phone-only gateway files).
+      - CERTIFY_PUBLIC_BASE_URL=${CERTIFY_PUBLIC_BASE_URL:-http://certify-nginx}
+      - KEYCLOAK_DOCKER_AUTH_SERVER=${KEYCLOAK_DOCKER_AUTH_SERVER:-http://keycloak:8080}
     volumes:
       - ../app:/demo/app
       - ../data:/demo/data

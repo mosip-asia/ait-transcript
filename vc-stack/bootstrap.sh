@@ -64,6 +64,23 @@ env_value() {
     | sed 's/^[[:space:]]*//; s/[[:space:]]*$//'
 }
 
+# JSON-LD context URL baked into every transcript VC. Local runs keep the Docker-only name (nothing but
+# containers reads it). A public deployment (CERTIFY_PUBLIC_BASE_URL is https) uses the api. gateway, which
+# already serves the file, so a phone can load it when it verifies the VC after download.
+# STUDENT_CONTEXT_URL in .env overrides it (rehearsing the switch locally, or rolling a deployment back).
+student_context_url() {
+  local certify_public override
+  override="$(env_value STUDENT_CONTEXT_URL)"
+  certify_public="$(env_value CERTIFY_PUBLIC_BASE_URL)"
+  if [[ -n "$override" ]]; then
+    printf '%s' "$override"
+  elif [[ "$certify_public" == https://* ]]; then
+    printf '%s/academic-transcript-context.json' "${certify_public%/}"
+  else
+    printf '%s' "$LOCAL_STUDENT_CONTEXT_URL"
+  fi
+}
+
 # -------- args --------
 for a in "$@"; do
   case "$a" in
@@ -500,6 +517,32 @@ did_refresh() {
   ok "post-restart DID confirmed: $new_did"
 }
 
+# -------- context refresh --------
+# certify_init.sql seeds the local context URL and only runs on a fresh database, so a deployed one is
+# moved to student_context_url() here. Idempotent; already-issued VCs keep the URL they were signed with.
+context_refresh() {
+  step "VC @context URL"
+  local url changed
+  url="$(student_context_url)"
+  changed=$(docker compose exec -T database psql -U postgres -d inji_certify -tAq -v ON_ERROR_STOP=1 -v "new_url=$url" \
+    < context_refresh.sql | tr -d '[:space:]') || die "context_refresh.sql failed" 2
+  if [[ "$changed" != "1" ]]; then
+    ok "ait-transcript context already $url"
+    return
+  fi
+  ok "ait-transcript context → $url"
+  # Mimoto caches Certify's issuer metadata and builds the credential request's @context from it; a stale
+  # cache fails Certify's context match ("No matching ldp_vc credential configuration"), so restart both.
+  docker compose restart certify mimoto-service >/dev/null
+  local deadline=$(( $(date +%s) + 120 ))
+  until curl -sf http://localhost:9091/.well-known/openid-credential-issuer >/dev/null \
+     && curl -sf http://localhost:9099/v1/mimoto/issuers >/dev/null; do
+    (( $(date +%s) <= deadline )) || die "certify/mimoto not available after restart" 2
+    sleep 2
+  done
+  ok "restarted certify and mimoto-service"
+}
+
 # -------- validate --------
 validate() {
   step "End-to-end validation"
@@ -527,7 +570,7 @@ validate() {
   [[ -n "$mimoto_issuers" ]] && ok "mimoto issuers: $mimoto_issuers" || die "mimoto issuers empty" 2
 
   local expected_student_context student_context student_metadata_context
-  expected_student_context="$LOCAL_STUDENT_CONTEXT_URL,https://www.w3.org/ns/credentials/v2"
+  expected_student_context="$(student_context_url),https://www.w3.org/ns/credentials/v2"
   student_context=$(docker compose exec -T database 2>/dev/null psql -U postgres -d inji_certify -tAc \
     "select context from certify.credential_config where credential_config_key_id='ait-transcript';" \
     | tr -d '[:space:]')
@@ -581,7 +624,7 @@ validate() {
 # -------- main --------
 main() {
   if (( ONLY_VALIDATE )); then validate; exit 0; fi
-  if (( ONLY_DID ));      then did_refresh; validate; exit 0; fi
+  if (( ONLY_DID ));      then did_refresh; context_refresh; validate; exit 0; fi
 
   preflight
   (( DO_WIPE )) && do_wipe
@@ -595,6 +638,7 @@ main() {
   compose_up
   wait_healthy
   did_refresh
+  context_refresh
   validate
 }
 
