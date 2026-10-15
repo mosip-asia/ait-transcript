@@ -1,6 +1,6 @@
 # AIT Transcript VC Journey
 
-Local Docker-only walkthrough: student requests a transcript VC, registrar approves in the app, student claims into **Inji Web**, presents to **Inji Verify**.
+Local Docker-only walkthrough: student requests a transcript VC, registrar approves in the app, student claims into **Inji Web**, presents to **Inji Verify**. The same stack runs publicly on GCP, where the credential can also be claimed into the **Inji mobile wallet** (see [Developing an Inji-based mobile wallet](#developing-an-inji-based-mobile-wallet)).
 
 ```mermaid
 flowchart LR
@@ -186,6 +186,41 @@ After `./run-demo.sh` (no further terminal steps):
 | Keycloak (student logins, realm `inji`) | https://keycloak.transcript-demo.ait-vc.dpi.ait.ac.th |
 | Container logs (Dozzle, basic auth) | https://logs.transcript-demo.ait-vc.dpi.ait.ac.th |
 
+## Developing an Inji-based mobile wallet
+
+The GCP deployment issues the transcript to the Inji mobile wallet as well as to Inji Web. It works with Inji Wallet **v0.22.1**, confirmed end to end on a physical iPhone through TestFlight (iOS only; Android is untried). Developers building their own wallet on Inji Wallet need these three public hostnames and one app setting:
+
+| Need | Value |
+|---|---|
+| Wallet backend (Mimoto issuer list and token proxy, Certify metadata and credential endpoint) | `https://api.transcript-demo.ait-vc.dpi.ait.ac.th` |
+| Student login (Keycloak realm `inji`) | `https://keycloak.transcript-demo.ait-vc.dpi.ait.ac.th` |
+| Check a credential by QR in the browser | `https://verify.transcript-demo.ait-vc.dpi.ait.ac.th` |
+| App setting (`.env`) | `MIMOTO_HOST=https://api.transcript-demo.ait-vc.dpi.ait.ac.th` (no trailing slash, no `/v1/mimoto`) |
+
+| Wallet values | |
+|---|---|
+| Issuer / credential | `AITUniversity` / `ait-transcript` (scope `ait_transcript_vc_ldp`, format `ldp_vc`) |
+| OAuth client / redirect | `wallet-demo` / `io.mosip.residentapp.inji://oauthredirect` (register this URL scheme in the app) |
+| Test students | mock students in [data/students.json](./data/students.json); ask the maintainer for the test password |
+
+What a developer should know before starting:
+
+- **Use a physical iPhone.** Inji Wallet v0.22.1 does not run in the iOS Simulator. Building on current Xcode needs a few changes (iOS 15 minimum, two Podfile settings, an `expo-localization` patch) and, **for iOS 27, a `SceneDelegate`**: without it the app is killed at launch. The step-by-step recipe, with the code, is in [wiki/guides/wallet-developer-urls.md](./wiki/guides/wallet-developer-urls.md).
+- **Always use the `api.` host, not `wallet.`.** The phone gets its own issuer list and Certify metadata from `api.`; the same paths on `wallet.` return Docker-internal values that only Inji Web can use. Why: [wiki/architecture/inji-mobile-wallet.md](./wiki/architecture/inji-mobile-wallet.md).
+- **The login code goes to Mimoto, not Keycloak.** `wallet-demo` is a confidential client, so Inji Wallet posts the code to `.../v1/mimoto/get-token/AITUniversity` and Mimoto authenticates for it.
+- **Download then verify happens on the phone.** Credentials issued before 2026-10-15 carry an old context URL that a phone cannot load; use freshly issued ones (the registrar portal's reissue).
+- **Not enabled:** presenting a credential from the phone to Inji Verify (OpenID4VP). Verify by QR in the browser instead.
+- **Availability:** the VM runs Mon-Fri 08:30-18:30 Asia/Bangkok only.
+
+If the app only says the download failed, the request order in the platform logs shows where it stopped; see "Where a failed download stopped" in the guide above.
+
+### Wallets that are not Inji Wallet
+
+A generic OpenID4VCI wallet cannot connect to the platform yet: the only OAuth client is confidential, and the advertised token endpoint is not public. Nothing has been tested with a non-Inji wallet. What the platform exposes, what a wallet must support, the workaround that exists today and the changes needed are in [wiki/guides/other-openid4vci-wallets.md](./wiki/guides/other-openid4vci-wallets.md).
+
 ## Docs
 
-- [wiki/OVERVIEW.md](./wiki/OVERVIEW.md) — architecture and gotchas  
+- [wiki/OVERVIEW.md](./wiki/OVERVIEW.md) — architecture and gotchas
+- [wiki/guides/wallet-developer-urls.md](./wiki/guides/wallet-developer-urls.md) — URLs, flow and iOS build recipe for Inji-based wallets
+- [wiki/guides/other-openid4vci-wallets.md](./wiki/guides/other-openid4vci-wallets.md) — connecting a non-Inji OpenID4VCI wallet
+- [wiki/architecture/inji-mobile-wallet.md](./wiki/architecture/inji-mobile-wallet.md) — why the phone gets its own views of the issuer list and metadata
