@@ -205,7 +205,7 @@ The GCP deployment issues the transcript to the Inji mobile wallet as well as to
 
 What a developer should know before starting:
 
-- **Use a physical iPhone.** Inji Wallet v0.22.1 does not run in the iOS Simulator. Building on current Xcode needs a few changes (iOS 15 minimum, two Podfile settings, an `expo-localization` patch) and, **for iOS 27, a `SceneDelegate`**: without it the app is killed at launch. The step-by-step recipe, with the code, is in [wiki/guides/wallet-developer-urls.md](./wiki/guides/wallet-developer-urls.md).
+- **Use a physical iPhone.** Inji Wallet v0.22.1 does not run in the iOS Simulator. Building on current Xcode needs a few changes (iOS 15 minimum, two Podfile settings, an `expo-localization` patch) and, **for iOS 27, a `SceneDelegate`**: without it the app is killed at launch. **Start from [wallet/](./wallet/README.md):** `BUNDLE_ID=... TEAM_ID=... ./wallet/apply.sh` clones Inji Wallet v0.22.1 and applies all of these changes (the AIT hosts, signing, build fixes and `SceneDelegate`) from one 31 KB patch. The step-by-step recipe, with the code, is in [wiki/guides/wallet-developer-urls.md](./wiki/guides/wallet-developer-urls.md).
 - **Always use the `api.` host, not `wallet.`.** The phone gets its own issuer list and Certify metadata from `api.`; the same paths on `wallet.` return Docker-internal values that only Inji Web can use. Why: [wiki/architecture/inji-mobile-wallet.md](./wiki/architecture/inji-mobile-wallet.md).
 - **The login code goes to Mimoto, not Keycloak.** `wallet-demo` is a confidential client, so Inji Wallet posts the code to `.../v1/mimoto/get-token/AITUniversity` and Mimoto authenticates for it.
 - **Download then verify happens on the phone.** Credentials issued before 2026-10-15 carry an old context URL that a phone cannot load; use freshly issued ones (the registrar portal's reissue).
@@ -221,6 +221,7 @@ A generic OpenID4VCI wallet cannot connect to the platform yet: the only OAuth c
 ## Docs
 
 - [wiki/OVERVIEW.md](./wiki/OVERVIEW.md) — architecture and gotchas
+- [wallet/README.md](./wallet/README.md) — the patch and one-command script that turn Inji Wallet v0.22.1 into the AIT-connected wallet
 - [wiki/guides/wallet-developer-urls.md](./wiki/guides/wallet-developer-urls.md) — URLs, flow and iOS build recipe for Inji-based wallets
 - [wiki/guides/other-openid4vci-wallets.md](./wiki/guides/other-openid4vci-wallets.md) — connecting a non-Inji OpenID4VCI wallet
 - [wiki/architecture/inji-mobile-wallet.md](./wiki/architecture/inji-mobile-wallet.md) — why the phone gets its own views of the issuer list and metadata
