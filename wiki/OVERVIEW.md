@@ -29,3 +29,14 @@ This repo is standalone — it does not run against or modify the upstream `inji
 - [VC download troubleshooting](./guides/vc-download-troubleshooting.md) — the four layered bugs (Keycloak login page, JWT issuer, nginx path truncation, JSON escaping) that block Inji Web VC download, how to tell them apart, and how each was fixed.
 - [Wallet developer URLs](./guides/wallet-developer-urls.md) — the endpoints, settings and flow for building your own wallet on Inji Wallet against the GCP demo.
 - [Connecting a non-Inji OpenID4VCI wallet](./guides/other-openid4vci-wallets.md) — what the platform exposes to a generic wallet, what blocks one today, the workaround and the changes needed.
+
+### Issuer v0.1 (planned product, not the running demo)
+
+Vocabulary for the Issuer product is in [CONTEXT.md](../CONTEXT.md).
+
+- [Responsibilities](./project/issuer-v0.1/responsibilities.md) — who owns which component of the Issuer, the external contracts, the design decisions that bound v0.1, and the verifier conformance profile.
+- [Interface contracts](./project/issuer-v0.1/contracts.md) — sign-in, record data, admin API, VDR publishing, credential offer and deployment configuration, and who provides each.
+- [Deviations from the proposal](./project/issuer-v0.1/deviations.md) — every place v0.1 departs from the issuer proposal (PR 4), why, and when it is revisited.
+- [Signing coverage](./research/signing-coverage.md) — why the transcript claims were not covered by the issuer signature, and the context fix chosen for v0.1.
+- [Diagrams](./diagrams/) — the issuer proposal overview and its ITserv view, in draw.io format.
+- [Schemas](./schemas/) — the transcript credential JSON Schema and examples (VCDM 1.1 variant), and the proposed corrected JSON-LD context.
