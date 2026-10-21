@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import base64
 import json
+import re
 import sys
 from pathlib import Path
 from urllib.parse import parse_qs
@@ -129,6 +130,9 @@ def test_verify_step_passes_when_the_credential_verifies_and_its_tampered_copy_d
     changed = {k for k in CREDENTIAL["credentialSubject"]
                if tampered["credentialSubject"].get(k) != CREDENTIAL["credentialSubject"][k]}
     assert changed == {"id"}, f"expected credentialSubject.id changed, got {changed}"
+    original_id, tampered_id = CREDENTIAL["credentialSubject"]["id"], tampered["credentialSubject"]["id"]
+    assert re.fullmatch(r"did:jwk:[A-Za-z0-9_-]+", tampered_id), f"tampered id must stay a valid did:jwk, got {tampered_id!r}"
+    assert tampered_id != original_id and len(tampered_id) == len(original_id) and tampered_id[:-1] == original_id[:-1]
     assert {k: v for k, v in tampered.items() if k != "credentialSubject"} == \
         {k: v for k, v in CREDENTIAL.items() if k != "credentialSubject"}
 

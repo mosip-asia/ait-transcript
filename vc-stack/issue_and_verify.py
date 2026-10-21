@@ -4,7 +4,8 @@ issue:  a token from the installation's realm (direct-access grant on the test-o
         persona and the credential scope), a proof JWT signed with a fresh key as did:jwk, Certify's
         /issuance/credential; the credential is written to a file.
 verify: verify-service's v2 vc-verification must answer SUCCESS for that file, and
-        ERR_SIGNATURE_VERIFICATION_FAILED once one top-level claim is changed.
+        ERR_SIGNATURE_VERIFICATION_FAILED once the holder DID (credentialSubject.id) is changed, until ticket 06
+        widens the change to fullName and a value inside courses.
 
 Deviation from the ticket's "Ed25519": the proof key is ES256 (P-256), because the seed's proof_types_supported
 allows RS256/ES256 only, and Inji Web uses ES256.
@@ -124,7 +125,9 @@ def verify_step(client: httpx.Client, credential: dict) -> list[str]:
     subject = credential["credentialSubject"]
     # Today's context signs only credentialSubject.id; ticket 06 widens this to fullName and a value inside courses.
     claim = "id"
-    tampered = {**credential, "credentialSubject": {**subject, claim: subject[claim] + " (tampered)"}}
+    # Swap the last character for another base64url one: the value stays a valid IRI and did:jwk, so only the signature can fail.
+    value = subject[claim]
+    tampered = {**credential, "credentialSubject": {**subject, claim: value[:-1] + ("A" if value[-1] != "A" else "B")}}
     outcome = verify(client, tampered)
     if outcome != "ERR_SIGNATURE_VERIFICATION_FAILED":
         problems.append(f"tampered credentialSubject.{claim}: expected ERR_SIGNATURE_VERIFICATION_FAILED, got {outcome}")
