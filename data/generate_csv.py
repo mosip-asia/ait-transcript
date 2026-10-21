@@ -48,7 +48,11 @@ CLAIM_COLUMNS = [
     "thesisExamination",
 ]
 
-CSV_COLUMNS = ["id", *CLAIM_COLUMNS]
+# Read by the mock adapter (adapter/), not by Certify: the degree level and the eligibility
+# attributes of contracts.md section 2b. They follow the claims, so Certify's data-columns stay a prefix.
+ADAPTER_COLUMNS = ["level", "holds", "conferralStatus", "balance"]
+
+CSV_COLUMNS = ["id", *CLAIM_COLUMNS, *ADAPTER_COLUMNS]
 
 
 def load_students(path: Path = STUDENTS_JSON) -> dict:
@@ -85,6 +89,9 @@ def build_rows(students: list[dict]) -> list[dict]:
             for claim in CLAIM_COLUMNS:
                 value = str(enriched.get(claim, ""))
                 row[claim] = value if claim == "courses" else escape_vc_quoted_claim(value)
+            eligibility = degree["eligibility"]
+            row.update(level=degree["level"], holds=json.dumps(eligibility["holds"]),
+                       conferralStatus=eligibility["conferralStatus"], balance=eligibility["balance"])
             rows.append(row)
     return rows
 

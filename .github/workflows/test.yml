@@ -44,7 +44,8 @@ jobs:
             portal/test_requests.py \
             data/test_ait_courses.py \
             data/test_generate_csv.py \
-            data/test_render_mimoto_issuers_config.py
+            data/test_render_mimoto_issuers_config.py \
+            adapter/test_adapter.py
           do
             echo "::group::$t"
             if python "$t"; then r=PASS; else r=FAIL; status=1; fi

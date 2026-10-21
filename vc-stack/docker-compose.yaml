@@ -288,6 +288,20 @@ services:
     # student-facing wallet/verify links are still browser-only deep links, built from
     # INJI_WEB_URL/INJI_VERIFY_URL/KEYCLOAK_PUBLIC_BASE_URL above (see portal/requests.py).
 
+  # Mock data adapter (contracts.md section 2b): read-only, reads the installation's CSV on every request.
+  # Reached as http://adapter:8000 from the other services; no host port.
+  adapter:
+    container_name: adapter
+    build:
+      context: ..
+      dockerfile: adapter/Dockerfile
+    environment:
+      - ADAPTER_CSV=/data/student_identity_data.csv
+    volumes:
+      - ../installations/${INSTALLATION}/adapter:/data:ro
+    networks:
+      - network
+
 networks:
   network:
     name: vc_stack_network

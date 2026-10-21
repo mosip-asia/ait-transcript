@@ -66,8 +66,11 @@ prop_cols=$(grep '^mosip.certify.mock.data-provider.csv.data-columns=' "$INSTALL
 csv_header=$(head -1 "$csv_file" | tr -d '\r')
 prop_n=$(echo "$prop_cols" | awk -F, '{print NF}')
 csv_n=$(echo "$csv_header" | awk -F, '{print NF}')
-[[ "$prop_n" == "$csv_n" ]] || fail "data-columns count ($prop_n) != CSV header count ($csv_n)"
-[[ "$prop_cols" == "$csv_header" ]] || fail "data-columns header text mismatch"
+[[ "$prop_n" -le "$csv_n" ]] || fail "data-columns count ($prop_n) exceeds CSV header count ($csv_n)"
+csv_prefix=$(echo "$csv_header" | cut -d, -f1-"$prop_n")
+[[ "$prop_cols" == "$csv_prefix" ]] || fail "data-columns must be the leading CSV header columns, in order (claim columns first)"
+extra_n=$((csv_n - prop_n))
+[[ "$extra_n" -eq 0 ]] || ok "$extra_n adapter-only column(s) after the claim columns: $(echo "$csv_header" | cut -d, -f"$((prop_n + 1))"-)"
 ok "CSV column alignment"
 
 template=config/AITUniversity-ait-transcript-template.html
@@ -104,6 +107,14 @@ auth_aud=$(curl -sf http://localhost:4004/v1/mimoto/issuers/AITUniversity | jq -
 [[ "$auth_aud" == http://keycloak:8080/* ]] \
   || fail "authorization_audience must be keycloak:8080 token URL (got: ${auth_aud:-<empty>})"
 ok "Issuer authorization_audience matches Docker Keycloak token URL"
+
+# The mock adapter answers contract 2b's three paths and a 404, and serves an edited CSV value at once.
+docker compose run --rm --no-deps -T \
+  -v "$STACK_DIR/../adapter/test_adapter.py:/demo/adapter/test_adapter.py:ro" \
+  demo-app python adapter/test_adapter.py http://adapter:8000 \
+  "/demo/installations/$INSTALLATION/adapter/student_identity_data.csv" \
+  || fail "mock adapter (adapter/test_adapter.py)"
+ok "mock adapter serves the degree list, the record and the eligibility attributes"
 
 # Scripted issuance, then verification with a tampered copy, inside the Docker network (see the script's docstring).
 issue_and_verify() {

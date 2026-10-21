@@ -82,7 +82,7 @@ def seed_template() -> dict:
 def test_certify_configuration_names_the_generated_columns() -> None:
     # Certify maps CSV cells to claims by position and fills the template from them.
     props = (AIT / "certify-csvdp-student.properties").read_text(encoding="utf-8")
-    columns = ",".join(gc.CSV_COLUMNS)
+    columns = ",".join(["id", *gc.CLAIM_COLUMNS])  # the adapter columns after them are not Certify's
     assert re.search(r"^mosip\.certify\.mock\.data-provider\.csv\.data-columns=(.*)$", props, re.M)[1].strip() == columns
     (plugin_config,) = json.loads(seed_value(r"'(\[\{\"mosip\.certify\.mock[^']*)'::JSONB"))
     assert plugin_config["mosip.certify.mock.data-provider.csv.data-columns"] == columns
@@ -107,6 +107,21 @@ def test_context_v1_signs_every_generated_claim() -> None:
         want = {"@id": "ait:courses", "@type": "@json"} if claim == "courses" else f"ait:{claim}"
         assert terms.get(claim) == want, (claim, terms.get(claim))
     assert set(terms) == {"@version", "@protected", "ait", "AitTranscriptCredential", *gc.CLAIM_COLUMNS}
+
+
+def test_eligibility_columns_follow_the_claims() -> None:
+    # The mock adapter's columns come after the claims; Certify maps by header name and ignores them.
+    assert gc.CSV_COLUMNS == ["id", *gc.CLAIM_COLUMNS, "level", "holds", "conferralStatus", "balance"]
+
+
+def test_personas_cover_each_transcript_check() -> None:
+    rows = gc.build_rows(gc.load_students()["students"])
+    holds = [json.loads(r["holds"]) for r in rows]
+    assert any(holds) and not all(holds)  # a hold fails the no-holds check
+    assert {"Conferred"} < {r["conferralStatus"] for r in rows}  # and a student that is not conferred
+    assert any(float(r["balance"]) > 0 for r in rows) and any(float(r["balance"]) == 0 for r in rows)
+    clean = [r for r in rows if not json.loads(r["holds"]) and r["conferralStatus"] == "Conferred" and float(r["balance"]) == 0]
+    assert clean  # someone still passes all three
 
 
 def test_csv_goes_to_the_ait_installation_adapter() -> None:
