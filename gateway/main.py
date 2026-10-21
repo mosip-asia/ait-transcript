@@ -56,7 +56,7 @@ def create_app(settings: Settings, adapter: httpx.Client | None = None, store: S
     if unknown:
         raise ValueError(f"no credential type for the enabled scope(s) {sorted(unknown)}")
     enabled = {scope: ct.REGISTRY[scope] for scope in settings.enabled_scopes}
-    adapter = adapter or httpx.Client(base_url=settings.adapter_url, timeout=10)
+    adapter = adapter or httpx.Client(base_url=settings.adapter_url, timeout=3)
     store = store or Store(settings.database_url)
     expected_auth = f"Bearer {settings.auth_token}".encode()
 
@@ -100,12 +100,19 @@ def create_app(settings: Settings, adapter: httpx.Client | None = None, store: S
         degrees = fetch(f"{student}/degrees")
         if not degrees:
             raise Refusal(404, "no_record")
-        degree_id = degrees[0]["degreeId"]  # one identity per degree in v0.1: the list has one entry
-        checks = ct.evaluate(ctype, fetch(f"{student}/eligibility", degreeId=degree_id))
+        try:
+            degree_id = degrees[0]["degreeId"]  # one identity per degree in v0.1: the list has one entry
+            checks = ct.evaluate(ctype, fetch(f"{student}/eligibility", degreeId=degree_id))
+        except (KeyError, IndexError, TypeError, ValueError, ArithmeticError) as exc:
+            raise Refusal(502, "gateway_error") from exc  # malformed adapter data
         if not all(c["passed"] for c in checks):
             raise Refusal(403, "checklist_failed", credentialType=ctype.credential_type, checks=checks)
 
-        body = ct.claims(ctype, fetch(f"{student}/transcript", degreeId=degree_id))
+        record = fetch(f"{student}/transcript", degreeId=degree_id)
+        try:
+            body = ct.claims(ctype, record)
+        except (KeyError, IndexError, TypeError, ValueError, AttributeError) as exc:
+            raise Refusal(502, "gateway_error") from exc  # malformed adapter data
         try:
             store.record(sub, ctype.credential_type, ctype.scope, claims.get("client_id"))
         except psycopg.Error as exc:

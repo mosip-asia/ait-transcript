@@ -163,16 +163,26 @@ issue_and_verify() {
     -v "$STACK_DIR/issue_and_verify.py:/demo/vc-stack/issue_and_verify.py:ro" \
     demo-app python vc-stack/issue_and_verify.py "$@"
 }
+issuance_rows() {
+  docker compose exec -T database psql -U postgres -d inji_certify -tAc "select count(*) from gateway.issuances"     | tr -d '[:space:]'
+}
+rows_before=$(issuance_rows) || fail "cannot count gateway.issuances"
 smoke_vc=.demo-state/smoke-credential.json
 issue_and_verify issue "$INSTALLATION" ait-2026-0001 ait_transcript_vc_ldp "$smoke_vc" \
   || fail "scripted issuance (vc-stack/issue_and_verify.py issue)"
 jq -e --arg u "$ctx_url" '."@context" | index($u)' "$REPO_ROOT/$smoke_vc" >/dev/null \
   || fail "issued credential does not name $ctx_url in its @context"
 issue_and_verify verify "$smoke_vc" || fail "credential verification (vc-stack/issue_and_verify.py verify)"
+rows_issued=$(issuance_rows) || fail "cannot count gateway.issuances"
+[[ "$rows_issued" == "$((rows_before + 1))" ]]   || fail "the Certify-path issuance must add one gateway.issuances row (before: $rows_before, after: $rows_issued)"
+ok "the Certify-path issuance wrote one gateway.issuances row"
 
 # A persona the Gateway's checklist refuses (a hold on the record) gets the OpenID4VCI error body with its code.
 issue_and_verify refused "$INSTALLATION" ait-2026-0002 ait_transcript_vc_ldp checklist_failed \
   || fail "refused persona through Certify (vc-stack/issue_and_verify.py refused ... checklist_failed)"
+rows_refused=$(issuance_rows) || fail "cannot count gateway.issuances"
+[[ "$rows_refused" == "$rows_issued" ]]   || fail "the refused persona must add no gateway.issuances row (before: $rows_issued, after: $rows_refused)"
+ok "the refused persona wrote no gateway.issuances row"
 
 # With the Gateway down, Certify still starts (the plugin calls nothing at startup) and a credential request is
 # gateway_error. The Gateway is started again whether or not the checks pass, so later steps still see it.

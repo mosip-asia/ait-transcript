@@ -8,6 +8,7 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
 import org.json.JSONArray;
@@ -83,7 +84,9 @@ public class GatewayDataProviderPlugin implements DataProviderPlugin {
             throw new DataProviderExchangeException(GATEWAY_ERROR);
         }
         if (response.statusCode() / 100 != 2) {
-            throw new DataProviderExchangeException(errorCode(response.body()));
+            String code = errorCode(response.body());
+            log.warn("Gateway answered {} with error {}", response.statusCode(), code);
+            throw new DataProviderExchangeException(code);
         }
         JSONObject result;
         try {
@@ -91,7 +94,7 @@ public class GatewayDataProviderPlugin implements DataProviderPlugin {
         } catch (JSONException e) {
             throw new DataProviderExchangeException(GATEWAY_ERROR);
         }
-        for (String key : result.keySet()) {
+        for (String key : new ArrayList<>(result.keySet())) {
             Object value = result.get(key);
             if (value instanceof JSONObject || value instanceof JSONArray) {
                 result.put(key, value.toString());

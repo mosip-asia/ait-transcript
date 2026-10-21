@@ -26,7 +26,7 @@ The installation's own values:
   - `mosip.certify.gateway.url`: the Gateway's base URL, `http://gateway:8000`
   - `mosip.certify.gateway.auth-token`: the shared bearer token; must equal `GATEWAY_AUTH_TOKEN` below (the committed value is test-only)
   - `mosip.certify.gateway.connect-timeout-ms`: `2000`
-  - `mosip.certify.gateway.read-timeout-ms`: `10000`
+  - `mosip.certify.gateway.read-timeout-ms`: `15000` (the Gateway makes three adapter calls of at most 3 s each and a database write with a 3 s connect timeout, 12 s in the worst case)
 - Gateway settings, in `gateway.env` (the `gateway` service's `env_file`; edit the file and recreate the container, `docker compose up -d gateway`):
   - `GATEWAY_ENABLED_SCOPES`: space-separated scopes the Gateway serves, each a credential type registered in `gateway/credential_types.py`; here `ait_transcript_vc_ldp`
   - `GATEWAY_ADAPTER_URL`: the data adapter's base URL, `http://adapter:8000` (the mock adapter)

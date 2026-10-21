@@ -32,7 +32,17 @@ docker run --rm --user "$(id -u):$(id -g)" \
   -v "$ROOT/gateway/plugin:/src" -w /src \
   -v "$STACK/plugins/.m2:/var/maven/.m2" -e MAVEN_CONFIG=/var/maven/.m2 \
   maven:3.9-eclipse-temurin-21 mvn -q -B -Duser.home=/var/maven package
-cp "$ROOT/gateway/plugin/target/gateway-data-provider-plugin.jar" "$STACK/plugins/"
+JAR_NEW="$ROOT/gateway/plugin/target/gateway-data-provider-plugin.jar"
+JAR_LIVE="$STACK/plugins/gateway-data-provider-plugin.jar"
+jar_changed=1
+if [[ -f "$JAR_LIVE" ]] && cmp -s "$JAR_NEW" "$JAR_LIVE"; then jar_changed=0; fi
+cp "$JAR_NEW" "$STACK/plugins/"
+# Compose mounts the jar as a single file, so a changed jar needs Certify recreated; its nginx resolves the upstream at start.
+if [[ "$jar_changed" == 1 && -n "$(docker compose ps -q --status running certify)" ]]; then
+  echo "==> Plugin jar changed: recreate Certify and restart its nginx"
+  docker compose up -d --no-deps --force-recreate certify
+  docker compose restart certify-nginx
+fi
 
 "$STACK/bootstrap.sh" "$@"
 

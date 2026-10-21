@@ -11,7 +11,7 @@ class Store:
         self.database_url = database_url
 
     def ensure_schema(self) -> None:
-        with psycopg.connect(self.database_url) as conn:
+        with psycopg.connect(self.database_url, connect_timeout=3) as conn:
             conn.execute("CREATE SCHEMA IF NOT EXISTS gateway")
             conn.execute(
                 """CREATE TABLE IF NOT EXISTS gateway.issuances (
@@ -24,7 +24,7 @@ class Store:
             )
 
     def record(self, sub: str, credential_type: str, scope: str, client_id: str | None) -> None:
-        with psycopg.connect(self.database_url) as conn:
+        with psycopg.connect(self.database_url, connect_timeout=3) as conn:
             conn.execute(
                 "INSERT INTO gateway.issuances (sub, credential_type, scope, client_id) VALUES (%s, %s, %s, %s)",
                 (sub, credential_type, scope, client_id),

@@ -148,6 +148,26 @@ def test_starts_while_the_adapter_is_down_and_answers_gateway_error() -> None:
         assert store.rows == []
 
 
+def test_malformed_adapter_data_is_a_gateway_error_not_a_crash() -> None:
+    import httpx
+
+    def answer(eligibility: dict | None, degrees: list) -> httpx.Client:
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(200, json=degrees if request.url.path.endswith("/degrees") else eligibility)
+        return httpx.Client(base_url="http://adapter:8000", transport=httpx.MockTransport(handler))
+
+    good = {"holds": [], "conferralStatus": "Conferred", "balance": "0"}
+    cases = [(answer(dict(good, balance="n/a"), [{"degreeId": "d1"}]), "balance is not a number"),
+             (answer({"holds": []}, [{"degreeId": "d1"}]), "eligibility lacks fields"),
+             (answer(good, [{"id": "d1"}]), "degree lacks degreeId")]
+    for adapter, label in cases:
+        store = FakeStore()
+        with host_gateway(adapter, store) as client:
+            status, body = post_with(client)({"sub": ELIGIBLE, "scope": SCOPE}, "test-token")
+        assert (status, body) == (502, {"error": "gateway_error"}), (label, status, body)
+        assert store.rows == []
+
+
 def test_a_failed_issuance_record_is_a_gateway_error_not_a_200() -> None:
     import psycopg
 

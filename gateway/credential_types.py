@@ -47,9 +47,10 @@ def escape_vc_quoted_claim(value: str) -> str:
 
 
 def claims(ctype: CredentialType, record: dict) -> dict:
-    """The 200 body: the type's claims, every string escaped for the quoted template; arrays (`courses`, which
-    the template embeds unquoted) are left as they are."""
-    return {k: escape_vc_quoted_claim(v) if isinstance(v, str) else v for k, v in ctype.claims(record).items()}
+    """The 200 body: the type's claims, every string escaped for the quoted template; other scalars become strings, and arrays (`courses`,
+    which the template embeds unquoted) are left as they are."""
+    return {k: v if isinstance(v, list) else escape_vc_quoted_claim("" if v is None else str(v))
+            for k, v in ctype.claims(record).items()}
 
 
 # --- AIT transcript ---------------------------------------------------------------------------------------
