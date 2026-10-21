@@ -69,6 +69,15 @@ jobs:
 
       - run: ./vc-stack/smoke.sh
 
+      - uses: actions/upload-artifact@v5
+        if: always()
+        with:
+          name: smoke-credential-${{ github.sha }}
+          path: .demo-state/smoke-credential.json
+          if-no-files-found: ignore
+          include-hidden-files: true
+          retention-days: 30
+
       - run: python3 vc-stack/test_context_refresh.py
 
       - name: Collect stack logs
