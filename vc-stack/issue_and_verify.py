@@ -125,7 +125,7 @@ def verify_step(client: httpx.Client, credential: dict) -> list[str]:
     subject = credential["credentialSubject"]
     # Today's context signs only credentialSubject.id; ticket 06 widens this to fullName and a value inside courses.
     claim = "id"
-    # Swap the last character for another base64url one: the value stays a valid IRI and did:jwk, so only the signature can fail.
+    # Swap the last character for another base64url one: the value stays syntactically a valid did:jwk IRI (the decoded JWK need not be valid), so verify-service reaches the signature check.
     value = subject[claim]
     tampered = {**credential, "credentialSubject": {**subject, claim: value[:-1] + ("A" if value[-1] != "A" else "B")}}
     outcome = verify(client, tampered)

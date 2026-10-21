@@ -13,7 +13,7 @@
 #   ./bootstrap.sh --prepare        # only write .env and create the Docker network
 #   ./bootstrap.sh --help
 #
-# INSTALLATION (environment, else .env) names the installations/ directory to run.
+# INSTALLATION (environment, else .env, else the git-ignored .installation marker) names the installations/ directory to run.
 # Exit codes: 0 ok, 1 prerequisite missing, 2 health check failed, 3 user input needed.
 
 set -euo pipefail

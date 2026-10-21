@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Start the full AIT Transcript VC demo: CSV sync, Inji stack, demo app (all Docker).
-# INSTALLATION (environment, else vc-stack/.env) names the installations/ directory: INSTALLATION=ait ./run-demo.sh
+# INSTALLATION (environment, else vc-stack/.env, else the git-ignored vc-stack/.installation marker) names the installations/ directory: INSTALLATION=ait ./run-demo.sh
 set -euo pipefail
 
 for bin in docker jq curl awk; do
