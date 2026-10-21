@@ -44,20 +44,33 @@ def stringify(claims: dict) -> dict:
             for k, v in claims.items()}
 
 
+def escaped(row: dict, names) -> dict:
+    """The Gateway's 200 body after stringify, for a CSV row holding the values verbatim: every claim escaped for the
+    quoted template, `courses` (JSON text, which the template embeds unquoted) as it is."""
+    return {k: row[k] if k == "courses" else ct.escape_vc_quoted_claim(row[k]) for k in names}
+
+
 def assert_only_failing(checks: list[dict], failing: str | list[str], ctype: ct.CredentialType) -> None:
-    """Every check of the type listed in order; `reason` on the failing one(s) only."""
-    assert [c["check"] for c in checks] == [check.name for check in ctype.checks], checks
-    for c in checks:
-        if c["check"] in ([failing] if isinstance(failing, str) else failing):
-            assert c["passed"] is False and isinstance(c["reason"], str) and c["reason"], c
-        else:
-            assert c == {"check": c["check"], "passed": True}, c
+    """The checks of a 403 body exactly: every check of the type in order, the failing one(s) failed with a reason,
+    every other check of the type passed without one."""
+    failing = [failing] if isinstance(failing, str) else failing
+    names = [check.name for check in ctype.checks]
+    assert set(failing) <= set(names), (failing, names)
+    assert [c["check"] for c in checks] == names, checks
+    assert [c["check"] for c in checks if c["passed"] is False] == [n for n in names if n in failing], checks
+    assert [c for c in checks if c["passed"] is not False] == [{"check": n, "passed": True} for n in names if n not in failing], checks
+    assert all(isinstance(c.get("reason"), str) and c["reason"] for c in checks if c["passed"] is False), checks
 
 
 def read_fixtures(path: Path) -> list[dict]:
-    """An installation's smoke.json: one entry per credential type, each with the scope, the eligible persona and
-    each refused persona's failing check (one name, or a list when several fail together)."""
+    """An installation's smoke.json: one entry per credential type, each with the scope, the eligible persona (or a
+    list of them) and each refused persona's failing check (one name, or a list when several fail together)."""
     return json.loads(path.read_text(encoding="utf-8"))
+
+
+def eligible_personas(fixture: dict) -> list[str]:
+    eligible = fixture["eligible"]
+    return [eligible] if isinstance(eligible, str) else eligible
 
 
 @contextmanager
@@ -86,10 +99,11 @@ def mock_adapter(csv_path: Path | None = None):
 def check_gateway(post, rows, token: str, csv_path: Path, fixtures: dict) -> None:
     """`post(body, token)` returns (status, body); `rows()` the issuance rows as (sub, type, scope, client_id).
     `fixtures` is one entry of the installation's smoke.json."""
-    scope, eligible = fixtures["scope"], fixtures["eligible"]
+    scope, personas = fixtures["scope"], eligible_personas(fixtures)
+    eligible = personas[0]  # the error cases below use the first
     ctype = ct.REGISTRY[scope]
     with open(csv_path, newline="", encoding="utf-8") as f:
-        csv_row = next(r for r in csv.DictReader(f) if r["id"] == eligible)
+        csv_rows = {r["id"]: r for r in csv.DictReader(f)}
     before = len(rows())
     request = {"sub": eligible, "scope": scope, "client_id": "wallet-demo"}
 
@@ -109,10 +123,11 @@ def check_gateway(post, rows, token: str, csv_path: Path, fixtures: dict) -> Non
     assert len(rows()) == before, "a refusal wrote an issuance row"
 
     # The scope is matched inside a space-separated claim; every other claim is ignored.
-    status, body = post({**request, "scope": f"openid {scope}", "accessTokenHash": "x", "iss": "y"}, token)
-    assert status == 200, (status, body)
-    assert stringify(body) == {k: csv_row[k] for k in ctype.claim_names}, body
-    assert rows()[before:] == [(eligible, ctype.credential_type, scope, "wallet-demo")], rows()
+    for sub in personas:
+        status, body = post({**request, "sub": sub, "scope": f"openid {scope}", "accessTokenHash": "x", "iss": "y"}, token)
+        assert status == 200, (sub, status, body)
+        assert stringify(body) == escaped(csv_rows[sub], ctype.claim_names), (sub, body)
+    assert rows()[before:] == [(sub, ctype.credential_type, scope, "wallet-demo") for sub in personas], rows()
 
 
 def post_with(client):
@@ -234,7 +249,7 @@ def run_live_adapter_down(url: str, fixtures: list[dict]) -> None:
     import httpx
 
     with httpx.Client(base_url=url, timeout=30) as client:
-        status, body = post_with(client)({"sub": fixtures[0]["eligible"], "scope": fixtures[0]["scope"]},
+        status, body = post_with(client)({"sub": eligible_personas(fixtures[0])[0], "scope": fixtures[0]["scope"]},
                                          os.environ["GATEWAY_AUTH_TOKEN"])
     assert (status, body.get("error")) == (502, "gateway_error"), (status, body)
 

@@ -19,11 +19,9 @@ from fastapi import FastAPI, HTTPException
 
 app = FastAPI(title="Mock data adapter")
 
-# Stored as JSON text (data/generate_csv.py) and served decoded.
+# Stored as JSON text (data/generate_csv.py) and served decoded; every other cell is served verbatim, a cell the
+# row lacks as null. Escaping for Certify's template is the Gateway's (gateway/credential_types.py).
 JSON_COLUMNS = {"courses", "holds"}
-# The generator escapes every other transcript claim for Certify's quoted Velocity substitution; these it
-# stores as they are.
-RAW_COLUMNS = {"id", "level", "conferralStatus", "balance", *JSON_COLUMNS}
 # contracts.md section 2b's eligibility attributes: on the eligibility path only.
 ELIGIBILITY_COLUMNS = {"holds", "conferralStatus", "balance"}
 # Not in the record: the identity, the generator's rendering of `courses` and the eligibility attributes.
@@ -36,8 +34,7 @@ def find_row(sub: str, degree_id: str | None = None) -> dict:
         row = next((r for r in csv.DictReader(f) if r["id"] == sub), None)
     if row is None or degree_id not in (None, sub):  # degreeId is the row's id
         raise HTTPException(404, "no such student or degree")
-    return {k: json.loads(v) if k in JSON_COLUMNS else v if k in RAW_COLUMNS else json.loads(f'"{v}"')
-            for k, v in row.items()}
+    return {k: json.loads(v) if k in JSON_COLUMNS and v is not None else v for k, v in row.items()}
 
 
 @app.get("/students/{sub}/degrees")

@@ -73,14 +73,13 @@ def test_public_snippet_swaps_only_authorization_servers() -> None:
     assert "proxy_pass http://$certify_nginx_upstream;" in snippet
 
 
-def test_public_snippet_names_the_installations_realm() -> None:
-    out = r.render({**PUBLIC, "INSTALLATION": "hackathon"})
-    assert (
-        """sub_filter '"authorization_servers":["http://keycloak:8080/realms/hackathon"]' """
-        """'"authorization_servers":["https://keycloak.demo.example/realms/hackathon"]';"""
-    ) in out[r.GATEWAY_SNIPPET_OUT]
-    assert json.loads(out[r.REPO_ROOT / "installations" / "hackathon" / "mimoto-issuers-config.json"])[
-        "issuers"][0]["issuer_id"] == "AITHackathon"
+def test_an_installation_without_the_mobile_wallet_renders_only_mimotos_list() -> None:
+    # The tracked phone files in vc-stack/config/ are AIT's: rendering the hackathon must not overwrite them.
+    for env in ({"INSTALLATION": "hackathon"}, {**PUBLIC, "INSTALLATION": "hackathon"}):
+        out = r.render(env)
+        hackathon_list = r.REPO_ROOT / "installations" / "hackathon" / "mimoto-issuers-config.json"
+        assert list(out) == [hackathon_list], list(out)
+        assert json.loads(out[hackathon_list])["issuers"][0]["issuer_id"] == "AITHackathon"
 
 
 def test_local_run_leaves_gateway_alone() -> None:

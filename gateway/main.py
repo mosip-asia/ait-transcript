@@ -102,8 +102,11 @@ def create_app(settings: Settings, adapter: httpx.Client | None = None, store: S
             raise Refusal(404, "no_record")
         try:
             degree_id = degrees[0]["degreeId"]  # one identity per degree in v0.1: the list has one entry
-            checks = ct.evaluate(ctype, fetch(f"{student}/eligibility", degreeId=degree_id))
-        except (KeyError, IndexError, TypeError, ValueError, ArithmeticError) as exc:
+            eligibility = fetch(f"{student}/eligibility", degreeId=degree_id)
+            if None in eligibility.values():  # a row missing a column: fail closed, never read it as a value
+                raise ValueError("null eligibility attribute")
+            checks = ct.evaluate(ctype, eligibility)
+        except (KeyError, IndexError, TypeError, ValueError, ArithmeticError, AttributeError) as exc:
             raise Refusal(502, "gateway_error") from exc  # malformed adapter data
         if not all(c["passed"] for c in checks):
             raise Refusal(403, "checklist_failed", credentialType=ctype.credential_type, checks=checks)

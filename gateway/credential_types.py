@@ -44,16 +44,20 @@ def evaluate(ctype: CredentialType, eligibility: dict) -> list[dict]:
 
 def escape_vc_quoted_claim(value: str) -> str:
     """Certify substitutes claims into its JSON Velocity template as `"claim": "${claim}"`, so a quote or a
-    newline would break the JSON. The same rule as data/generate_csv.py's escape_vc_quoted_claim."""
+    newline would break the JSON. The only place a claim is escaped: the adapter serves values verbatim."""
     return json.dumps(value)[1:-1]
 
 
 def claims(ctype: CredentialType, record: dict) -> dict:
     """The 200 body: the type's claims, every string escaped for the quoted template; other scalars become strings, and arrays (`courses`,
-    which the template embeds unquoted) are left as they are. A field the record lacks is an empty string."""
-    named = {k: record.get(k, "") for k in ctype.claim_names} | ctype.derived(record)
-    return {k: v if isinstance(v, list) else escape_vc_quoted_claim("" if v is None else str(v))
-            for k, v in named.items()}
+    which the template embeds unquoted) are left as they are. A field the record lacks, or serves as null, raises
+    (KeyError, ValueError): the Gateway answers gateway_error rather than issue an empty or "None" claim."""
+    derived = ctype.derived(record)
+    named = {k: derived[k] if k in derived else record[k] for k in ctype.claim_names}
+    missing = [k for k, v in named.items() if v is None]
+    if missing:
+        raise ValueError(f"the record has no value for {missing}")
+    return {k: v if isinstance(v, list) else escape_vc_quoted_claim(str(v)) for k, v in named.items()}
 
 
 # --- AIT transcript ---------------------------------------------------------------------------------------

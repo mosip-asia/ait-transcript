@@ -58,22 +58,14 @@ def load_students(path: Path = STUDENTS_JSON) -> dict:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
-def escape_vc_quoted_claim(value: str) -> str:
-    """Escape a claim value for Certify's `"claim": "${claim}"` Velocity substitution.
-
-    Certify's vc_template does naive string substitution, not JSON-aware
-    templating — an unescaped `"` or newline (e.g. in courseList or
-    programCommittee) breaks the surrounding JSON string and issuance
-    fails with `json_processing_error`. `courses` is the one claim embedded
-    unquoted (raw JSON array) and must stay untouched by this.
-    """
-    return json.dumps(value)[1:-1]
-
-
 def build_rows(students: list[dict]) -> list[dict]:
     """One CSV row per degree, not per student — each degree is its own issuable
     Certify/Keycloak identity (`degree["keycloakId"]`) so a multi-degree student
-    can claim a distinct transcript VC per degree (see PLAN.md Phase 7)."""
+    can claim a distinct transcript VC per degree (see PLAN.md Phase 7).
+
+    Values are written verbatim (the csv module quotes a newline or a `"`); `courses`
+    and `holds` are JSON text. Escaping for Certify's quoted template is the Gateway's
+    alone (gateway/credential_types.py)."""
     rows = []
     for student in students:
         for degree in student["degrees"]:
@@ -86,8 +78,7 @@ def build_rows(students: list[dict]) -> list[dict]:
             enriched = enrich_ait_transcript_subject(subject)
             row = {"id": degree["keycloakId"]}
             for claim in CLAIM_COLUMNS:
-                value = str(enriched.get(claim, ""))
-                row[claim] = value if claim == "courses" else escape_vc_quoted_claim(value)
+                row[claim] = str(enriched.get(claim, ""))
             eligibility = degree["eligibility"]
             row.update(level=degree["level"], holds=json.dumps(eligibility["holds"]),
                        conferralStatus=eligibility["conferralStatus"], balance=eligibility["balance"])

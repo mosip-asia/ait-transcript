@@ -1,4 +1,5 @@
-"""Tests for the credential-type registry: the transcript's checklist and its claim mapping.
+"""Tests for the credential-type registry: the transcript's checklist and its claim mapping, and the Gateway's
+gateway_error for a record that lacks a claim.
 
 Run: python3 gateway/tests/test_credential_types.py      host only, no Docker
 Needs fastapi and httpx (portal/requirements.txt): the claim test reads the mock adapter in-process.
@@ -6,7 +7,11 @@ Needs fastapi and httpx (portal/requirements.txt): the claim test reads the mock
 
 from __future__ import annotations
 
-from test_issuances import ROSTER, assert_only_failing, mock_adapter, stringify  # puts gateway/ and data/ on sys.path
+import tempfile
+from pathlib import Path
+
+from test_issuances import (ROSTER, FakeStore, assert_only_failing, escaped, host_gateway,  # puts gateway/ and data/ on sys.path
+                            mock_adapter, post_with, stringify)
 
 import credential_types as ct  # noqa: E402
 import generate_csv as gc  # noqa: E402
@@ -47,20 +52,22 @@ def test_a_zero_balance_written_differently_still_passes() -> None:
     assert ct.evaluate(TRANSCRIPT, {**ELIGIBLE, "balance": "0"})[2] == {"check": "zero_balance", "passed": True}
 
 
-def test_claims_equal_the_generated_csv_row_for_every_persona() -> None:
-    """The Gateway's 200 body, after the plugin's stringify rule, is what the CSV row gives Certify's template today."""
+def test_claims_equal_the_escaped_generated_csv_row_for_every_persona() -> None:
+    """The Gateway's 200 body, after the plugin's stringify rule, is the generator's verbatim row escaped for the
+    quoted template: the same claim set, every claim, for every persona."""
     with mock_adapter() as (adapter, _, rows):
+        assert any("\n" in row["programCommittee"] for row in rows)  # a multiline claim is among them
         for row in rows:
             record = adapter.get(f"/students/{row['id']}/transcript").json()
             claims = ct.claims(TRANSCRIPT, record)
             assert isinstance(claims["courses"], list), row["id"]
             assert not RESERVED & claims.keys() and "courseTableHtml" not in claims
-            expected = {k: row[k] for k in gc.CLAIM_COLUMNS if k != "courseTableHtml"}
-            assert stringify(claims) == expected, row["id"]
+            assert stringify(claims) == escaped(row, gc.CLAIM_COLUMNS), row["id"]
 
 
 def test_multiline_claims_are_escaped_for_the_quoted_template() -> None:
-    record = {"courses": [{"term": "T1", "courses": [{"no": "AT01", "title": "Thai \"Basics\"", "grade": "A"},
+    record = {**{k: "" for k in ct.TRANSCRIPT_CLAIMS},
+              "courses": [{"term": "T1", "courses": [{"no": "AT01", "title": "Thai \"Basics\"", "grade": "A"},
                                                       {"no": "AT02", "title": "Ethics", "grade": ""}]}],
               "programCommittee": "Dr. A (Chair)\nDr. B", "fullName": "Somchai Café"}
     claims = ct.claims(TRANSCRIPT, record)
@@ -68,7 +75,41 @@ def test_multiline_claims_are_escaped_for_the_quoted_template() -> None:
     assert claims["programCommittee"] == "Dr. A (Chair)\\nDr. B"
     assert claims["fullName"] == "Somchai Caf\\u00e9"
     assert claims["courses"][0]["courses"][0]["title"] == 'Thai "Basics"'  # substituted unquoted: left as it is
-    assert claims["thesisTitle"] == ""  # a field the record lacks is an empty string, as in the CSV
+
+
+def test_a_claim_the_record_lacks_or_serves_as_null_raises() -> None:
+    record = {"teamId": "team-01", "teamName": "T", "oidcClientId": "c", "authEndpoint": "a", "issuerEndpoint": "i",
+              "verifierEndpoint": "v"}
+    assert ct.claims(PASSPORT, record)["teamName"] == "T"
+    for broken in ({k: v for k, v in record.items() if k != "teamName"}, {**record, "teamName": None}):
+        try:
+            ct.claims(PASSPORT, broken)
+        except (KeyError, ValueError):
+            continue
+        raise AssertionError(f"claims of {broken} did not raise")
+
+
+def test_a_roster_row_missing_a_column_is_a_gateway_error_never_none() -> None:
+    """Through the Gateway and the adapter in-process: a row shorter than the header (its trailing cells read as
+    null), and a roster without a column a type needs, are 502 gateway_error, never a claim of "None" or ""."""
+    header = ROSTER.read_text(encoding="utf-8").splitlines()[0]
+    short = header + "\nhack-2026-0001,team-01,Sandbox Pioneers\n"
+    columns = header.split(",")
+    full = ROSTER.read_text(encoding="utf-8").splitlines()[1].split(",")
+    without_team_name = ",".join(c for c in columns if c != "teamName") + "\n" + \
+        ",".join(v for c, v in zip(columns, full) if c != "teamName") + "\n"
+    with tempfile.TemporaryDirectory() as td:
+        for label, text, scopes in (("short row", short, (PASSPORT.scope, ACHIEVEMENT.scope)),
+                                    ("no teamName column", without_team_name, (PASSPORT.scope,))):
+            csv_path = Path(td) / "student_identity_data.csv"
+            csv_path.write_text(text, encoding="utf-8")
+            with mock_adapter(csv_path) as (adapter, _, _):
+                for scope in scopes:
+                    store = FakeStore()
+                    with host_gateway(adapter, store, (scope,)) as client:
+                        answer = post_with(client)({"sub": "hack-2026-0001", "scope": scope}, "test-token")
+                    assert answer == (502, {"error": "gateway_error"}), (label, scope, answer)
+                    assert store.rows == [], (label, scope)
 
 
 # --- Developer Passport (the hackathon installation) ---

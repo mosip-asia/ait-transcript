@@ -2,9 +2,11 @@
 
 Run: python3 adapter/test_adapter.py                      on the host, no Docker: a temp CSV from the generator,
                                                           then a temp copy of the hackathon roster
-     python3 adapter/test_adapter.py URL CSV              against the running container (smoke.sh), where
-                                                          CSV is the file the container mounts (the transcript CSV
-                                                          or a roster); the edit case rewrites it and puts it back
+     python3 adapter/test_adapter.py URL CSV COPY_URL COPY_CSV
+                                                          against the running containers (smoke.sh): the reads at
+                                                          URL, the adapter serving CSV (the transcript CSV or a
+                                                          roster), and the edit case at COPY_URL, a second adapter
+                                                          serving COPY_CSV, a copy, so CSV is never rewritten
 Needs fastapi and httpx (portal/requirements.txt).
 """
 
@@ -39,11 +41,10 @@ def set_column(csv_path: Path, sub: str, column: str, value: str) -> None:
 
 
 def check_adapter(get, csv_path: Path) -> None:
-    """`get(path)` returns (status, body). Checks every row of csv_path, then an unknown sub, then an edit."""
+    """`get(path)` returns (status, body). Checks every row of csv_path, then an unknown sub."""
     rows = read_rows(csv_path)
     # The transcript CSV carries contract 2b's eligibility attributes; a roster does not.
-    edited = "balance" if "balance" in rows[0] else "teamId"
-    if edited == "balance":
+    if "balance" in rows[0]:
         check_transcript_rows(get, rows)
     else:
         check_roster_rows(get, rows)
@@ -54,7 +55,13 @@ def check_adapter(get, csv_path: Path) -> None:
     assert get(f"/students/{first}/transcript?degreeId=other")[0] == 404
     assert get(f"/students/{first}/eligibility?degreeId=other")[0] == 404
 
-    # The file is read again on every request: an edited value is served at once.
+
+def check_edit(get, csv_path: Path) -> None:
+    """The file is read again on every request: an edited value of csv_path is served at once. Rewrites csv_path
+    and puts it back, so csv_path must be a copy, never an installation's file."""
+    rows = read_rows(csv_path)
+    edited = "balance" if "balance" in rows[0] else "teamId"
+    first = rows[0]["id"]
     original = csv_path.read_bytes()
     try:
         before = get(f"/students/{first}/eligibility")[1][edited]
@@ -80,8 +87,9 @@ def check_transcript_rows(get, rows: list[dict]) -> None:
         assert body["fullName"] == row["fullName"] and body["degreeId"] == sub and body["level"] == row["level"]
         assert body["registrationNo"] == row["registrationNo"] and "balance" not in body and "courseList" not in body
         assert isinstance(body["courses"], list) and body["courses"][0]["term"] and body["courses"][0]["courses"][0]["no"]
-        if "\n" in row["programCommittee"]:
-            assert "\n" in body["programCommittee"] and "\\" not in body["programCommittee"]  # Certify's escaping undone
+        # Every other cell exactly as written, a multiline one included: the adapter neither escapes nor un-escapes.
+        verbatim = {k: v for k, v in row.items() if k not in {"id", "courses", "courseList", "holds", "conferralStatus", "balance"}}
+        assert body == {"degreeId": sub, **verbatim, "courses": json.loads(row["courses"])}, sub
 
         status, body = get(f"/students/{sub}/eligibility?degreeId={sub}")
         assert status == 200 and body == {"holds": json.loads(row["holds"]), "conferralStatus": row["conferralStatus"],
@@ -120,34 +128,52 @@ def test_mock_adapter_on_a_generated_csv() -> None:
     with tempfile.TemporaryDirectory() as td:
         csv_path = Path(td) / "student_identity_data.csv"
         gc.write_csv(gc.build_rows(gc.load_students()["students"]), csv_path)
-        check_adapter(host_get(csv_path), csv_path)
+        get = host_get(csv_path)
+        check_adapter(get, csv_path)
+        check_edit(get, csv_path)
 
 
 def test_mock_adapter_on_the_hackathon_roster() -> None:
     with tempfile.TemporaryDirectory() as td:
         csv_path = Path(td) / "student_identity_data.csv"
         csv_path.write_bytes(ROSTER.read_bytes())
+        # A quote and a newline in a cell are served as written (no JSON decoding of plain cells).
+        set_column(csv_path, "hack-2026-0002", "teamName", 'Chain "Gang"\nof two')
         get = host_get(csv_path)
         check_adapter(get, csv_path)
+        check_edit(get, csv_path)
         assert get("/students/hack-2026-0001/transcript")[1]["teamName"] == "Sandbox Pioneers"
+        assert get("/students/hack-2026-0002/transcript")[1]["teamName"] == 'Chain "Gang"\nof two'
         # The participant without a team is on the roster, with an empty teamId.
         assert get("/students/hack-2026-0003/eligibility")[1]["teamId"] == ""
 
 
-def run_live(url: str, csv_path: Path) -> None:
+def run_live(url: str, csv_path: Path, copy_url: str, copy_csv: Path) -> None:
+    import time
+
     import httpx
 
-    def get(path: str) -> tuple[int, object]:
-        r = httpx.get(url + path, timeout=10)
-        return r.status_code, r.json()
+    def getter(base: str):
+        def get(path: str) -> tuple[int, object]:
+            r = httpx.get(base + path, timeout=10)
+            return r.status_code, r.json()
+        return get
 
-    check_adapter(get, csv_path)
+    check_adapter(getter(url), csv_path)
+    # The second adapter was started just before this run: wait for it to answer.
+    for _ in range(30):
+        try:
+            httpx.get(copy_url + "/docs", timeout=3)
+            break
+        except httpx.HTTPError:
+            time.sleep(1)
+    check_edit(getter(copy_url), copy_csv)
 
 
 if __name__ == "__main__":
-    if len(sys.argv) == 3:
-        run_live(sys.argv[1], Path(sys.argv[2]))
-        print(f"PASS adapter at {sys.argv[1]}")
+    if len(sys.argv) == 5:
+        run_live(sys.argv[1], Path(sys.argv[2]), sys.argv[3], Path(sys.argv[4]))
+        print(f"PASS adapter at {sys.argv[1]}, edit case at {sys.argv[3]}")
     else:
         for name, fn in list(globals().items()):
             if name.startswith("test_") and callable(fn):

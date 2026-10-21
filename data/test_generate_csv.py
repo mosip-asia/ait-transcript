@@ -56,9 +56,18 @@ def test_generated_csv_roundtrip() -> None:
             reader = csv.DictReader(f)
             assert reader.fieldnames == gc.CSV_COLUMNS
             read_rows = list(reader)
-    assert len(read_rows) == len(rows)
+    assert read_rows == rows  # every cell back as written, newlines included
     assert any("CS601" in (r["courses"] or "") for r in read_rows)
     assert all("${" not in (r["courses"] or "") for r in read_rows)
+
+
+def test_claims_are_written_verbatim_not_escaped() -> None:
+    # The Gateway is the only escaper (gateway/credential_types.py); the CSV holds the values themselves.
+    rows = gc.build_rows(gc.load_students()["students"])
+    for claim in ("courseList", "programCommittee"):
+        assert any("\n" in r[claim] for r in rows), claim
+        assert all("\\" not in r[claim] for r in rows), claim
+    assert all(json.loads(r["courses"]) for r in rows)  # courses stays a JSON column
 
 
 def test_columns_carry_no_course_table_html() -> None:

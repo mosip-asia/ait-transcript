@@ -73,7 +73,7 @@ The proposal names `GET /students/:id/transcript` (§5.1(3)). A student can hold
 
 - `GET /students/{id}/degrees` → list of `{ degreeId, level, degreeAwarded, dateGraduation }`.
 - `GET /students/{id}/transcript?degreeId={degreeId}` → one degree's full record.
-- `GET /students/{id}/eligibility?degreeId={degreeId}` → the attributes the Checklist reads: `holds[]`, `conferralStatus`, `balance`.
+- `GET /students/{id}/eligibility?degreeId={degreeId}` → the attributes the Checklist reads: `holds[]`, `conferralStatus`, `balance` for the transcript; `teamId`, `winner` on the hackathon roster.
 
 Record fields, taken from the test data in `data/students.json`:
 
@@ -85,10 +85,20 @@ Record fields, taken from the test data in `data/students.json`:
 | Credits | `courseworkCredits`, `thesisCredits`, `totalCredits` |
 | Courses | `courses[]`: `{ term, courses[]: { no, title, ... } }`; ordered arrays, numbers as strings |
 
+The hackathon installation's roster (`installations/hackathon/adapter/student_identity_data.csv`, one row per participant) serves the same three paths: `degrees` returns `{ degreeId }` only, and the record and the eligibility paths both serve the whole row.
+
+| Group | Fields |
+|---|---|
+| Eligibility | `teamId`, `winner` |
+| Developer Passport | `teamId`, `teamName`, `oidcClientId`, `authEndpoint`, `issuerEndpoint`, `verifierEndpoint` |
+| Achievement | `teamId`, `award` |
+
 Values the implementation fixed, which the real adapter must keep:
 
 - `conferralStatus` is `Conferred` or `Pending`.
 - `balance` is a decimal string such as `"1250.00"` (`"0.00"` when nothing is owed), never a number.
+- `teamId` is empty for a participant on the roster without a team.
+- `winner` is `true` for a member of a winning team (read case-insensitively); anything else, empty included, is not.
 - `degreeId` equals the row's `id`. v0.1 holds one degree per `sub`, so `degrees` returns one entry and a `degreeId` that differs from the `sub` finds no record.
 
 Read-only, fetched once per request, not stored by the Issuer (§3.2). Which fields may leave the SIS is OSA's decision; this list is the demo's, not an agreed one. Until the real adapter exists, our CSV-backed mock implements this contract and its eligibility attributes are editable so the Checklist can be exercised.

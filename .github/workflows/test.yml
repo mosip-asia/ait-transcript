@@ -89,7 +89,7 @@ jobs:
         if: always()
         with:
           name: smoke-credential-${{ matrix.installation }}-${{ github.sha }}
-          path: .demo-state/smoke-credential.json
+          path: .demo-state/smoke-credential-*.json
           if-no-files-found: ignore
           include-hidden-files: true
           retention-days: 30

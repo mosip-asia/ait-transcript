@@ -11,7 +11,9 @@ own issuer list or Certify's metadata as-is: both carry Docker-internal URLs
 (host.docker.internal, keycloak:8080) that Mimoto needs and Inji Web ignores,
 but a phone cannot resolve. Inji Web and Mimoto never go through the gateway
 for these two paths, so the gateway serves the phone its own copies and
-Mimoto's file is left alone (wiki/architecture/inji-mobile-wallet.md).
+Mimoto's file is left alone (wiki/architecture/inji-mobile-wallet.md). Only an
+installation in MOBILE_INSTALLATIONS gets them; for any other the tracked
+files in vc-stack/config/ are left as they are.
 """
 
 from __future__ import annotations
@@ -30,6 +32,8 @@ MOBILE_REDIRECT_URI = "io.mosip.residentapp.inji://oauthredirect"
 # Where Certify's issuer metadata points authorization_servers (Mimoto needs this internal URL).
 KEYCLOAK_DOCKER_AUTH_SERVER = "http://keycloak:8080"
 MOBILE_MOUNT = "/etc/nginx/mobile"
+# The installations the phone files are rendered for: the mobile wallet (wallet/) is patched for AIT's issuer only.
+MOBILE_INSTALLATIONS = {"ait"}
 
 
 def render(env: dict[str, str]) -> dict[Path, str]:
@@ -38,6 +42,8 @@ def render(env: dict[str, str]) -> dict[Path, str]:
     template = installation_dir / "mimoto-issuers-config.json.template"
     inji_web_url = env.get("INJI_WEB_URL", "http://localhost:4004")
     rendered = template.read_text(encoding="utf-8").replace("${INJI_WEB_URL}", inji_web_url)
+    if env["INSTALLATION"] not in MOBILE_INSTALLATIONS:
+        return {installation_dir / "mimoto-issuers-config.json": rendered}
 
     api_url = env.get("CERTIFY_PUBLIC_BASE_URL", "http://certify-nginx").rstrip("/")
     keycloak_url = env.get("KEYCLOAK_PUBLIC_BASE_URL", "http://localhost:9080").rstrip("/")

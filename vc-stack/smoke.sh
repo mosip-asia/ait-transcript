@@ -2,7 +2,7 @@
 # Automated smoke checks for Phase 1 (curl/jq). Run from vc-stack/ after bootstrap.
 # The same script for every installation: what differs comes from installations/$INSTALLATION (the realm and the
 # Mimoto issuer id, set by installation.sh, and smoke.json: a list with one entry per credential type, each with the
-# credential configuration, its scope, the eligible persona, each refused persona with the check it fails, the claims
+# credential configuration, its scope, the eligible persona (or a list of them), each refused persona with the check it fails, the claims
 # to tamper and, optionally, the Mimoto PDF template). Every issued, refused and tampered case runs for every type.
 set -euo pipefail
 
@@ -20,7 +20,8 @@ load_type() {
   local entry=".[$1]"
   CONFIG=$(fixture "$entry.credentialConfig")
   SCOPE=$(fixture "$entry.scope")
-  ELIGIBLE=$(fixture "$entry.eligible")
+  # One eligible persona, or a list of them; ${ELIGIBLE[0]} is the first.
+  mapfile -t ELIGIBLE < <(fixture "$entry.eligible | if type == \"array\" then .[] else . end")
   mapfile -t REFUSED < <(fixture "$entry.refused | keys_unsorted[]")
   mapfile -t TAMPER < <(fixture "$entry.tamper[]")
   MIMOTO_TEMPLATE=$(fixture "$entry.mimotoTemplate // empty")
@@ -132,9 +133,9 @@ ok "Mimoto exposes browser Keycloak auth URL for Inji Web"
 
 config_errors=$(curl -sf "http://localhost:4004/v1/mimoto/issuers/$ISSUER_ID/configuration" | jq -r '.errors | length')
 cred_count=$(curl -sf "http://localhost:4004/v1/mimoto/issuers/$ISSUER_ID/configuration" | jq -r '.response.credentials_supported | length')
-[[ "$config_errors" == "0" && "$cred_count" -ge 1 ]] \
-  || fail "issuer configuration must list credential types (errors=$config_errors, credentials_supported=$cred_count) — Keycloak well-known via keycloak:8080 often 502 until keycloak nginx reload"
-ok "Mimoto issuer configuration lists credential types for Inji Web"
+[[ "$config_errors" == "0" && "$cred_count" == "$TYPE_COUNT" ]] \
+  || fail "issuer configuration must list the $TYPE_COUNT credential types of smoke.json (errors=$config_errors, credentials_supported=$cred_count) — Keycloak well-known via keycloak:8080 often 502 until keycloak nginx reload"
+ok "Mimoto issuer configuration lists the $TYPE_COUNT credential types of smoke.json for Inji Web"
 
 token_ep=$(curl -sf "http://localhost:4004/v1/mimoto/issuers/$ISSUER_ID" | jq -r '.response.token_endpoint // empty')
 [[ "$token_ep" == http://localhost:4004/v1/mimoto/get-token/* ]] \
@@ -146,13 +147,24 @@ auth_aud=$(curl -sf "http://localhost:4004/v1/mimoto/issuers/$ISSUER_ID" | jq -r
   || fail "authorization_audience must be keycloak:8080 token URL (got: ${auth_aud:-<empty>})"
 ok "Issuer authorization_audience matches Docker Keycloak token URL"
 
-# The mock adapter answers contract 2b's three paths and a 404, and serves an edited CSV value at once.
+# The mock adapter answers contract 2b's three paths and a 404, and serves an edited CSV value at once. The edit
+# case runs on a copy of the CSV served by a second adapter container, so the installation's file is never rewritten.
+adapter_copy_dir="$REPO_ROOT/.demo-state/adapter-copy"
+rm -rf "$adapter_copy_dir" && mkdir -p "$adapter_copy_dir"
+cp "$csv_file" "$adapter_copy_dir/student_identity_data.csv"
+docker rm -f adapter-copy >/dev/null 2>&1 || true
+docker compose run -d --no-deps --name adapter-copy -e ADAPTER_CSV=/copy/student_identity_data.csv \
+  -v "$adapter_copy_dir:/copy:ro" adapter >/dev/null || fail "cannot start a second adapter on a copy of the CSV"
+adapter_rc=0
 docker compose run --rm --no-deps -T \
   -v "$STACK_DIR/../adapter/test_adapter.py:/demo/adapter/test_adapter.py:ro" \
   demo-app python adapter/test_adapter.py http://adapter:8000 \
   "/demo/installations/$INSTALLATION/adapter/student_identity_data.csv" \
-  || fail "mock adapter (adapter/test_adapter.py)"
-ok "mock adapter serves the degree list, the record and the eligibility attributes"
+  http://adapter-copy:8000 /demo/.demo-state/adapter-copy/student_identity_data.csv || adapter_rc=$?
+docker rm -f adapter-copy >/dev/null 2>&1 || true
+rm -rf "$adapter_copy_dir"
+[[ "$adapter_rc" == 0 ]] || fail "mock adapter (adapter/test_adapter.py)"
+ok "mock adapter serves the degree list, the record and the eligibility attributes, and an edited value at once"
 
 # The Gateway answers contract 2a's cases with the mock adapter beside it and writes one issuance row per 200.
 # Run from the gateway image (httpx, psycopg), whose environment carries the token and the database URL.
@@ -175,7 +187,7 @@ docker compose run --rm --no-deps -T -v "$REPO_ROOT/gateway/tests:/gateway/tests
 docker compose start adapter >/dev/null || fail "cannot restart the adapter"
 adapter_up=0
 for _ in $(seq 1 30); do
-  if docker compose run --rm --no-deps -T gateway python -c     "import httpx; httpx.get('http://adapter:8000/students/$ELIGIBLE/eligibility', timeout=3).raise_for_status()" >/dev/null 2>&1; then
+  if docker compose run --rm --no-deps -T gateway python -c     "import httpx; httpx.get('http://adapter:8000/students/${ELIGIBLE[0]}/eligibility', timeout=3).raise_for_status()" >/dev/null 2>&1; then
     adapter_up=1; break
   fi
   sleep 2
@@ -195,17 +207,20 @@ issuance_rows() {
 }
 for ((i = 0; i < TYPE_COUNT; i++)); do
   load_type "$i"
-  rows_before=$(issuance_rows) || fail "cannot count gateway.issuances"
-  smoke_vc=.demo-state/smoke-credential.json
-  issue_and_verify issue "$INSTALLATION" "$ELIGIBLE" "$SCOPE" "$smoke_vc" \
-    || fail "scripted issuance of $CONFIG (vc-stack/issue_and_verify.py issue)"
-  jq -e --arg u "$ctx_url" '."@context" | index($u)' "$REPO_ROOT/$smoke_vc" >/dev/null \
-    || fail "issued credential does not name $ctx_url in its @context"
-  issue_and_verify verify "$smoke_vc" "${TAMPER[@]}" || fail "verification of $CONFIG (vc-stack/issue_and_verify.py verify)"
-  rows_issued=$(issuance_rows) || fail "cannot count gateway.issuances"
-  [[ "$rows_issued" == "$((rows_before + 1))" ]] \
-    || fail "the Certify-path issuance of $CONFIG must add one gateway.issuances row (before: $rows_before, after: $rows_issued)"
-  ok "the Certify-path issuance of $CONFIG wrote one gateway.issuances row"
+  # One file per type, kept as a CI artifact; with several eligible personas it holds the last one's credential.
+  smoke_vc=".demo-state/smoke-credential-$CONFIG.json"
+  for persona in "${ELIGIBLE[@]}"; do
+    rows_before=$(issuance_rows) || fail "cannot count gateway.issuances"
+    issue_and_verify issue "$INSTALLATION" "$persona" "$SCOPE" "$smoke_vc" \
+      || fail "scripted issuance of $CONFIG to $persona (vc-stack/issue_and_verify.py issue)"
+    jq -e --arg u "$ctx_url" '."@context" | index($u)' "$REPO_ROOT/$smoke_vc" >/dev/null \
+      || fail "issued credential does not name $ctx_url in its @context"
+    issue_and_verify verify "$smoke_vc" "${TAMPER[@]}" || fail "verification of $CONFIG for $persona (vc-stack/issue_and_verify.py verify)"
+    rows_issued=$(issuance_rows) || fail "cannot count gateway.issuances"
+    [[ "$rows_issued" == "$((rows_before + 1))" ]] \
+      || fail "the Certify-path issuance of $CONFIG to $persona must add one gateway.issuances row (before: $rows_before, after: $rows_issued)"
+    ok "the Certify-path issuance of $CONFIG to $persona wrote one gateway.issuances row"
+  done
 
   # Each persona the Gateway's checklist refuses gets the OpenID4VCI error body with its code.
   for persona in "${REFUSED[@]}"; do
@@ -228,7 +243,7 @@ retry 90 curl -sf http://localhost:9091/.well-known/openid-credential-issuer && 
 gateway_down_rc=1
 if [[ "$certify_up" == 1 ]]; then
   gateway_down_rc=0
-  issue_and_verify refused "$INSTALLATION" "$ELIGIBLE" "$SCOPE" gateway_error || gateway_down_rc=$?
+  issue_and_verify refused "$INSTALLATION" "${ELIGIBLE[0]}" "$SCOPE" gateway_error || gateway_down_rc=$?
 fi
 docker compose start gateway >/dev/null || fail "cannot restart the Gateway"
 [[ "$certify_up" == 1 ]] || fail "Certify did not start while the Gateway was down"
