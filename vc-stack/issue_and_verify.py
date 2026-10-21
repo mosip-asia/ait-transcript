@@ -5,7 +5,8 @@ issue:  a token from the installation's realm (direct-access grant on the test-o
         /issuance/credential; the credential is written to a file.
 verify: verify-service's v2 vc-verification must answer SUCCESS for that file, and
         ERR_SIGNATURE_VERIFICATION_FAILED for each copy with one claim changed: the holder DID
-        (credentialSubject.id), fullName, and one grade inside courses.
+        (credentialSubject.id) and each claim path given (the installation's smoke.json `tamper`, e.g. fullName
+        and courses[0].courses[0].grade for the transcript).
 refused: the same credential request must be refused with the OpenID4VCI error body whose `error` is the given
         code (checklist_failed for a persona the Gateway's checklist refuses, gateway_error with the Gateway down).
 
@@ -19,7 +20,7 @@ installations/<name>/keycloak-realm.json). demo-app does not mount vc-stack/, so
   docker compose -f vc-stack/docker-compose.yaml run --rm --no-deps \\
       -v "$PWD/vc-stack/issue_and_verify.py:/demo/vc-stack/issue_and_verify.py:ro" demo-app \\
       python vc-stack/issue_and_verify.py issue ait ait-2026-0001 ait_transcript_vc_ldp .demo-state/smoke-credential.json
-  (same, ending in: python vc-stack/issue_and_verify.py verify .demo-state/smoke-credential.json)
+  (same, ending in: python vc-stack/issue_and_verify.py verify .demo-state/smoke-credential.json fullName)
   (same, ending in: python vc-stack/issue_and_verify.py refused ait ait-2026-0002 ait_transcript_vc_ldp checklist_failed)
 """
 
@@ -30,6 +31,7 @@ import base64
 import copy
 import json
 import os
+import re
 import sys
 import time
 from pathlib import Path
@@ -129,25 +131,27 @@ def verify(client: httpx.Client, credential: dict) -> str:
     return error.get("errorCode") or f"FAILED {json.dumps(result)}"
 
 
-def tampered_copies(credential: dict) -> dict[str, dict]:
-    """Copies of a transcript credential, each with one signed claim changed, keyed by the claim's path."""
+def tampered_copies(credential: dict, claims: list[str]) -> dict[str, dict]:
+    """Copies of a credential, each with one signed claim changed, keyed by the claim's path: the holder, then each
+    of `claims`, a path into credentialSubject to a string (`fullName`, `courses[0].courses[0].grade`)."""
     subject = credential["credentialSubject"]
     holder = subject["id"]
-    courses = copy.deepcopy(subject["courses"])
-    course = courses[0]["courses"][0]
-    course["grade"] = "F" if course["grade"] != "F" else "A"
-    changes = {
-        # Swap the last character for another base64url one: the value stays syntactically a valid did:jwk IRI
-        # (the decoded JWK need not be valid), so verify-service reaches the signature check.
-        "id": {"id": holder[:-1] + ("A" if holder[-1] != "A" else "B")},
-        "fullName": {"fullName": subject["fullName"] + " Jr"},
-        "courses[0].courses[0].grade": {"courses": courses},
-    }
-    return {path: {**credential, "credentialSubject": {**subject, **change}} for path, change in changes.items()}
+    # Swap the last character for another base64url one: the value stays syntactically a valid did:jwk IRI
+    # (the decoded JWK need not be valid), so verify-service reaches the signature check.
+    copies = {"id": {**subject, "id": holder[:-1] + ("A" if holder[-1] != "A" else "B")}}
+    for path in claims:
+        changed = copy.deepcopy(subject)
+        *parents, leaf = (int(k) if k.isdigit() else k for k in re.findall(r"[^.\[\]]+", path))
+        node = changed
+        for key in parents:
+            node = node[key]
+        node[leaf] += " (tampered)"
+        copies[path] = changed
+    return {path: {**credential, "credentialSubject": changed} for path, changed in copies.items()}
 
 
-def verify_step(client: httpx.Client, credential: dict) -> list[str]:
-    """The credential must verify; each tampered copy (the holder, fullName, a grade inside courses) must fail its signature.
+def verify_step(client: httpx.Client, credential: dict, claims: list[str]) -> list[str]:
+    """The credential must verify; each tampered copy (the holder, each of `claims`) must fail its signature.
 
     Returns what went wrong, empty when every outcome is as expected.
     """
@@ -155,7 +159,7 @@ def verify_step(client: httpx.Client, credential: dict) -> list[str]:
     outcome = verify(client, credential)
     if outcome != "SUCCESS":
         problems.append(f"credential: expected SUCCESS, got {outcome}")
-    for path, tampered in tampered_copies(credential).items():
+    for path, tampered in tampered_copies(credential, claims).items():
         outcome = verify(client, tampered)
         if outcome != "ERR_SIGNATURE_VERIFICATION_FAILED":
             problems.append(f"tampered credentialSubject.{path}: expected ERR_SIGNATURE_VERIFICATION_FAILED, got {outcome}")
@@ -170,8 +174,9 @@ def main() -> int:
     p_issue.add_argument("persona", help="Keycloak username, e.g. ait-2026-0001")
     p_issue.add_argument("scope", help="credential scope, e.g. ait_transcript_vc_ldp")
     p_issue.add_argument("out", type=Path)
-    p_verify = steps.add_parser("verify", help="verify a credential file, then a tampered copy")
+    p_verify = steps.add_parser("verify", help="verify a credential file, then tampered copies")
     p_verify.add_argument("credential", type=Path)
+    p_verify.add_argument("claims", nargs="*", help="claim paths to tamper, e.g. fullName courses[0].courses[0].grade")
     p_refused = steps.add_parser("refused", help="the credential request must be refused with CODE")
     p_refused.add_argument("installation")
     p_refused.add_argument("persona")
@@ -194,12 +199,12 @@ def main() -> int:
             print(f"OK: issued {args.scope} for {args.persona} -> {args.out}")
             return 0
         credential = json.loads(args.credential.read_text(encoding="utf-8"))
-        problems = verify_step(client, credential)
+        problems = verify_step(client, credential, args.claims)
         if problems:
             for problem in problems:
                 print(f"FAIL: {problem}", file=sys.stderr)
             return 1
-        print(f"OK: credential verifies (SUCCESS); tampered {', '.join(tampered_copies(credential))} each fail"
+        print(f"OK: credential verifies (SUCCESS); tampered {', '.join(['id', *args.claims])} each fail"
               " (ERR_SIGNATURE_VERIFICATION_FAILED)")
         return 0
 

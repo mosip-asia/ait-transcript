@@ -10,7 +10,7 @@ on:
 permissions:
   contents: read
 
-# The installations/ directory every job runs against.
+# The installations/ directory the host tests run against; stack-smoke runs every installation.
 env:
   INSTALLATION: ait
 
@@ -39,6 +39,7 @@ jobs:
           for t in \
             vc-stack/test_inji_web_vc_readiness.py \
             vc-stack/test_installation_guard.py \
+            vc-stack/test_installations.py \
             vc-stack/test_issue_and_verify.py \
             portal/test_auth.py \
             portal/test_requests.py \
@@ -56,12 +57,18 @@ jobs:
           done
           exit "$status"
 
+  # One fresh runner per installation: Certify's seed runs only on a fresh database, so nothing is wiped between them.
   stack-smoke:
-    name: Stack smoke (Docker Compose)
+    name: Stack smoke (Docker Compose, ${{ matrix.installation }})
     runs-on: ubuntu-latest
     timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        installation: [ait, hackathon]
     env:
       COMPOSE: docker compose -f vc-stack/docker-compose.yaml
+      INSTALLATION: ${{ matrix.installation }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -81,13 +88,15 @@ jobs:
       - uses: actions/upload-artifact@v5
         if: always()
         with:
-          name: smoke-credential-${{ github.sha }}
+          name: smoke-credential-${{ matrix.installation }}-${{ github.sha }}
           path: .demo-state/smoke-credential.json
           if-no-files-found: ignore
           include-hidden-files: true
           retention-days: 30
 
-      - run: python3 vc-stack/test_context_refresh.py
+      # context_refresh.sql moves the ait-transcript row only.
+      - if: matrix.installation == 'ait'
+        run: python3 vc-stack/test_context_refresh.py
 
       - name: Collect stack logs
         if: failure()
@@ -99,7 +108,7 @@ jobs:
       - uses: actions/upload-artifact@v5
         if: failure()
         with:
-          name: stack-logs
+          name: stack-logs-${{ matrix.installation }}
           path: stack-logs/
 
       - name: Tear down

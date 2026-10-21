@@ -1,10 +1,13 @@
 """Tests for the Gateway's POST /issuances (contracts.md section 2a) with the mock adapter beside it.
 
-Run: python3 gateway/tests/test_issuances.py            on the host, no Docker: the Gateway and the mock adapter
-                                                        in-process on a generated CSV, the issuance store faked
-     python3 gateway/tests/test_issuances.py URL CSV    against the running containers (smoke.sh), inside the
-                                                        gateway image: the token and the database URL come from
-                                                        the service's environment, CSV is the adapter's file
+Run: python3 gateway/tests/test_issuances.py                     on the host, no Docker: the Gateway and the mock
+                                                                 adapter in-process, the issuance store faked; every
+                                                                 installation's personas on its CSV (generated for
+                                                                 ait, the committed roster for hackathon)
+     python3 gateway/tests/test_issuances.py URL CSV FIXTURES    against the running containers (smoke.sh), inside
+                                                                 the gateway image: the token and the database URL
+                                                                 come from the service's environment, CSV is the
+                                                                 adapter's file, FIXTURES the installation's smoke.json
 Host mode needs gateway/requirements.txt and portal/requirements.txt.
 """
 
@@ -20,15 +23,19 @@ from contextlib import contextmanager
 from pathlib import Path
 
 GATEWAY_DIR = Path(__file__).resolve().parents[1]
-# Host mode only: the Gateway's modules and data/'s generator (the live run inside the image imports neither).
+# The Gateway's modules (the image has them too); data/'s generator in host mode only.
 sys.path.insert(0, str(GATEWAY_DIR))
 sys.path.insert(0, str(GATEWAY_DIR.parent / "data"))
 
+import credential_types as ct  # noqa: E402
+
+INSTALLATIONS = GATEWAY_DIR.parent / "installations"
+ROSTER = INSTALLATIONS / "hackathon" / "adapter" / "student_identity_data.csv"
+# The host-mode CSV per installation: None is the one generated from data/students.json.
+HOST_CSV = {"ait": None, "hackathon": ROSTER}
+# The edge cases below run on the AIT installation.
 SCOPE = "ait_transcript_vc_ldp"
 ELIGIBLE = "ait-2026-0001"
-FAILING = {"ait-2026-0002": "no_holds", "ait-2026-0003": "conferred", "ait-2026-0004": "zero_balance"}
-# CSV columns that are not template claims: the identity and the adapter's own columns (data/generate_csv.py).
-NOT_CLAIMS = {"id", "level", "holds", "conferralStatus", "balance"}
 
 
 def stringify(claims: dict) -> dict:
@@ -37,9 +44,9 @@ def stringify(claims: dict) -> dict:
             for k, v in claims.items()}
 
 
-def assert_only_failing(checks: list[dict], failing: str) -> None:
-    """Every transcript check listed in order; `reason` on the failing one only."""
-    assert [c["check"] for c in checks] == ["no_holds", "conferred", "zero_balance"], checks
+def assert_only_failing(checks: list[dict], failing: str, ctype: ct.CredentialType) -> None:
+    """Every check of the type listed in order; `reason` on the failing one only."""
+    assert [c["check"] for c in checks] == [check.name for check in ctype.checks], checks
     for c in checks:
         if c["check"] == failing:
             assert c["passed"] is False and isinstance(c["reason"], str) and c["reason"], c
@@ -47,16 +54,26 @@ def assert_only_failing(checks: list[dict], failing: str) -> None:
             assert c == {"check": c["check"], "passed": True}, c
 
 
+def read_fixtures(path: Path) -> dict:
+    """An installation's smoke.json: the scope, the eligible persona and each refused persona's failing check."""
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
 @contextmanager
-def mock_adapter():
-    """The mock adapter's app in-process on a CSV generated from data/students.json: (client, csv_path, rows)."""
+def mock_adapter(csv_path: Path | None = None):
+    """The mock adapter's app in-process on csv_path, else on a CSV generated from data/students.json:
+    (client, csv_path, rows)."""
     import generate_csv as gc
     from fastapi.testclient import TestClient
 
-    rows = gc.build_rows(gc.load_students()["students"])
     with tempfile.TemporaryDirectory() as td:
-        csv_path = Path(td) / "student_identity_data.csv"
-        gc.write_csv(rows, csv_path)
+        if csv_path is None:
+            rows = gc.build_rows(gc.load_students()["students"])
+            csv_path = Path(td) / "student_identity_data.csv"
+            gc.write_csv(rows, csv_path)
+        else:
+            with open(csv_path, newline="", encoding="utf-8") as f:
+                rows = list(csv.DictReader(f))
         os.environ["ADAPTER_CSV"] = str(csv_path)
         # Loaded by path: the adapter's module is also called main.
         spec = importlib.util.spec_from_file_location("adapter_main", GATEWAY_DIR.parent / "adapter" / "main.py")
@@ -65,33 +82,36 @@ def mock_adapter():
         yield TestClient(module.app), csv_path, rows
 
 
-def check_gateway(post, rows, token: str, csv_path: Path) -> None:
-    """`post(body, token)` returns (status, body); `rows()` the issuance rows as (sub, type, scope, client_id)."""
+def check_gateway(post, rows, token: str, csv_path: Path, fixtures: dict) -> None:
+    """`post(body, token)` returns (status, body); `rows()` the issuance rows as (sub, type, scope, client_id).
+    `fixtures` is the installation's smoke.json."""
+    scope, eligible = fixtures["scope"], fixtures["eligible"]
+    ctype = ct.REGISTRY[scope]
     with open(csv_path, newline="", encoding="utf-8") as f:
-        csv_row = next(r for r in csv.DictReader(f) if r["id"] == ELIGIBLE)
+        csv_row = next(r for r in csv.DictReader(f) if r["id"] == eligible)
     before = len(rows())
-    request = {"sub": ELIGIBLE, "scope": SCOPE, "client_id": "wallet-demo"}
+    request = {"sub": eligible, "scope": scope, "client_id": "wallet-demo"}
 
     assert post(request, None)[0] == 401
     assert post(request, "not-the-token")[0] == 401
 
     assert post({**request, "scope": "openid some_other_scope"}, token) == (400, {"error": "unknown_scope"})
-    assert post({"sub": ELIGIBLE}, token) == (400, {"error": "unknown_scope"})
-    assert post({"scope": SCOPE}, token) == (400, {"error": "invalid_access_token"})
+    assert post({"sub": eligible}, token) == (400, {"error": "unknown_scope"})
+    assert post({"scope": scope}, token) == (400, {"error": "invalid_access_token"})
     assert post({**request, "sub": "nobody"}, token) == (404, {"error": "no_record"})
 
-    for sub, failing in FAILING.items():
+    for sub, failing in fixtures["refused"].items():
         status, body = post({**request, "sub": sub}, token)
         assert status == 403 and body["error"] == "checklist_failed", (sub, status, body)
-        assert body["credentialType"] == "AitTranscriptCredential", body
-        assert_only_failing(body["checks"], failing)
+        assert body["credentialType"] == ctype.credential_type, body
+        assert_only_failing(body["checks"], failing, ctype)
     assert len(rows()) == before, "a refusal wrote an issuance row"
 
     # The scope is matched inside a space-separated claim; every other claim is ignored.
-    status, body = post({**request, "scope": f"openid {SCOPE}", "accessTokenHash": "x", "iss": "y"}, token)
+    status, body = post({**request, "scope": f"openid {scope}", "accessTokenHash": "x", "iss": "y"}, token)
     assert status == 200, (status, body)
-    assert stringify(body) == {k: v for k, v in csv_row.items() if k not in NOT_CLAIMS}, body
-    assert rows()[before:] == [(ELIGIBLE, "AitTranscriptCredential", SCOPE, "wallet-demo")], rows()
+    assert stringify(body) == {k: csv_row[k] for k in ctype.claim_names}, body
+    assert rows()[before:] == [(eligible, ctype.credential_type, scope, "wallet-demo")], rows()
 
 
 def post_with(client):
@@ -123,11 +143,20 @@ def host_gateway(adapter, store: FakeStore, enabled_scopes: tuple[str, ...] = (S
     return TestClient(main.create_app(settings, adapter=adapter, store=store))
 
 
-def test_issuances_with_the_mock_adapter() -> None:
-    store = FakeStore()
-    with mock_adapter() as (adapter, csv_path, _), host_gateway(adapter, store) as client:
-        assert store.schema_ready, "the schema is created on start"
-        check_gateway(post_with(client), lambda: store.rows, "test-token", csv_path)
+def enabled_scopes(installation: str) -> tuple[str, ...]:
+    """GATEWAY_ENABLED_SCOPES from the installation's gateway.env."""
+    lines = (INSTALLATIONS / installation / "gateway.env").read_text(encoding="utf-8").splitlines()
+    return tuple(next(line for line in lines if line.startswith("GATEWAY_ENABLED_SCOPES=")).split("=", 1)[1].split())
+
+
+def test_issuances_with_the_mock_adapter_for_every_installation() -> None:
+    for installation, csv_path in HOST_CSV.items():
+        store = FakeStore()
+        fixtures = read_fixtures(INSTALLATIONS / installation / "smoke.json")
+        with mock_adapter(csv_path) as (adapter, served_csv, _), \
+                host_gateway(adapter, store, enabled_scopes(installation)) as client:
+            assert store.schema_ready, "the schema is created on start"
+            check_gateway(post_with(client), lambda: store.rows, "test-token", served_csv, fixtures)
 
 
 def test_starts_while_the_adapter_is_down_and_answers_gateway_error() -> None:
@@ -185,7 +214,7 @@ def test_a_scope_the_installation_does_not_enable_is_unknown() -> None:
         assert post_with(client)({"sub": ELIGIBLE, "scope": SCOPE}, "test-token") == (400, {"error": "unknown_scope"})
 
 
-def run_live(url: str, csv_path: Path) -> None:
+def run_live(url: str, csv_path: Path, fixtures: dict) -> None:
     import httpx
     import psycopg
 
@@ -194,24 +223,25 @@ def run_live(url: str, csv_path: Path) -> None:
             return conn.execute("SELECT sub, credential_type, scope, client_id FROM gateway.issuances ORDER BY id").fetchall()
 
     with httpx.Client(base_url=url, timeout=10) as client:
-        check_gateway(post_with(client), rows, os.environ["GATEWAY_AUTH_TOKEN"], csv_path)
+        check_gateway(post_with(client), rows, os.environ["GATEWAY_AUTH_TOKEN"], csv_path, fixtures)
 
 
-def run_live_adapter_down(url: str) -> None:
+def run_live_adapter_down(url: str, fixtures: dict) -> None:
     """With the adapter stopped, an issuance request is a Gateway error (502), not a crash."""
     import httpx
 
     with httpx.Client(base_url=url, timeout=30) as client:
-        status, body = post_with(client)({"sub": ELIGIBLE, "scope": SCOPE}, os.environ["GATEWAY_AUTH_TOKEN"])
+        status, body = post_with(client)({"sub": fixtures["eligible"], "scope": fixtures["scope"]},
+                                         os.environ["GATEWAY_AUTH_TOKEN"])
     assert (status, body.get("error")) == (502, "gateway_error"), (status, body)
 
 
 if __name__ == "__main__":
-    if len(sys.argv) == 3 and sys.argv[1] == "adapter-down":
-        run_live_adapter_down(sys.argv[2])
+    if len(sys.argv) == 4 and sys.argv[1] == "adapter-down":
+        run_live_adapter_down(sys.argv[2], read_fixtures(Path(sys.argv[3])))
         print(f"PASS gateway at {sys.argv[2]} answers gateway_error while the adapter is down")
-    elif len(sys.argv) == 3:
-        run_live(sys.argv[1], Path(sys.argv[2]))
+    elif len(sys.argv) == 4:
+        run_live(sys.argv[1], Path(sys.argv[2]), read_fixtures(Path(sys.argv[3])))
         print(f"PASS gateway at {sys.argv[1]}")
     else:
         for name, fn in list(globals().items()):

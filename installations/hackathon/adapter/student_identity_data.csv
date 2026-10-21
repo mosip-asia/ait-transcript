@@ -1,0 +1,4 @@
+id,teamId,teamName,winner,award,oidcClientId,authEndpoint,issuerEndpoint,verifierEndpoint
+hack-2026-0001,team-01,Sandbox Pioneers,true,Best Use of Verifiable Credentials,hack-team-01,http://localhost:9080/realms/hackathon,http://localhost:9091,http://localhost:9095
+hack-2026-0002,team-02,Chain Gang,false,,hack-team-02,http://localhost:9080/realms/hackathon,http://localhost:9091,http://localhost:9095
+hack-2026-0003,,,false,,,http://localhost:9080/realms/hackathon,http://localhost:9091,http://localhost:9095

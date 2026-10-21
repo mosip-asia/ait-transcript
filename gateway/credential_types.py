@@ -1,9 +1,10 @@
 """The credential types the Gateway serves: a registry in code, keyed by the OAuth scope.
 
 Each type names its scope, its credential type, its checks (evaluated in order over the adapter's eligibility
-attributes) and its mapping from the adapter's record to the template's variable names. The installation's
-settings say which scopes are enabled; nothing else differs between installations. Only the transcript is
-registered today; the Developer Passport and the Achievement join it as further entries.
+attributes, each reading the attributes it names) and the template's variable names, each taken from the
+adapter's record field of that name unless the type derives it. The installation's settings say which scopes are
+enabled; nothing else differs between installations. The transcript (AIT) and the Developer Passport
+(hackathon) are registered; the Achievement joins them as a further entry.
 """
 
 from __future__ import annotations
@@ -26,7 +27,8 @@ class CredentialType:
     scope: str
     credential_type: str
     checks: tuple[Check, ...]
-    claims: Callable[[dict], dict]
+    claim_names: tuple[str, ...]
+    derived: Callable[[dict], dict] = lambda record: {}  # claims computed from the record, overriding by name
 
 
 def evaluate(ctype: CredentialType, eligibility: dict) -> list[dict]:
@@ -48,9 +50,10 @@ def escape_vc_quoted_claim(value: str) -> str:
 
 def claims(ctype: CredentialType, record: dict) -> dict:
     """The 200 body: the type's claims, every string escaped for the quoted template; other scalars become strings, and arrays (`courses`,
-    which the template embeds unquoted) are left as they are."""
+    which the template embeds unquoted) are left as they are. A field the record lacks is an empty string."""
+    named = {k: record.get(k, "") for k in ctype.claim_names} | ctype.derived(record)
     return {k: v if isinstance(v, list) else escape_vc_quoted_claim("" if v is None else str(v))
-            for k, v in ctype.claims(record).items()}
+            for k, v in named.items()}
 
 
 # --- AIT transcript ---------------------------------------------------------------------------------------
@@ -78,12 +81,6 @@ def derive_course_list(semesters: list[dict]) -> str:
     return "\n".join(lines)
 
 
-def transcript_claims(record: dict) -> dict:
-    out = {k: record.get(k, "") for k in TRANSCRIPT_CLAIMS}
-    out["courseList"] = derive_course_list(record["courses"])
-    return out
-
-
 TRANSCRIPT = CredentialType(
     scope="ait_transcript_vc_ldp",
     credential_type="AitTranscriptCredential",
@@ -92,7 +89,24 @@ TRANSCRIPT = CredentialType(
         Check("conferred", lambda e: e["conferralStatus"] == "Conferred", lambda e: "Degree not yet conferred"),
         Check("zero_balance", lambda e: Decimal(e["balance"]) == 0, lambda e: f"Outstanding balance: {e['balance']}"),
     ),
-    claims=transcript_claims,
+    claim_names=TRANSCRIPT_CLAIMS,
+    derived=lambda record: {"courseList": derive_course_list(record["courses"])},
 )
 
-REGISTRY: dict[str, CredentialType] = {t.scope: t for t in (TRANSCRIPT,)}
+
+# --- Hackathon Developer Passport -------------------------------------------------------------------------
+
+# The claims Certify's developer-passport template substitutes: roster columns, as the organiser fills them.
+PASSPORT_CLAIMS = ("teamId", "teamName", "oidcClientId", "authEndpoint", "issuerEndpoint", "verifierEndpoint")
+
+DEVELOPER_PASSPORT = CredentialType(
+    scope="developer_passport_vc_ldp",
+    credential_type="DeveloperPassportCredential",
+    checks=(
+        # A registered participant without a team has an empty teamId on the roster.
+        Check("on_roster", lambda e: bool(e["teamId"].strip()), lambda e: "Not on a team on the hackathon roster"),
+    ),
+    claim_names=PASSPORT_CLAIMS,
+)
+
+REGISTRY: dict[str, CredentialType] = {t.scope: t for t in (TRANSCRIPT, DEVELOPER_PASSPORT)}

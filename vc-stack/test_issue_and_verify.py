@@ -111,6 +111,8 @@ CREDENTIAL = {
     },
     "proof": {"type": "Ed25519Signature2020", "proofValue": "z..."},
 }
+# The AIT installation's tampered claims (installations/ait/smoke.json).
+TAMPER = ["fullName", "courses[0].courses[0].grade"]
 SUCCESS = {"allChecksSuccessful": True, "schemaAndSignatureCheck": {"valid": True, "error": None},
            "expiryCheck": {"valid": True}, "statusCheck": [], "claims": {}}
 
@@ -153,7 +155,7 @@ def changed_subject_claims(tampered: dict) -> set[str]:
 def test_verify_step_passes_when_the_credential_verifies_and_every_tampered_copy_does_not() -> None:
     pristine = json.dumps(CREDENTIAL)
     client, seen = mock_client(signature_checking_verifier)
-    assert iv.verify_step(client, CREDENTIAL) == []
+    assert iv.verify_step(client, CREDENTIAL, TAMPER) == []
     assert json.dumps(CREDENTIAL) == pristine, "verify_step must not modify the credential it was given"
     original, holder, name, grade = (json.loads(json.loads(r.content)["verifiableCredential"]) for r in seen)
     assert original == CREDENTIAL
@@ -179,7 +181,7 @@ def test_verify_step_passes_when_the_credential_verifies_and_every_tampered_copy
 
 def test_verify_step_names_every_tampered_claim_that_still_verifies() -> None:
     client, _ = mock_client(lambda r: httpx.Response(200, json=SUCCESS))
-    problems = iv.verify_step(client, CREDENTIAL)
+    problems = iv.verify_step(client, CREDENTIAL, TAMPER)
     assert len(problems) == 3, problems
     for claim, problem in zip(("id", "fullName", "courses[0].courses[0].grade"), problems):
         assert f"tampered credentialSubject.{claim}:" in problem and "ERR_SIGNATURE_VERIFICATION_FAILED" in problem, problem
@@ -193,13 +195,25 @@ def test_verify_step_fails_when_only_the_grade_inside_courses_is_unsigned() -> N
         return httpx.Response(200, json=SUCCESS if unsigned else SIGNATURE_FAILED)
 
     client, _ = mock_client(courses_unsigned)
-    problems = iv.verify_step(client, CREDENTIAL)
+    problems = iv.verify_step(client, CREDENTIAL, TAMPER)
     assert len(problems) == 1 and "credentialSubject.courses[0].courses[0].grade" in problems[0], problems
+
+
+def test_tampered_copies_change_each_named_claim_and_the_holder() -> None:
+    # The hackathon installation's Developer Passport: one top-level roster claim.
+    passport = {"type": ["VerifiableCredential", "DeveloperPassportCredential"],
+                "credentialSubject": {"id": "did:jwk:abc", "teamId": "team-01", "teamName": "Sandbox Pioneers"}}
+    copies = iv.tampered_copies(passport, ["teamName"])
+    assert list(copies) == ["id", "teamName"]
+    tampered = copies["teamName"]["credentialSubject"]
+    assert tampered["teamName"] != "Sandbox Pioneers"
+    assert {**tampered, "teamName": "Sandbox Pioneers"} == passport["credentialSubject"]
+    assert passport["credentialSubject"]["teamName"] == "Sandbox Pioneers", "the credential itself is left alone"
 
 
 def test_verify_step_fails_when_the_credential_itself_does_not_verify() -> None:
     client, _ = mock_client(lambda r: httpx.Response(200, json=SIGNATURE_FAILED))
-    problems = iv.verify_step(client, CREDENTIAL)
+    problems = iv.verify_step(client, CREDENTIAL, TAMPER)
     assert problems and "SUCCESS" in problems[0], problems
 
 

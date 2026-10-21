@@ -6,7 +6,7 @@ Needs fastapi and httpx (portal/requirements.txt): the claim test reads the mock
 
 from __future__ import annotations
 
-from test_issuances import assert_only_failing, mock_adapter, stringify  # puts gateway/ and data/ on sys.path
+from test_issuances import ROSTER, assert_only_failing, mock_adapter, stringify  # puts gateway/ and data/ on sys.path
 
 import credential_types as ct  # noqa: E402
 import generate_csv as gc  # noqa: E402
@@ -35,7 +35,7 @@ def test_each_failed_check_carries_a_reason_and_the_others_are_still_evaluated()
         "zero_balance": {**ELIGIBLE, "balance": "1250.00"},
     }
     for failing, eligibility in cases.items():
-        assert_only_failing(ct.evaluate(TRANSCRIPT, eligibility), failing)
+        assert_only_failing(ct.evaluate(TRANSCRIPT, eligibility), failing, TRANSCRIPT)
 
 
 def test_every_check_fails_together() -> None:
@@ -69,6 +69,38 @@ def test_multiline_claims_are_escaped_for_the_quoted_template() -> None:
     assert claims["fullName"] == "Somchai Caf\\u00e9"
     assert claims["courses"][0]["courses"][0]["title"] == 'Thai "Basics"'  # substituted unquoted: left as it is
     assert claims["thesisTitle"] == ""  # a field the record lacks is an empty string, as in the CSV
+
+
+# --- Developer Passport (the hackathon installation) ---
+
+PASSPORT = ct.REGISTRY["developer_passport_vc_ldp"]
+
+
+def test_the_passport_scope_names_its_credential_type() -> None:
+    assert PASSPORT.credential_type == "DeveloperPassportCredential"
+
+
+def test_a_participant_on_a_team_is_on_the_roster() -> None:
+    assert ct.evaluate(PASSPORT, {"teamId": "team-02", "winner": "false"}) == [{"check": "on_roster", "passed": True}]
+
+
+def test_a_participant_without_a_team_is_not_on_the_roster() -> None:
+    for team_id in ("", "  "):
+        [check] = ct.evaluate(PASSPORT, {"teamId": team_id, "winner": "false"})
+        assert check["check"] == "on_roster" and check["passed"] is False and check["reason"], check
+
+
+def test_passport_claims_are_the_roster_columns() -> None:
+    with mock_adapter(ROSTER) as (adapter, _, _):
+        record = adapter.get("/students/hack-2026-0001/transcript").json()
+    assert ct.claims(PASSPORT, record) == {
+        "teamId": "team-01",
+        "teamName": "Sandbox Pioneers",
+        "oidcClientId": "hack-team-01",
+        "authEndpoint": "http://localhost:9080/realms/hackathon",
+        "issuerEndpoint": "http://localhost:9091",
+        "verifierEndpoint": "http://localhost:9095",
+    }
 
 
 if __name__ == "__main__":

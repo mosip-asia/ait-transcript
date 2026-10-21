@@ -33,14 +33,14 @@ services:
       - download_hsm_client=false
       - mosip_certify_domain_url=${CERTIFY_PUBLIC_BASE_URL:-http://certify-nginx}
       # Keycloak's --hostname-url=http://keycloak:8080 (see keycloak-server service) makes every
-      # token it issues carry iss=http://keycloak:8080/realms/inji, regardless of which URL the
+      # token it issues carry iss=http://keycloak:8080/realms/<realm>, regardless of which URL the
       # browser used to log in (that's rewritten separately by keycloak-nginx's sub_filter for
       # localhost:9080). Certify's resource-server issuer-uri must match that iss exactly or JWT
       # validation fails — so it uses the same KEYCLOAK_DOCKER_AUTH_SERVER as the authorization URL,
-      # not KEYCLOAK_PUBLIC_BASE_URL.
-      - MOSIP_CERTIFY_AUTHORIZATION_URL=${KEYCLOAK_DOCKER_AUTH_SERVER:-http://keycloak:8080}/realms/inji
-      - MOSIP_CERTIFY_AUTHN_ISSUER_URI=${KEYCLOAK_DOCKER_AUTH_SERVER:-http://keycloak:8080}/realms/inji
-      - MOSIP_CERTIFY_AUTHN_JWK_SET_URI=${KEYCLOAK_INTERNAL_BASE_URL:-http://host.docker.internal:9080}/realms/inji/protocol/openid-connect/certs
+      # not KEYCLOAK_PUBLIC_BASE_URL. The realm is the installation's: its Certify properties build
+      # the authorization URL, issuer URI and JWK set URI from these two variables.
+      - KEYCLOAK_DOCKER_AUTH_SERVER=${KEYCLOAK_DOCKER_AUTH_SERVER:-http://keycloak:8080}
+      - KEYCLOAK_INTERNAL_BASE_URL=${KEYCLOAK_INTERNAL_BASE_URL:-http://host.docker.internal:9080}
       - MOSIP_CERTIFY_AUTHN_ALLOWED_AUDIENCES={ 'wallet-demo', 'http://certify-nginx:80/v1/certify/issuance/credential', 'http://certify-nginx/v1/certify/issuance/credential', '${CERTIFY_PUBLIC_BASE_URL:-http://certify-nginx}/v1/certify/issuance/credential' }
     volumes:
       - ./config/certify-default.properties:/home/mosip/config/certify-default.properties

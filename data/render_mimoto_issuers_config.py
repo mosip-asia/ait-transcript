@@ -42,6 +42,7 @@ def render(env: dict[str, str]) -> dict[Path, str]:
     api_url = env.get("CERTIFY_PUBLIC_BASE_URL", "http://certify-nginx").rstrip("/")
     keycloak_url = env.get("KEYCLOAK_PUBLIC_BASE_URL", "http://localhost:9080").rstrip("/")
     internal_as = env.get("KEYCLOAK_DOCKER_AUTH_SERVER", KEYCLOAK_DOCKER_AUTH_SERVER).rstrip("/")
+    realm = json.loads((installation_dir / "keycloak-realm.json").read_text(encoding="utf-8"))["realm"]
     # Local runs have no phone: leave the gateway exactly as it was.
     is_public = api_url.startswith("https://")
 
@@ -77,7 +78,7 @@ location = /.well-known/openid-credential-issuer {{
     proxy_set_header Connection "";
     proxy_set_header Accept-Encoding "";
     sub_filter_types application/json;
-    sub_filter '"authorization_servers":["{internal_as}/realms/inji"]' '"authorization_servers":["{keycloak_url}/realms/inji"]';
+    sub_filter '"authorization_servers":["{internal_as}/realms/{realm}"]' '"authorization_servers":["{keycloak_url}/realms/{realm}"]';
 }}
 """
     else:

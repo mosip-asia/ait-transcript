@@ -8,6 +8,8 @@ credentials/download is reachable via the Inji Web proxy (not blocked with 403).
 Full browser OAuth + PDF is still manual (PRD §9); this guards the misconfigurations that
 caused empty issuers, Keycloak not loading, and "session is not valid" on download.
 
+Checks the installation INSTALLATION names (default ait), as smoke.sh runs it.
+
 Run:
   python3 vc-stack/test_inji_web_vc_readiness.py
   python3 vc-stack/test_inji_web_vc_readiness.py --live
@@ -17,6 +19,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 import urllib.error
 import urllib.request
@@ -24,11 +27,13 @@ from pathlib import Path
 
 STACK_DIR = Path(__file__).resolve().parent
 REPO_ROOT = STACK_DIR.parent
-AIT_DIR = REPO_ROOT / "installations" / "ait"
+INSTALLATION_DIR = REPO_ROOT / "installations" / os.environ.get("INSTALLATION", "ait")
 
 INJI_WEB_ORIGIN = "http://localhost:4004"
 KEYCLOAK_PUBLIC = "http://localhost:9080"
-ISSUER_ID = "AITUniversity"
+ISSUER_ID = json.loads((INSTALLATION_DIR / "mimoto-issuers-config.json.template").read_text(encoding="utf-8"))[
+    "issuers"][0]["issuer_id"]
+CREDENTIAL_CONFIG = json.loads((INSTALLATION_DIR / "smoke.json").read_text(encoding="utf-8"))["credentialConfig"]
 MIMOTO_ISSUERS = f"{INJI_WEB_ORIGIN}/v1/mimoto/issuers"
 MIMOTO_CONFIG = f"{INJI_WEB_ORIGIN}/v1/mimoto/issuers/{ISSUER_ID}/configuration"
 MIMOTO_DOWNLOAD = f"{INJI_WEB_ORIGIN}/v1/mimoto/credentials/download"
@@ -56,7 +61,7 @@ def _http_json(url: str, method: str = "GET", body: dict | None = None) -> tuple
 
 
 def test_issuers_config_token_endpoint_uses_inji_web_proxy() -> None:
-    cfg = json.loads((AIT_DIR / "mimoto-issuers-config.json").read_text(encoding="utf-8"))
+    cfg = json.loads((INSTALLATION_DIR / "mimoto-issuers-config.json").read_text(encoding="utf-8"))
     issuer = cfg["issuers"][0]
     token_ep = issuer["token_endpoint"]
     assert token_ep == EXPECTED_TOKEN, (
@@ -88,7 +93,7 @@ def test_mimoto_keycloak_external_is_browser_url() -> None:
 
 
 def test_keycloak_wallet_demo_redirect_includes_inji_web() -> None:
-    realm = json.loads((AIT_DIR / "keycloak-realm.json").read_text(encoding="utf-8"))
+    realm = json.loads((INSTALLATION_DIR / "keycloak-realm.json").read_text(encoding="utf-8"))
     client = next(c for c in realm["clients"] if c["clientId"] == "wallet-demo")
     redirects = client["redirectUris"]
     assert "http://localhost:4004/redirect" in redirects
@@ -107,7 +112,7 @@ def test_live_issuer_list_and_configuration() -> None:
     auth_ep = resp.get("authorization_endpoint", "")
     assert auth_ep.startswith(f"{KEYCLOAK_PUBLIC}/"), auth_ep
     supported = resp.get("credentials_supported") or []
-    assert any(c.get("name") == "ait-transcript" for c in supported)
+    assert any(c.get("name") == CREDENTIAL_CONFIG for c in supported), supported
 
     status, payload = _http_json(f"{MIMOTO_ISSUERS}/{ISSUER_ID}")
     assert status == 200

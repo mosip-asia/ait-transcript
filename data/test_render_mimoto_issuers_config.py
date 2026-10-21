@@ -73,6 +73,16 @@ def test_public_snippet_swaps_only_authorization_servers() -> None:
     assert "proxy_pass http://$certify_nginx_upstream;" in snippet
 
 
+def test_public_snippet_names_the_installations_realm() -> None:
+    out = r.render({**PUBLIC, "INSTALLATION": "hackathon"})
+    assert (
+        """sub_filter '"authorization_servers":["http://keycloak:8080/realms/hackathon"]' """
+        """'"authorization_servers":["https://keycloak.demo.example/realms/hackathon"]';"""
+    ) in out[r.GATEWAY_SNIPPET_OUT]
+    assert json.loads(out[r.REPO_ROOT / "installations" / "hackathon" / "mimoto-issuers-config.json"])[
+        "issuers"][0]["issuer_id"] == "AITHackathon"
+
+
 def test_local_run_leaves_gateway_alone() -> None:
     out = r.render(AIT)
     assert all(line.startswith("#") for line in out[r.GATEWAY_SNIPPET_OUT].splitlines())

@@ -2,7 +2,7 @@
 # INSTALLATION names the directory under installations/ that docker-compose.yaml
 # mounts; the environment wins over vc-stack/.env, which wins over the marker file
 # vc-stack/.installation. Exits when it names no directory,
-# otherwise exports INSTALLATION (for Compose) and sets INSTALLATION_DIR.
+# otherwise exports INSTALLATION (for Compose) and sets INSTALLATION_DIR, REALM and ISSUER_ID.
 
 STACK_ENV="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/.env"
 
@@ -26,3 +26,6 @@ if [[ -z "$INSTALLATION" || ! -d "$(dirname "$STACK_ENV")/../installations/$INST
 fi
 INSTALLATION_DIR="$(cd "$(dirname "$STACK_ENV")/../installations/$INSTALLATION" && pwd)"
 export INSTALLATION
+# The installation's Keycloak realm and Mimoto issuer id.
+REALM="$(jq -r .realm "$INSTALLATION_DIR/keycloak-realm.json")"
+ISSUER_ID="$(jq -r '.issuers[0].issuer_id' "$INSTALLATION_DIR/mimoto-issuers-config.json.template")"

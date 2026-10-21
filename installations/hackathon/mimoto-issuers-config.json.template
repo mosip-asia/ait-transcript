@@ -1,0 +1,31 @@
+{
+  "issuers": [
+    {
+      "credential_issuer": "AITHackathon",
+      "issuer_id": "AITHackathon",
+      "protocol": "OpenId4VCI",
+      "display": [
+        {
+          "name": "AIT Hackathon",
+          "logo": {
+            "url": "https://ait.ac.th/wp-content/uploads/2024/09/AIT_globe.png",
+            "alt_text": "ait-logo"
+          },
+          "title": "AIT Hackathon",
+          "description": "Download your AIT Hackathon credentials",
+          "language": "en"
+        }
+      ],
+      "client_id": "wallet-demo",
+      "redirect_uri": "${INJI_WEB_URL}/redirect",
+      "token_endpoint": "${INJI_WEB_URL}/v1/mimoto/get-token/AITHackathon",
+      "authorization_audience": "http://keycloak:8080/realms/hackathon/protocol/openid-connect/token",
+      "proxy_token_endpoint": "http://keycloak:8080/realms/hackathon/protocol/openid-connect/token",
+      "client_alias": "wallet-demo-client",
+      "qr_code_type": "EmbeddedVC",
+      "credential_issuer_host": "http://host.docker.internal:9091",
+      "enabled": "true",
+      "wellknown_endpoint": "http://host.docker.internal:9091/.well-known/openid-credential-issuer"
+    }
+  ]
+}

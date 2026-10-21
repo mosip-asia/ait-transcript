@@ -31,9 +31,7 @@ P12_PASS_DEFAULT="xy4gh6swa2i"
 NETWORK_NAME="vc_stack_network"
 OVERRIDE_FILE="docker-compose.override.yaml"
 ESIGNET_TOKEN_URL="https://esignet-mock.collab.mosip.net/v1/esignet/oauth/v2/token"
-KEYCLOAK_TOKEN_URL="http://host.docker.internal:9080/realms/inji/protocol/openid-connect/token"
 KEYCLOAK_DOCKER_AUTH_SERVER="http://keycloak:8080"
-KEYCLOAK_REALM_PATH="/realms/inji"
 LOCAL_KEYCLOAK_PUBLIC_BASE_URL="http://localhost:9080"
 LOCAL_KEYCLOAK_INTERNAL_BASE_URL="http://host.docker.internal:9080"
 LOCAL_CERTIFY_PUBLIC_BASE_URL="http://localhost:9091"
@@ -60,7 +58,7 @@ keycloak_expected_issuer() {
   printf "%s%s" "$pub" "$KEYCLOAK_REALM_PATH"
 }
 
-# JSON-LD context URL baked into every transcript VC. Local runs keep the Docker-only name (nothing but
+# JSON-LD context URL baked into every transcript VC (the AIT installation's; context_refresh.sql moves only that row). Local runs keep the Docker-only name (nothing but
 # containers reads it). Both go through the public gateway's /contexts/ route to the vdr container. A public
 # deployment (CERTIFY_PUBLIC_BASE_URL is https) uses the api. gateway's public name, so a phone can load the
 # context when it verifies the VC after download.
@@ -96,6 +94,9 @@ for a in "$@"; do
 done
 
 source "$STACK_DIR/installation.sh"
+
+KEYCLOAK_TOKEN_URL="http://host.docker.internal:9080/realms/$REALM/protocol/openid-connect/token"
+KEYCLOAK_REALM_PATH="/realms/$REALM"
 
 # -------- preflight --------
 preflight() {
@@ -333,17 +334,17 @@ EOF
     public_base_url="$(env_value PUBLIC_BASE_URL)"
     if [[ -n "$public_base_url" ]]; then
       public_base_url="${public_base_url%/}"
-      token_endpoint="$public_base_url/v1/mimoto/get-token/AITUniversity"
-      authorization_audience="$public_base_url/realms/inji/protocol/openid-connect/token"
+      token_endpoint="$public_base_url/v1/mimoto/get-token/$ISSUER_ID"
+      authorization_audience="$public_base_url$KEYCLOAK_REALM_PATH/protocol/openid-connect/token"
       proxy_token_endpoint="$authorization_audience"
       credential_issuer_host="$public_base_url"
       wellknown_endpoint="$public_base_url/.well-known/openid-credential-issuer"
       redirect_uri="$LOCAL_INJI_WEB_OAUTH_REDIRECT_URI"
     else
-      token_endpoint="$LOCAL_MIMOTO_PUBLIC_BASE_URL/v1/mimoto/get-token/AITUniversity"
+      token_endpoint="$LOCAL_MIMOTO_PUBLIC_BASE_URL/v1/mimoto/get-token/$ISSUER_ID"
       # Mimoto 0.21.x uses auth-server well-known token_endpoint for JWT aud (must match Keycloak :9080), not these fields alone.
-      authorization_audience="$KEYCLOAK_DOCKER_AUTH_SERVER/realms/inji/protocol/openid-connect/token"
-      proxy_token_endpoint="$KEYCLOAK_DOCKER_AUTH_SERVER/realms/inji/protocol/openid-connect/token"
+      authorization_audience="$KEYCLOAK_DOCKER_AUTH_SERVER$KEYCLOAK_REALM_PATH/protocol/openid-connect/token"
+      proxy_token_endpoint="$authorization_audience"
       redirect_uri="$LOCAL_INJI_WEB_OAUTH_REDIRECT_URI"
       # Mimoto (in Docker) reaches host-published Certify via host.docker.internal.
       credential_issuer_host="http://host.docker.internal:9091"
@@ -430,7 +431,7 @@ wait_healthy() {
     "http://localhost:4004/v1/mimoto/issuers"                          # inji-web → mimoto (issuer list UI)
     "http://localhost:9095/v1/verify/actuator/health"                  # verify-service
   )
-  [[ "$MODE" == "b" ]] && urls+=("http://localhost:9080/realms/inji/.well-known/openid-configuration")
+  [[ "$MODE" == "b" ]] && urls+=("http://localhost:9080$KEYCLOAK_REALM_PATH/.well-known/openid-configuration")
 
   for url in "${urls[@]}"; do
     printf "  waiting on %s " "$url"
@@ -450,7 +451,7 @@ wait_healthy() {
     while true; do
       local cfg_http cfg_errs
       cfg_http=$(curl -sS -o /tmp/mimoto_cfg.json -w '%{http_code}' \
-        http://localhost:4004/v1/mimoto/issuers/AITUniversity/configuration || echo 000)
+        "http://localhost:4004/v1/mimoto/issuers/$ISSUER_ID/configuration" || echo 000)
       cfg_errs=$(jq -r '.errors | length' /tmp/mimoto_cfg.json 2>/dev/null || echo 1)
       if [[ "$cfg_http" == "200" && "$cfg_errs" == "0" ]]; then
         printf " %sok%s\n" "$GRN" "$RST"
@@ -588,30 +589,35 @@ validate() {
   mimoto_issuers=$(curl -sf http://localhost:9099/v1/mimoto/issuers | jq -r '.response.issuers[].issuer_id' | paste -sd, -)
   [[ -n "$mimoto_issuers" ]] && ok "mimoto issuers: $mimoto_issuers" || die "mimoto issuers empty" 2
 
-  local expected_student_context student_context student_metadata_context
-  expected_student_context="$(student_context_url),https://www.w3.org/ns/credentials/v2"
-  student_context=$(docker compose exec -T database 2>/dev/null psql -U postgres -d inji_certify -tAc \
-    "select context from certify.credential_config where credential_config_key_id='ait-transcript';" \
-    | tr -d '[:space:]')
-  [[ "$student_context" == "$expected_student_context" ]] \
-    && ok "ait-transcript DB context order matches QR signing lookup" \
-    || die "ait-transcript context must be '$expected_student_context' (got: ${student_context:-<empty>})" 2
-
-  student_metadata_context=$(curl -sf http://localhost:9091/.well-known/openid-credential-issuer | jq -r \
-    '.credential_configurations_supported["ait-transcript"].credential_definition["@context"] | join(",")')
-  [[ "$student_metadata_context" == "$expected_student_context" ]] \
-    && ok "ait-transcript issuer metadata context order aligned" \
-    || die "ait-transcript issuer metadata context mismatch: ${student_metadata_context:-<empty>}" 2
+  # Every credential_config row: its context column (the QR signing lookup) is its type's context on the VDR, then
+  # the VCDM 2.0 base, and the issuer metadata lists the same @context in the same order.
+  local context_base issuer_metadata config_contexts key context metadata_context
+  context_base="$(student_context_url)"
+  context_base="${context_base%%/contexts/*}"
+  issuer_metadata=$(curl -sf http://localhost:9091/.well-known/openid-credential-issuer) || die "certify .well-known not serving" 2
+  config_contexts=$(docker compose exec -T database 2>/dev/null psql -U postgres -d inji_certify -tA -F ' ' -c \
+    "select credential_config_key_id, context from certify.credential_config;" | sed '/^$/d')
+  [[ -n "$config_contexts" ]] || die "no rows in certify.credential_config" 2
+  while read -r key context; do
+    [[ "$context" == "$context_base/contexts/"*",https://www.w3.org/ns/credentials/v2" ]] \
+      && ok "$key DB context order matches QR signing lookup" \
+      || die "$key context must be '$context_base/contexts/<type>/v<n>.json,https://www.w3.org/ns/credentials/v2' (got: ${context:-<empty>})" 2
+    metadata_context=$(jq -r --arg key "$key" \
+      '.credential_configurations_supported[$key].credential_definition["@context"] | join(",")' <<<"$issuer_metadata")
+    [[ "$metadata_context" == "$context" ]] \
+      && ok "$key issuer metadata context order aligned" \
+      || die "$key issuer metadata context mismatch: ${metadata_context:-<empty>}" 2
+  done <<<"$config_contexts"
 
   if [[ "$MODE" == "b" ]]; then
     local kc_iss expected_kc_iss auth_endpoint expected_auth_prefix
-    kc_iss=$(curl -sf http://localhost:9080/realms/inji/.well-known/openid-configuration | jq -r '.issuer')
-    expected_kc_iss="http://keycloak:8080/realms/inji"
+    kc_iss=$(curl -sf "http://localhost:9080$KEYCLOAK_REALM_PATH/.well-known/openid-configuration" | jq -r '.issuer')
+    expected_kc_iss="$KEYCLOAK_DOCKER_AUTH_SERVER$KEYCLOAK_REALM_PATH"
     [[ "$kc_iss" == "$expected_kc_iss" ]] && ok "keycloak realm: $kc_iss (browser :9080, token aud via keycloak:8080)" || die "keycloak issuer wrong: $kc_iss (expected $expected_kc_iss)" 2
     # The browser-facing Keycloak base: KEYCLOAK_PUBLIC_BASE_URL from .env on a
     # public deploy, http://localhost:9080 locally (keycloak_expected_issuer).
     expected_auth_prefix="$(keycloak_expected_issuer)/"
-    auth_endpoint=$(curl -sS http://localhost:4004/v1/mimoto/issuers/AITUniversity/configuration | jq -r '.response.authorization_endpoint // empty')
+    auth_endpoint=$(curl -sS "http://localhost:4004/v1/mimoto/issuers/$ISSUER_ID/configuration" | jq -r '.response.authorization_endpoint // empty')
     [[ -n "$auth_endpoint" ]] \
       && [[ "$auth_endpoint" == "$expected_auth_prefix"* ]] \
       && ok "mimoto issuer configuration auth URL is browser-reachable ($auth_endpoint)" \
@@ -637,7 +643,7 @@ validate() {
   say "  Inji Verify UI:            http://localhost:4007"
   say "  Demo app (student/registrar): http://localhost:4100"
   [[ "$MODE" == "b" ]] && say "  Keycloak (admin/admin):    http://localhost:9080"
-  say "  Login (Mode B):            user ait-2026-0001 / password inji"
+  say "  Login (Mode B):            user $(jq -r '.users[0].username' "$INSTALLATION_DIR/keycloak-realm.json") / password inji"
 }
 
 # -------- main --------
