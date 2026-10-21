@@ -40,7 +40,7 @@ LOCAL_CERTIFY_PUBLIC_BASE_URL="http://localhost:9091"
 LOCAL_MIMOTO_PUBLIC_BASE_URL="http://localhost:4004"
 LOCAL_INJI_WEB_OAUTH_REDIRECT_URI="http://localhost:4004/redirect"
 LOCAL_CERTIFY_INTERNAL_BASE_URL="http://certify-nginx"
-LOCAL_STUDENT_CONTEXT_URL="http://host.docker.internal:9091/academic-transcript-context.json"
+LOCAL_STUDENT_CONTEXT_URL="http://host.docker.internal:9098/contexts/transcript/v1.json"
 
 # -------- styling --------
 if [[ -t 1 ]]; then BOLD=$'\e[1m'; DIM=$'\e[2m'; RED=$'\e[31m'; GRN=$'\e[32m'; YLW=$'\e[33m'; CYN=$'\e[36m'; RST=$'\e[0m'
@@ -61,8 +61,9 @@ keycloak_expected_issuer() {
 }
 
 # JSON-LD context URL baked into every transcript VC. Local runs keep the Docker-only name (nothing but
-# containers reads it). A public deployment (CERTIFY_PUBLIC_BASE_URL is https) uses the api. gateway, which
-# already serves the file, so a phone can load it when it verifies the VC after download.
+# containers reads it). Both go through the public gateway's /contexts/ route to the vdr container. A public
+# deployment (CERTIFY_PUBLIC_BASE_URL is https) uses the api. gateway's public name, so a phone can load the
+# context when it verifies the VC after download.
 # STUDENT_CONTEXT_URL in .env overrides it (rehearsing the switch locally, or rolling a deployment back).
 student_context_url() {
   local certify_public override
@@ -71,7 +72,7 @@ student_context_url() {
   if [[ -n "$override" ]]; then
     printf '%s' "$override"
   elif [[ "$certify_public" == https://* ]]; then
-    printf '%s/academic-transcript-context.json' "${certify_public%/}"
+    printf '%s/contexts/transcript/v1.json' "${certify_public%/}"
   else
     printf '%s' "$LOCAL_STUDENT_CONTEXT_URL"
   fi
@@ -383,6 +384,8 @@ compose_up() {
   step "docker compose up -d (mode=$MODE)"
   if [[ "$MODE" == "a" ]]; then
     docker compose up -d database certify certify-nginx mimoto-service inji-web verify-service verify-ui
+    # The transcript context is served by vdr through public-gateway; --no-deps keeps keycloak-* down.
+    docker compose up -d --no-deps vdr public-gateway
     ensure_certify_nginx_up
     docker compose restart mimoto-service inji-web verify-ui
     ok "started Mode A services (keycloak-* skipped)"

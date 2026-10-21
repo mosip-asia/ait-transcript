@@ -13,8 +13,8 @@ import uuid
 from pathlib import Path
 
 STACK = Path(__file__).parent
-LOCAL = "http://host.docker.internal:9091/academic-transcript-context.json"
-PUBLIC = "https://api.demo.example/academic-transcript-context.json"
+LOCAL = "http://host.docker.internal:9098/contexts/transcript/v1.json"
+PUBLIC = "https://api.demo.example/contexts/transcript/v1.json"
 W3C = "https://www.w3.org/ns/credentials/v2"
 
 

@@ -99,7 +99,7 @@ If a future need arises for real enforcement, the upgrade path is a small adapte
 
 **Hard requirement:** the claimed VC, once opened as a PDF/card from Inji Web, must look like the **official AIT Master Transcript** — not a generic wallet card. This is not a nice-to-have; it is the design the user already built and approved in Credential Lab (the `aittranscript` preset), and this repo vendors it **verbatim** rather than re-deriving a simplified version.
 
-Vendored source of truth (copied into [design/](./design/), not re-designed): `design/pdf-ait-transcript-template.html` (the Mimoto PDF template) and `design/ait_courses.py` (parses/validates semester-block `courses` JSON and renders `courseTableHtml`). Original design rationale: `inji/docs/superpowers/specs/2026-08-07-ait-transcript-preset-design.md`. Building `app/` and `vc-stack/` must wire claims into this template, not restyle it.
+Vendored source of truth (copied into [design/](./design/), not re-designed): `design/pdf-ait-transcript-template.html` (the Mimoto PDF template) and `design/ait_courses.py` (parses/validates semester-block `courses` JSON and renders the `courseList` text). Original design rationale: `inji/docs/superpowers/specs/2026-08-07-ait-transcript-preset-design.md`. Building `app/` and `vc-stack/` must wire claims into this template, not restyle it.
 
 ### Claims
 
@@ -113,13 +113,12 @@ Flat header/program/thesis fields (bordered grid, matches the physical transcrip
 | `faculty`, `academicProgram`, `areaOfSpecialization`, `notes` | string | program block |
 | `issueDate` | string | printed top-right of the transcript |
 | `courses` | JSON array (unquoted embed: `"courses": ${courses}`) | semester blocks: `{term, courses: [{no, title, lab, lec, credits, grade}], credits, gpa, cumGpa}` — machine-readable, canonicalized JSON |
-| `courseTableHtml` | string (quoted, JSON-escaped) | Python-rendered `<table>` built from `courses` by `design/ait_courses.py`; the PDF renders this and only this for the course body |
-| `courseList` | string (quoted) | newline `Course — Grade` summary, derived from `courses`, for wallet-card / non-PDF display |
+| `courseList` | string | newline `Course — Grade` text rendering derived from `courses`, for wallet-card / non-PDF display |
 | `thesisTitle`, `thesisGrade`, `programCommittee` | string | footer block |
-| `courseworkCredits`, `thesisCredits`, `totalCredits`, `thesisExamination` | string | credit summary, folded into `courseTableHtml` rendering |
+| `courseworkCredits`, `thesisCredits`, `totalCredits`, `thesisExamination` | string | credit summary, rendered from data alongside `courses` |
 
 Known gotchas to avoid re-discovering (see `inji/wiki/guides/credential-lab-pdf-csv-gotchas.md`):
-- `courses` embeds unquoted in the VC template; `courseTableHtml` and `courseList` are quoted, JSON-escaped strings.
+- All claims are untyped strings except `courses`, which is a JSON array; `courseList` is its text rendering.
 - Mimoto's Velocity template must use `#claimValue(...)` only — no `#while` / `#elseif` / string splitting on courses.
 - CSV `data-columns` width must match the CSV header exactly or values shift between claims.
 - A VC's claims are baked at issuance; changing the fixture after issuance requires re-issuing (delete + re-download in Inji Web), not just re-rendering the PDF.

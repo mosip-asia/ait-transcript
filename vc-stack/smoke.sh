@@ -10,7 +10,7 @@ source "$STACK_DIR/installation.sh"
 CLAIMS=(
   fullName dateOfBirth country registrationNo previousDegree yearAwarded
   dateAdmitted option degreeAwarded dateGraduation faculty academicProgram
-  areaOfSpecialization notes issueDate courses courseTableHtml courseList
+  areaOfSpecialization notes issueDate courses courseList
   thesisTitle thesisGrade programCommittee courseworkCredits thesisCredits
   totalCredits thesisExamination
 )
@@ -40,6 +40,18 @@ auth_srv=$(echo "$issuer_json" | jq -r '.authorization_servers[0] // empty')
 [[ "$auth_srv" == "http://keycloak:8080/realms/inji" ]] \
   || fail "Certify authorization_servers must be http://keycloak:8080/realms/inji (got: ${auth_srv:-<empty>})"
 ok "Certify OID4VCI authorization_servers use Docker Keycloak URL"
+
+# The Compose check of wiki/research/certify-json-literal.md section 4 runs below: step 2 here, steps 3 to 5
+# after issuance, step 1 (library versions) printed for the record.
+ctx_url=$(echo "$issuer_json" | jq -r \
+  '.credential_configurations_supported["ait-transcript"].credential_definition["@context"][0]')
+[[ "$ctx_url" == */contexts/transcript/v1.json ]] \
+  || fail "ait-transcript @context must name the VDR's /contexts/transcript/v1.json (got: ${ctx_url:-<empty>})"
+served_ctx=$(curl -sf http://localhost:9098/contexts/transcript/v1.json) \
+  || fail "public gateway does not serve /contexts/transcript/v1.json (vdr container)"
+[[ "$(jq -S . <<<"$served_ctx")" == "$(jq -S . "$REPO_ROOT/vc-lab/contexts/transcript/v1.json")" ]] \
+  || fail "served context differs from vc-lab/contexts/transcript/v1.json"
+ok "transcript context v1 served by the VDR through the public gateway"
 
 csv_file="$INSTALLATION_DIR/adapter/student_identity_data.csv"
 kc_users=$(jq -r '.users[].username' "$INSTALLATION_DIR/keycloak-realm.json" | sorted_lines)
@@ -102,7 +114,32 @@ issue_and_verify() {
 smoke_vc=.demo-state/smoke-credential.json
 issue_and_verify issue "$INSTALLATION" ait-2026-0001 ait_transcript_vc_ldp "$smoke_vc" \
   || fail "scripted issuance (vc-stack/issue_and_verify.py issue)"
+jq -e --arg u "$ctx_url" '."@context" | index($u)' "$REPO_ROOT/$smoke_vc" >/dev/null \
+  || fail "issued credential does not name $ctx_url in its @context"
 issue_and_verify verify "$smoke_vc" || fail "credential verification (vc-stack/issue_and_verify.py verify)"
+
+stack_logs=$(docker compose logs --no-color certify verify-service 2>&1) || fail "cannot read the certify and verify-service logs"
+context_warnings=$(grep -E 'Cannot load context|is not an absolute IRI nor @json' <<<"$stack_logs" | head -5 || true)
+[[ -z "$context_warnings" ]] || fail "JSON-LD context warnings in the certify or verify-service log: $context_warnings"
+ok "no context-loading or datatype warnings in the certify and verify-service logs"
+
+# Step 1, for the record (expected versions: the research note's section 1); never fails the smoke run.
+jsonld_libs() {
+  local jar tmp
+  jar=$(docker compose exec -T "$1" sh -c 'ls /home/mosip/*.jar' 2>/dev/null | head -1 | tr -d '\r')
+  [[ -n "$jar" ]] || { echo "no jar under /home/mosip"; return; }
+  tmp=$(mktemp)
+  docker compose cp "$1:$jar" "$tmp" >/dev/null 2>&1 && python3 - "$tmp" <<'EOF'
+import re, sys, zipfile
+names = zipfile.ZipFile(sys.argv[1]).namelist()
+print(" ".join(sorted(n.rsplit("/", 1)[-1] for n in names
+                      if re.search(r"(jsonld|titanium|rdf-urdna|ld-signatures)[^/]*\.jar$", n))))
+EOF
+  rm -f "$tmp"
+}
+for svc in certify verify-service; do
+  echo "INFO: $svc JSON-LD libraries: $(jsonld_libs "$svc" || echo unreadable)"
+done
 
 python3 "$STACK_DIR/test_inji_web_vc_readiness.py" --live
 

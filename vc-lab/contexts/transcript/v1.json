@@ -5,37 +5,24 @@
     "ait": "https://ait.example/transcript#",
     "AitTranscriptCredential": "ait:AitTranscriptCredential",
     "fullName": "ait:fullName",
-    "dateOfBirth": {
-      "@id": "ait:dateOfBirth",
-      "@type": "http://www.w3.org/2001/XMLSchema#date"
-    },
+    "dateOfBirth": "ait:dateOfBirth",
     "country": "ait:country",
     "registrationNo": "ait:registrationNo",
     "previousDegree": "ait:previousDegree",
     "yearAwarded": "ait:yearAwarded",
-    "dateAdmitted": {
-      "@id": "ait:dateAdmitted",
-      "@type": "http://www.w3.org/2001/XMLSchema#date"
-    },
+    "dateAdmitted": "ait:dateAdmitted",
     "option": "ait:option",
     "degreeAwarded": "ait:degreeAwarded",
-    "dateGraduation": {
-      "@id": "ait:dateGraduation",
-      "@type": "http://www.w3.org/2001/XMLSchema#date"
-    },
+    "dateGraduation": "ait:dateGraduation",
     "faculty": "ait:faculty",
     "academicProgram": "ait:academicProgram",
     "areaOfSpecialization": "ait:areaOfSpecialization",
     "notes": "ait:notes",
-    "issueDate": {
-      "@id": "ait:issueDate",
-      "@type": "http://www.w3.org/2001/XMLSchema#date"
-    },
+    "issueDate": "ait:issueDate",
     "courses": {
       "@id": "ait:courses",
       "@type": "@json"
     },
-    "courseTableHtml": "ait:courseTableHtml",
     "courseList": "ait:courseList",
     "thesisTitle": "ait:thesisTitle",
     "thesisGrade": "ait:thesisGrade",

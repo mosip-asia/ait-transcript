@@ -7,13 +7,13 @@
 -- works in both directions. Prints "1" when a row changed, nothing otherwise.
 -- Credentials already issued keep the URL they were signed with.
 UPDATE certify.credential_config
-SET context = regexp_replace(context, '[^,]*academic-transcript-context\.json', :'new_url'),
+SET context = regexp_replace(context, '[^,]*/contexts/transcript/v[0-9]+\.json', :'new_url'),
     vc_template = translate(encode(convert_to(
         regexp_replace(convert_from(decode(vc_template, 'base64'), 'UTF8'),
-                       '"[^"]*academic-transcript-context\.json"', '"' || :'new_url' || '"'),
+                       '"[^"]*/contexts/transcript/v[0-9]+\.json"', '"' || :'new_url' || '"'),
         'UTF8'), 'base64'), E'\n', ''),  -- encode() wraps at 76 chars; Certify's decoder rejects newlines
     upd_dtimes = NOW()
 WHERE credential_config_key_id = 'ait-transcript'
-  AND (context IS DISTINCT FROM regexp_replace(context, '[^,]*academic-transcript-context\.json', :'new_url')
+  AND (context IS DISTINCT FROM regexp_replace(context, '[^,]*/contexts/transcript/v[0-9]+\.json', :'new_url')
        OR convert_from(decode(vc_template, 'base64'), 'UTF8') NOT LIKE '%"' || :'new_url' || '"%')
 RETURNING 1;

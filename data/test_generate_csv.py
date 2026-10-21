@@ -5,7 +5,10 @@ Run: python3 data/test_generate_csv.py
 
 from __future__ import annotations
 
+import base64
 import csv
+import json
+import re
 import sys
 import tempfile
 from pathlib import Path
@@ -54,9 +57,56 @@ def test_generated_csv_roundtrip() -> None:
             assert reader.fieldnames == gc.CSV_COLUMNS
             read_rows = list(reader)
     assert len(read_rows) == len(rows)
-    assert any("CS601" in (r["courseTableHtml"] or "") for r in read_rows)
-    assert all("${" not in (r["courseTableHtml"] or "") for r in read_rows)
+    assert any("CS601" in (r["courses"] or "") for r in read_rows)
     assert all("${" not in (r["courses"] or "") for r in read_rows)
+
+
+def test_columns_carry_no_course_table_html() -> None:
+    # Every claim is signed now; the course record travels once, as courses (spec: Context fix).
+    assert "courseTableHtml" not in gc.CSV_COLUMNS
+
+
+AIT = gc.REPO_ROOT / "installations" / "ait"
+
+
+def seed_value(pattern: str) -> str:
+    """One SQL string literal of the ait-transcript credential_config row, found by its shape."""
+    return re.search(pattern, (AIT / "certify_seed.sql").read_text(encoding="utf-8"))[1]
+
+
+def seed_template() -> dict:
+    template = base64.b64decode(seed_value(r"'(ewo[A-Za-z0-9+/=]+)'")).decode()
+    return json.loads(template.replace("${courses}", "[]"))  # the one unquoted placeholder
+
+
+def test_certify_configuration_names_the_generated_columns() -> None:
+    # Certify maps CSV cells to claims by position and fills the template from them.
+    props = (AIT / "certify-csvdp-student.properties").read_text(encoding="utf-8")
+    columns = ",".join(gc.CSV_COLUMNS)
+    assert re.search(r"^mosip\.certify\.mock\.data-provider\.csv\.data-columns=(.*)$", props, re.M)[1].strip() == columns
+    (plugin_config,) = json.loads(seed_value(r"'(\[\{\"mosip\.certify\.mock[^']*)'::JSONB"))
+    assert plugin_config["mosip.certify.mock.data-provider.csv.data-columns"] == columns
+    assert list(json.loads(seed_value(r"'(\{\"fullName\": \{\"display\"[^']*)'::JSONB"))) == gc.CLAIM_COLUMNS
+    assert list(seed_template()["credentialSubject"]) == ["id", *gc.CLAIM_COLUMNS]
+
+
+def test_template_and_context_column_name_the_same_vdr_url() -> None:
+    url = seed_value(r"'([^']*/contexts/transcript/v1\.json[^']*)'").split(",")[0]
+    assert url == "http://host.docker.internal:9098/contexts/transcript/v1.json", url
+    assert seed_template()["@context"] == ["https://www.w3.org/ns/credentials/v2", url,
+                                           "https://w3id.org/security/suites/ed25519-2020/v1"]
+
+
+def test_context_v1_signs_every_generated_claim() -> None:
+    # Claim terms at the top level, untyped strings except courses as a JSON literal (spec: Context fix).
+    context = gc.REPO_ROOT / "vc-lab" / "contexts" / "transcript" / "v1.json"
+    terms = json.loads(context.read_text(encoding="utf-8"))["@context"]
+    assert terms["ait"] == "https://ait.example/transcript#"
+    assert terms["AitTranscriptCredential"] == "ait:AitTranscriptCredential"
+    for claim in gc.CLAIM_COLUMNS:
+        want = {"@id": "ait:courses", "@type": "@json"} if claim == "courses" else f"ait:{claim}"
+        assert terms.get(claim) == want, (claim, terms.get(claim))
+    assert set(terms) == {"@version", "@protected", "ait", "AitTranscriptCredential", *gc.CLAIM_COLUMNS}
 
 
 def test_csv_goes_to_the_ait_installation_adapter() -> None:

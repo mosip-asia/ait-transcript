@@ -8,6 +8,7 @@ Run: python3 vc-stack/test_issue_and_verify.py
 from __future__ import annotations
 
 import base64
+import copy
 import json
 import re
 import sys
@@ -87,7 +88,13 @@ def test_proof_jwt_is_es256_signed_by_the_did_jwk_in_its_kid() -> None:
 
 CREDENTIAL = {
     "type": ["VerifiableCredential", "AitTranscriptCredential"],
-    "credentialSubject": {"id": "did:jwk:abc", "fullName": "Nara Wattanakul", "courses": [{"grade": "A"}]},
+    "credentialSubject": {
+        "id": "did:jwk:abc",
+        "fullName": "Nara Wattanakul",
+        "courses": [{"term": "August Semester 2024", "credits": "3", "gpa": "4.00", "cumGpa": "4.00",
+                     "courses": [{"no": "CS601", "title": "Advanced Algorithms", "lec": "45", "lab": "0",
+                                  "credits": "3", "grade": "A"}]}],
+    },
     "proof": {"type": "Ed25519Signature2020", "proofValue": "z..."},
 }
 SUCCESS = {"allChecksSuccessful": True, "schemaAndSignatureCheck": {"valid": True, "error": None},
@@ -122,25 +129,58 @@ def signature_checking_verifier(request: httpx.Request) -> httpx.Response:
     return httpx.Response(200, json=SUCCESS if sent == CREDENTIAL else SIGNATURE_FAILED)
 
 
-def test_verify_step_passes_when_the_credential_verifies_and_its_tampered_copy_does_not() -> None:
+def changed_subject_claims(tampered: dict) -> set[str]:
+    assert {k: v for k, v in tampered.items() if k != "credentialSubject"} == \
+        {k: v for k, v in CREDENTIAL.items() if k != "credentialSubject"}, "only credentialSubject may change"
+    subject = CREDENTIAL["credentialSubject"]
+    return {k for k in subject if tampered["credentialSubject"].get(k) != subject[k]}
+
+
+def test_verify_step_passes_when_the_credential_verifies_and_every_tampered_copy_does_not() -> None:
+    pristine = json.dumps(CREDENTIAL)
     client, seen = mock_client(signature_checking_verifier)
     assert iv.verify_step(client, CREDENTIAL) == []
-    original, tampered = (json.loads(json.loads(r.content)["verifiableCredential"]) for r in seen)
+    assert json.dumps(CREDENTIAL) == pristine, "verify_step must not modify the credential it was given"
+    original, holder, name, grade = (json.loads(json.loads(r.content)["verifiableCredential"]) for r in seen)
     assert original == CREDENTIAL
-    changed = {k for k in CREDENTIAL["credentialSubject"]
-               if tampered["credentialSubject"].get(k) != CREDENTIAL["credentialSubject"][k]}
-    assert changed == {"id"}, f"expected credentialSubject.id changed, got {changed}"
-    original_id, tampered_id = CREDENTIAL["credentialSubject"]["id"], tampered["credentialSubject"]["id"]
+
+    # The holder binding: the last character swapped, so the value stays a valid did:jwk and reaches the signature check.
+    assert changed_subject_claims(holder) == {"id"}
+    original_id, tampered_id = CREDENTIAL["credentialSubject"]["id"], holder["credentialSubject"]["id"]
     assert re.fullmatch(r"did:jwk:[A-Za-z0-9_-]+", tampered_id), f"tampered id must stay a valid did:jwk, got {tampered_id!r}"
     assert tampered_id != original_id and len(tampered_id) == len(original_id) and tampered_id[:-1] == original_id[:-1]
-    assert {k: v for k, v in tampered.items() if k != "credentialSubject"} == \
-        {k: v for k, v in CREDENTIAL.items() if k != "credentialSubject"}
+
+    # A top-level claim (spec: user story 15).
+    assert changed_subject_claims(name) == {"fullName"}
+    assert name["credentialSubject"]["fullName"] != "Nara Wattanakul"
+
+    # One grade inside courses and nothing else in the course record (spec: user story 14).
+    assert changed_subject_claims(grade) == {"courses"}
+    new_grade = grade["credentialSubject"]["courses"][0]["courses"][0]["grade"]
+    assert new_grade != "A"
+    expected = copy.deepcopy(CREDENTIAL["credentialSubject"]["courses"])
+    expected[0]["courses"][0]["grade"] = new_grade
+    assert grade["credentialSubject"]["courses"] == expected
 
 
-def test_verify_step_fails_when_the_tampered_copy_still_verifies() -> None:
+def test_verify_step_names_every_tampered_claim_that_still_verifies() -> None:
     client, _ = mock_client(lambda r: httpx.Response(200, json=SUCCESS))
     problems = iv.verify_step(client, CREDENTIAL)
-    assert len(problems) == 1 and "credentialSubject.id" in problems[0] and "ERR_SIGNATURE_VERIFICATION_FAILED" in problems[0], problems
+    assert len(problems) == 3, problems
+    for claim, problem in zip(("id", "fullName", "courses[0].courses[0].grade"), problems):
+        assert f"tampered credentialSubject.{claim}:" in problem and "ERR_SIGNATURE_VERIFICATION_FAILED" in problem, problem
+
+
+def test_verify_step_fails_when_only_the_grade_inside_courses_is_unsigned() -> None:
+    # What the old type-scoped context did, and what option 1a must rule out: courses dropped from the signed data.
+    def courses_unsigned(request: httpx.Request) -> httpx.Response:
+        sent = json.loads(json.loads(request.content)["verifiableCredential"])
+        unsigned = {**sent["credentialSubject"], "courses": None} == {**CREDENTIAL["credentialSubject"], "courses": None}
+        return httpx.Response(200, json=SUCCESS if unsigned else SIGNATURE_FAILED)
+
+    client, _ = mock_client(courses_unsigned)
+    problems = iv.verify_step(client, CREDENTIAL)
+    assert len(problems) == 1 and "credentialSubject.courses[0].courses[0].grade" in problems[0], problems
 
 
 def test_verify_step_fails_when_the_credential_itself_does_not_verify() -> None:

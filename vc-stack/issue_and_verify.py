@@ -4,8 +4,8 @@ issue:  a token from the installation's realm (direct-access grant on the test-o
         persona and the credential scope), a proof JWT signed with a fresh key as did:jwk, Certify's
         /issuance/credential; the credential is written to a file.
 verify: verify-service's v2 vc-verification must answer SUCCESS for that file, and
-        ERR_SIGNATURE_VERIFICATION_FAILED once the holder DID (credentialSubject.id) is changed, until ticket 06
-        widens the change to fullName and a value inside courses.
+        ERR_SIGNATURE_VERIFICATION_FAILED for each copy with one claim changed: the holder DID
+        (credentialSubject.id), fullName, and one grade inside courses.
 
 Deviation from the ticket's "Ed25519": the proof key is ES256 (P-256), because the seed's proof_types_supported
 allows RS256/ES256 only, and Inji Web uses ES256.
@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import argparse
 import base64
+import copy
 import json
 import os
 import sys
@@ -113,24 +114,36 @@ def verify(client: httpx.Client, credential: dict) -> str:
     return error.get("errorCode") or f"FAILED {json.dumps(result)}"
 
 
-def verify_step(client: httpx.Client, credential: dict) -> list[str]:
-    """The credential must verify; a copy with credentialSubject.id changed must fail its signature.
+def tampered_copies(credential: dict) -> dict[str, dict]:
+    """Copies of a transcript credential, each with one signed claim changed, keyed by the claim's path."""
+    subject = credential["credentialSubject"]
+    holder = subject["id"]
+    courses = copy.deepcopy(subject["courses"])
+    course = courses[0]["courses"][0]
+    course["grade"] = "F" if course["grade"] != "F" else "A"
+    changes = {
+        # Swap the last character for another base64url one: the value stays syntactically a valid did:jwk IRI
+        # (the decoded JWK need not be valid), so verify-service reaches the signature check.
+        "id": {"id": holder[:-1] + ("A" if holder[-1] != "A" else "B")},
+        "fullName": {"fullName": subject["fullName"] + " Jr"},
+        "courses[0].courses[0].grade": {"courses": courses},
+    }
+    return {path: {**credential, "credentialSubject": {**subject, **change}} for path, change in changes.items()}
 
-    Returns what went wrong, empty when both outcomes are as expected.
+
+def verify_step(client: httpx.Client, credential: dict) -> list[str]:
+    """The credential must verify; each tampered copy (the holder, fullName, a grade inside courses) must fail its signature.
+
+    Returns what went wrong, empty when every outcome is as expected.
     """
     problems = []
     outcome = verify(client, credential)
     if outcome != "SUCCESS":
         problems.append(f"credential: expected SUCCESS, got {outcome}")
-    subject = credential["credentialSubject"]
-    # Today's context signs only credentialSubject.id; ticket 06 widens this to fullName and a value inside courses.
-    claim = "id"
-    # Swap the last character for another base64url one: the value stays syntactically a valid did:jwk IRI (the decoded JWK need not be valid), so verify-service reaches the signature check.
-    value = subject[claim]
-    tampered = {**credential, "credentialSubject": {**subject, claim: value[:-1] + ("A" if value[-1] != "A" else "B")}}
-    outcome = verify(client, tampered)
-    if outcome != "ERR_SIGNATURE_VERIFICATION_FAILED":
-        problems.append(f"tampered credentialSubject.{claim}: expected ERR_SIGNATURE_VERIFICATION_FAILED, got {outcome}")
+    for path, tampered in tampered_copies(credential).items():
+        outcome = verify(client, tampered)
+        if outcome != "ERR_SIGNATURE_VERIFICATION_FAILED":
+            problems.append(f"tampered credentialSubject.{path}: expected ERR_SIGNATURE_VERIFICATION_FAILED, got {outcome}")
     return problems
 
 
@@ -153,12 +166,14 @@ def main() -> int:
             args.out.write_text(json.dumps(credential, indent=2), encoding="utf-8")
             print(f"OK: issued {args.scope} for {args.persona} -> {args.out}")
             return 0
-        problems = verify_step(client, json.loads(args.credential.read_text(encoding="utf-8")))
+        credential = json.loads(args.credential.read_text(encoding="utf-8"))
+        problems = verify_step(client, credential)
         if problems:
             for problem in problems:
                 print(f"FAIL: {problem}", file=sys.stderr)
             return 1
-        print("OK: credential verifies (SUCCESS); tampered claim fails (ERR_SIGNATURE_VERIFICATION_FAILED)")
+        print(f"OK: credential verifies (SUCCESS); tampered {', '.join(tampered_copies(credential))} each fail"
+              " (ERR_SIGNATURE_VERIFICATION_FAILED)")
         return 0
 
 

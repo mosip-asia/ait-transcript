@@ -175,7 +175,7 @@ services:
     container_name: verify-service
     image: injistack/inji-verify-service:0.17.0
     user: root
-    # The issued VC's JSON-LD context is http://host.docker.internal:9091/... (see
+    # The issued VC's JSON-LD context is http://host.docker.internal:9098/contexts/... (see
     # bootstrap.sh LOCAL_STUDENT_CONTEXT_URL). Docker Desktop resolves that name by
     # itself; on Linux (the GCP VM) it needs this mapping or verification fails.
     extra_hosts:
@@ -240,6 +240,18 @@ services:
       - certify-nginx
       - keycloak
       - verify-service
+      - vdr
+    restart: unless-stopped
+    networks:
+      - network
+
+  # Static mock VDR: the authored JSON-LD contexts under /contexts/, reached through public-gateway.
+  # nginx reads the files per request, so an edited context is served without a restart.
+  vdr:
+    container_name: vdr
+    image: nginx:stable
+    volumes:
+      - ../vc-lab/contexts:/usr/share/nginx/html/contexts:ro
     restart: unless-stopped
     networks:
       - network

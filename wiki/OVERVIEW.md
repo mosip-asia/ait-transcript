@@ -22,6 +22,7 @@ This repo is standalone — it does not run against or modify the upstream `inji
 
 - [Approval gate](./concepts/approval-gate.md) — why the registrar approval step is enforced in the demo app UI only, not at Certify/Keycloak, and the upgrade path if that ever needs to change.
 - [Transcript credential design](./concepts/transcript-credential.md) — the AIT Transcript VC claim shape, where it was borrowed from, and the PDF-rendering gotchas to avoid re-discovering.
+- [Transcript JSON-LD context](./concepts/transcript-context.md) — context v1 on the static mock VDR (`vc-lab/contexts/transcript/v1.json`), its URL, the rules that get every claim signed (top-level terms, no datatypes, `courses` as `@json`), the jsonld-java caveat and the versioning promise.
 - [VC revocation](./concepts/vc-revocation.md) — registrar revoke/reissue/history, the VCDM 1.1 → 2.0 migration it required, and the schema/networking/caching gotchas hit building it.
 
 ### Guides
@@ -44,4 +45,4 @@ Vocabulary for the Issuer product is in [CONTEXT.md](../CONTEXT.md).
 - [Pre-authorized flow and the data-provider plugin](./research/certify-preauth-flow.md) — why one Certify 0.14 cannot serve pre-authorized offers and wallet-initiated issuance together, the flow traced, and the costed alternatives for the hard copy.
 - [Hackathon credential configurations](./research/hackathon-configurations.md) — what VPID, Developer Passport and Achievement consist of in `ait-vc` today, and what a VCDM 2.0 migration into the Issuer changes.
 - [Diagrams](./diagrams/) — the issuer proposal overview and its ITserv view, in draw.io format.
-- [Schemas](./schemas/) — the transcript credential JSON Schema and examples (VCDM 1.1 variant), and the proposed corrected JSON-LD context.
+- [Schemas](./schemas/) — the transcript credential JSON Schema and example v2 (VCDM 2.0, for transcript context v1); the VCDM 1.1 variant was removed with the context fix.

@@ -25,7 +25,7 @@ All values below are from the live deployment.
 | Grant | authorization code with PKCE `S256`; no pre-authorized code, **no credential offer** |
 | Format | `ldp_vc`, signed `Ed25519Signature2020` (algorithm `EdDSA`), VCDM 2.0 |
 | Key binding | `did:jwk`; proof type `jwt`, signing algorithms `RS256` or `ES256` |
-| Credential `@context` | `["https://api.transcript-demo.ait-vc.dpi.ait.ac.th/academic-transcript-context.json", "https://www.w3.org/ns/credentials/v2"]`; the request's `@context` must match this list |
+| Credential `@context` | `["https://api.transcript-demo.ait-vc.dpi.ait.ac.th/contexts/transcript/v1.json", "https://www.w3.org/ns/credentials/v2"]`; the request's `@context` must match this list |
 | Not in the issuer metadata | `nonce_endpoint`, credential offer, batch or deferred endpoints, SD-JWT VC or mdoc configurations |
 
 ## What the wallet itself must support

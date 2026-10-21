@@ -38,7 +38,6 @@ CLAIM_COLUMNS = [
     "notes",
     "issueDate",
     "courses",
-    "courseTableHtml",
     "courseList",
     "thesisTitle",
     "thesisGrade",
@@ -60,8 +59,8 @@ def escape_vc_quoted_claim(value: str) -> str:
     """Escape a claim value for Certify's `"claim": "${claim}"` Velocity substitution.
 
     Certify's vc_template does naive string substitution, not JSON-aware
-    templating — an unescaped `"` (e.g. in courseTableHtml's `style="..."`
-    attributes) or newline breaks the surrounding JSON string and issuance
+    templating — an unescaped `"` or newline (e.g. in courseList or
+    programCommittee) breaks the surrounding JSON string and issuance
     fails with `json_processing_error`. `courses` is the one claim embedded
     unquoted (raw JSON array) and must stay untouched by this.
     """
