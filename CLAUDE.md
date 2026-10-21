@@ -42,6 +42,7 @@ python3 vc-stack/test_inji_web_vc_readiness.py        # config checks for the In
 python3 vc-stack/test_inji_web_vc_readiness.py --live # same plus live Mimoto/Inji Web checks
 python3 vc-stack/test_installation_guard.py           # the scripts refuse a missing INSTALLATION; bash only, no Docker
 python3 vc-stack/test_installations.py                # every installation's realm users match its adapter CSV, and its smoke personas are among them; no Docker
+python3 vc-stack/test_configuration_contract.py       # wiki/project/issuer-v0.1/configuration-contract.md's tables match docker-compose.yaml (services, images, env, env files, mounts, ports, allowlist) both ways; needs PyYAML (uvicorn[standard]), no Docker
 python3 portal/test_auth.py                           # demo app logic; host Python or inside the image, see below
 python3 portal/test_requests.py
 python3 data/test_ait_courses.py                      # data fixture tests

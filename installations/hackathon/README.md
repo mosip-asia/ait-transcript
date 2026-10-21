@@ -2,6 +2,8 @@
 
 The files the stack mounts when `INSTALLATION=hackathon` (in `vc-stack/.env` or the environment): `INSTALLATION=hackathon ./run-demo.sh`. Everything else in `vc-stack/` is the same for every installation. Certify's seed runs only on a fresh database, so switching a local stack from another installation needs `--wipe` (`INSTALLATION=hackathon ./run-demo.sh --wipe`), which also renews the signing key and `did:key`.
 
+How the infra team deploys this directory (the service set, every variable and mounted file, the secrets a deployment replaces, and the ingress allowlist, which is the same for both installations) is the configuration contract, [`wiki/project/issuer-v0.1/configuration-contract.md`](../../wiki/project/issuer-v0.1/configuration-contract.md); this file lists the values. The committed Gateway token, the realm's users and their passwords, and the `smoke` client are test-only fixtures that a deployment replaces.
+
 | File | Read by | Notes |
 |---|---|---|
 | `certify-csvdp-student.properties` | Certify (`csvdp-student` profile) | Certify's settings: the authorization server (realm `hackathon`), the Gateway data-provider plugin's six keys (below), the issuer display; `bootstrap.sh` rewrites `did-url` after a wipe |

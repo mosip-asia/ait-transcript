@@ -2,6 +2,8 @@
 
 The files the stack mounts when `INSTALLATION=ait` (in `vc-stack/.env` or the environment): `INSTALLATION=ait ./run-demo.sh`. Everything else in `vc-stack/` is the same for every installation. Certify's seed runs only on a fresh database, so switching a local stack from another installation needs `--wipe` (`INSTALLATION=ait ./run-demo.sh --wipe`), which also renews the signing key and `did:key`.
 
+How the infra team deploys this directory (the service set, every variable and mounted file, the secrets a deployment replaces, and the ingress allowlist, which is the same for both installations) is the configuration contract, [`wiki/project/issuer-v0.1/configuration-contract.md`](../../wiki/project/issuer-v0.1/configuration-contract.md); this file lists the values. The committed Gateway token, the realm's users and their passwords, and the `smoke` client are test-only fixtures that a deployment replaces.
+
 | File | Read by | Notes |
 |---|---|---|
 | `certify-csvdp-student.properties` | Certify (`csvdp-student` profile) | Certify's settings, including the authorization server (realm `inji`) and the Gateway data-provider plugin's six keys (below); `bootstrap.sh` rewrites `did-url` after a wipe |
@@ -16,7 +18,7 @@ The files the stack mounts when `INSTALLATION=ait` (in `vc-stack/.env` or the en
 
 The installation's own values:
 
-- Keycloak realm: `inji`, with wallet client `wallet-demo`
+- Keycloak realm: `inji`, with wallet client `wallet-demo`; every user's password is `inji` (test-only)
 - Test-only client `smoke`: public, direct-access grant, the `ait_transcript_vc_ldp` scope and a hardcoded `client_id` claim; only `vc-stack/issue_and_verify.py` (run by `smoke.sh`) uses it
 - Scope: `ait_transcript_vc_ldp`
 - Credential configuration: `ait-transcript`, type `AitTranscriptCredential`
@@ -26,7 +28,7 @@ The installation's own values:
   - `mosip.certify.integration.data-provider-plugin`: `GatewayDataProviderPlugin`
   - `mosip.certify.integration.scan-base-package`: `asia.mosip.issuer.gateway.plugin`
   - `mosip.certify.gateway.url`: the Gateway's base URL, `http://gateway:8000`
-  - `mosip.certify.gateway.auth-token`: the shared bearer token; must equal `GATEWAY_AUTH_TOKEN` below (the committed value is test-only)
+  - `mosip.certify.gateway.auth-token`: the shared bearer token; must equal `GATEWAY_AUTH_TOKEN` below (the committed value, `dev-only-ait-gateway-token`, is test-only)
   - `mosip.certify.gateway.connect-timeout-ms`: `2000`
   - `mosip.certify.gateway.read-timeout-ms`: `15000` (the Gateway makes three adapter calls of at most 3 s each and a database write with a 3 s connect timeout, 12 s in the worst case)
 - Gateway settings, in `gateway.env` (the `gateway` service's `env_file`; edit the file and recreate the container, `docker compose up -d gateway`):

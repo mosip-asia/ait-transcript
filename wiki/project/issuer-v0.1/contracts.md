@@ -136,11 +136,11 @@ The Issuer promises a valid OpenID4VCI credential offer and nothing more about t
 
 ## 6. Deployment configuration (infra team)
 
-The handover: two images (Gateway, Portal), the plugin jar, the configuration of every stock image (environment variables, mounted files, per-installation settings), and the ingress allowlist. An installation is a self-contained stack described by one directory, `installations/<name>/`; Certify is listed once per instance, since a 0.14 instance serves one token issuer and one data-provider plugin and an installation may need more than one (2026-10-20). Any change goes to the infra team before it is applied.
+The handover: the images we build (Gateway, mock adapter, Portal), the plugin jar, the configuration of every stock image (environment variables, mounted files, per-installation settings), and the ingress allowlist. The full contract, with both installations' values, is [`configuration-contract.md`](configuration-contract.md). An installation is a self-contained stack described by one directory, `installations/<name>/`; Certify is listed once per instance, since a 0.14 instance serves one token issuer and one data-provider plugin and an installation may need more than one (2026-10-20). Any change goes to the infra team before it is applied.
 
 | Exposure | Endpoints |
 |---|---|
-| Public | Certify's OpenID4VCI endpoints, the Authorization Server, the Portal, the Verify UI |
-| Internal only | Certify's management, ledger-search, status and credential-configuration APIs (unauthenticated in stock Certify), called by the Gateway and Portal |
+| Public | Certify's OpenID4VCI endpoints, the Authorization Server, the Portal, the Verify UI, the `vdr` container's `/contexts/` path |
+| Internal only | Certify's management, ledger-search, status and credential-configuration APIs (unauthenticated in stock Certify), called by the Gateway and Portal; the Gateway, the adapter, Postgres |
 
 Signing-key custody is the infra team's; Certify supports PKCS12 or PKCS#11. One pod per Certify instance with `spring.cache.type=simple`, or Redis if infra scales it (2026-10-20).
