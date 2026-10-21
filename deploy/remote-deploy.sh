@@ -86,7 +86,9 @@ docker network inspect "$NETWORK" >/dev/null 2>&1 || docker network create "$NET
 
 # Reboots regenerate app.env and run run-demo.sh with no variable, so keep the value in a marker file the checkout owns.
 INSTALLATION_NAME="$(awk -F= '$1 == "INSTALLATION" { value=$2 } END { print value }' "$APP_ENV" | tr -d '\r' | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"
+# The wipe deletes vc-stack/.env, so run it before copying app.env in (--prepare stops after the wipe and .env).
+if [ "$WIPE" = "wipe" ]; then vc-stack/bootstrap.sh --wipe --prepare; fi
 printf '%s\n' "${INSTALLATION_NAME:-ait}" > vc-stack/.installation
 cp "$APP_ENV" vc-stack/.env
-if [ "$WIPE" = "wipe" ]; then ./run-demo.sh --wipe; else ./run-demo.sh; fi
+./run-demo.sh
 echo "deployed $SHA"

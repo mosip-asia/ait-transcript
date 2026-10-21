@@ -136,17 +136,9 @@ ok "no context-loading or datatype warnings in the certify and verify-service lo
 
 # Step 1: the JSON-LD libraries each image carries must be the ones the research note's section 4 expects.
 jsonld_libs() {
-  local jar tmp
-  jar=$(docker compose exec -T "$1" sh -c 'ls /home/mosip/*.jar' 2>/dev/null | head -1 | tr -d '\r')
-  [[ -n "$jar" ]] || { echo "no jar under /home/mosip"; return; }
-  tmp=$(mktemp)
-  docker compose cp "$1:$jar" "$tmp" >/dev/null 2>&1 && python3 - "$tmp" <<'PYEOF'
-import re, sys, zipfile
-names = zipfile.ZipFile(sys.argv[1]).namelist()
-print(" ".join(sorted(n.rsplit("/", 1)[-1] for n in names
-                      if re.search(r"(jsonld|titanium|rdf-urdna|ld-signatures)[^/]*\.jar$", n))))
-PYEOF
-  rm -f "$tmp"
+  docker compose exec -T "$1" unzip -l "/home/inji/$2.jar" 2>/dev/null | tr -d '\r' \
+    | grep -oE 'BOOT-INF/lib/(jsonld|titanium|rdf-urdna|ld-signatures)[^/]*\.jar$' \
+    | sed 's|.*/||' | sort | tr '\n' ' ' | sed 's/ $//'
 }
 assert_jsonld_libs() {
   local svc="$1" found="$2" jar missing=""
@@ -160,10 +152,10 @@ assert_jsonld_libs() {
   fi
   ok "$svc JSON-LD libraries as expected: $found"
 }
-certify_libs=$(jsonld_libs certify || echo unreadable)
+certify_libs=$(jsonld_libs certify certify-service || echo unreadable)
 assert_jsonld_libs certify "$certify_libs" titanium-json-ld-1.6.0.jar titanium-jcs-1.0.0.jar titanium-rdfc-2.0.0.jar \
   jsonld-common-java-1.14.0.jar rdf-urdna-1.4.jar
-verify_libs=$(jsonld_libs verify-service || echo unreadable)
+verify_libs=$(jsonld_libs verify-service verify-service || echo unreadable)
 assert_jsonld_libs verify-service "$verify_libs" titanium-json-ld-1.3.2.jar titanium-json-ld-jre8-1.3.1.jar \
   jsonld-common-java-1.8.0.jar rdf-urdna-1.2.jar ld-signatures-java-1.11.0.jar
 
