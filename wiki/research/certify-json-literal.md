@@ -1,6 +1,6 @@
 # Does Certify 0.14 and Verify 0.17 JSON-LD processing accept `@json`?
 
-Research note, written 2026-10-20 against upstream source. **Answer from source: yes on both ends, not yet observed on the running stack.** It settles the open point in [`signing-coverage.md`](signing-coverage.md) ("Whether Titanium in the Certify 0.14 image accepts `@json` is unchecked") for option 1a (claim terms at the top level of the context, `courses` typed `"@type": "@json"`).
+Research note, written 2026-10-20 against upstream source. **Answer from source: yes on both ends; observed on the running stack on 2026-10-21 (section 4).** It settles the open point in [`signing-coverage.md`](signing-coverage.md) ("Whether Titanium in the Certify 0.14 image accepts `@json` is unchecked") for option 1a (claim terms at the top level of the context, `courses` typed `"@type": "@json"`).
 
 ## Short answer
 
@@ -105,7 +105,7 @@ Not on either path, confirmed from every POM and Gradle file above. For the reco
 
 ## 4. The check that would make this observed
 
-Not run. Smallest version, all inside `vc-stack/` with the stack up:
+**Observed 2026-10-21**, steps 2 to 5, by `vc-stack/smoke.sh` on the CI stack (GitHub Actions run 39539975939 at commit `506969a`, the context-fix commit): the v1 context served by the `vdr` container through the public gateway, one transcript issued and verified (`SUCCESS`), the copies with a tampered holder id, a tampered `fullName` and a tampered grade inside `courses` each rejected with `ERR_SIGNATURE_VERIFICATION_FAILED`, and no `Cannot load context` or `Datatype […] is not an absolute IRI nor @json` line in the Certify or Verify logs. Step 1 (jar versions inside the images) and step 6 (the N-Quads literal) were not run. Smallest version, all inside `vc-stack/` with the stack up:
 
 1. Confirm the resolution in section 1 inside the running images: `docker exec` into the Certify container and `unzip -l` the Spring Boot jar, grepping `BOOT-INF/lib` for `jsonld-common-java`, `titanium-json-ld`, `titanium-jcs`, `titanium-rdfc`, `rdf-urdna`; the same in the Verify container for `jsonld-common-java`, `titanium-json-ld`, `titanium-json-ld-jre8`, `rdf-urdna`, `ld-signatures-java`. Expected: 1.14.0 / 1.6.0 / 1.0.0 / 2.0.0 / 1.4 and 1.8.0 / 1.3.2 / 1.3.1 / 1.2 / 1.11.0.
 2. Replace `config/academic-transcript-context.json` with the proposed context (top-level terms, `courses` as `{"@id": "ait:courses", "@type": "@json"}`), served at the same URL. No Certify restart is needed for the signing side (no document cache); follow the repository's existing context-refresh procedure (`context_refresh.sql`, `test_context_refresh.py`) for anything that caches the context elsewhere.
@@ -122,7 +122,7 @@ If step 1 shows different versions from the table, re-read the relevant parts of
 - It depends on option 1 being applied at the same time: the `courses` term must be at the top level of the context so it is still in scope at `credentialSubject`.
 - Keep `courses` values conservative: ASCII keys, numbers with at most seven fraction digits (grades and credits are fine), and no control characters in strings. All of these are symmetric between the two ends today, but the JCS code is not fully RFC 8785 and a future Titanium upgrade on one side only could change the number formatting for exotic values.
 - An outside verifier on jsonld.js or any other JSON-LD 1.1 processor handles the literal the same way; a verifier built on jsonld-java rejects the context with `invalid type mapping`. This is a stronger failure than the silent-drop case in signing-coverage.md, and it is the trade-off against the fallback of defining the inner terms individually, which every processor accepts.
-- The verdict above is from source. Until section 4 has been run once, record it as expected, not observed, the same way signing-coverage.md records its own untested points.
+- The verdict above is from source and, since 2026-10-21, observed: section 4's steps 2 to 5 ran green on the CI stack, so option 1a is the context in use (`vc-lab/contexts/transcript/v1.json`).
 
 ## Sources
 
