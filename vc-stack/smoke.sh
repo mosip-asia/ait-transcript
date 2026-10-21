@@ -164,7 +164,7 @@ issue_and_verify() {
     demo-app python vc-stack/issue_and_verify.py "$@"
 }
 issuance_rows() {
-  docker compose exec -T database psql -U postgres -d inji_certify -tAc "select count(*) from gateway.issuances"     | tr -d '[:space:]'
+  docker compose exec -T database psql -U postgres -d inji_certify -tAc "select count(*) from gateway.issuances"     | tr -d '[:space:]'
 }
 rows_before=$(issuance_rows) || fail "cannot count gateway.issuances"
 smoke_vc=.demo-state/smoke-credential.json
