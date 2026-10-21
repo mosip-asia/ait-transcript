@@ -116,6 +116,32 @@ docker compose run --rm --no-deps -T \
   || fail "mock adapter (adapter/test_adapter.py)"
 ok "mock adapter serves the degree list, the record and the eligibility attributes"
 
+# The Gateway answers contract 2a's cases with the mock adapter beside it and writes one issuance row per 200.
+# Run from the gateway image (httpx, psycopg), whose environment carries the token and the database URL.
+docker compose run --rm --no-deps -T \
+  -v "$REPO_ROOT/gateway/tests:/gateway/tests:ro" \
+  -v "$INSTALLATION_DIR/adapter:/data:ro" \
+  gateway python tests/test_issuances.py http://gateway:8000 /data/student_identity_data.csv \
+  || fail "Gateway (gateway/tests/test_issuances.py)"
+ok "Gateway: 200, 403 per failing check, 404, 400, 401, one issuance row per 200"
+
+# An adapter failure during a request is a Gateway error (502), not a crash. The adapter is restarted
+# whether or not the check passes, so later steps still see it.
+docker compose stop adapter >/dev/null || fail "cannot stop the adapter"
+adapter_down_rc=0
+docker compose run --rm --no-deps -T   -v "$REPO_ROOT/gateway/tests:/gateway/tests:ro"   gateway python tests/test_issuances.py adapter-down http://gateway:8000 || adapter_down_rc=$?
+docker compose start adapter >/dev/null || fail "cannot restart the adapter"
+adapter_up=0
+for _ in $(seq 1 30); do
+  if docker compose run --rm --no-deps -T gateway python -c     "import httpx; httpx.get('http://adapter:8000/students/ait-2026-0001/eligibility', timeout=3).raise_for_status()" >/dev/null 2>&1; then
+    adapter_up=1; break
+  fi
+  sleep 2
+done
+[[ "$adapter_up" == 1 ]] || fail "adapter did not answer again after restart"
+[[ "$adapter_down_rc" == 0 ]] || fail "Gateway with the adapter down must answer 502 gateway_error (gateway/tests/test_issuances.py adapter-down)"
+ok "Gateway: adapter down is a 502 gateway_error, and the adapter is back"
+
 # Scripted issuance, then verification with a tampered copy, inside the Docker network (see the script's docstring).
 issue_and_verify() {
   docker compose run --rm --no-deps -T \

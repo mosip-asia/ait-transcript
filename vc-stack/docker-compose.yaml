@@ -302,6 +302,23 @@ services:
     networks:
       - network
 
+  # The Gateway (contracts.md section 2a): POST /issuances, the checklist runner behind Certify's data-provider
+  # plugin. Settings (enabled scopes, adapter URL, bearer token, database URL) come from the installation's
+  # gateway.env. Reached as http://gateway:8000; no host port. It does not wait for the adapter; it creates its
+  # gateway schema in Certify's Postgres on start and restarts until that database accepts connections.
+  gateway:
+    container_name: gateway
+    build:
+      context: ..
+      dockerfile: gateway/Dockerfile
+    env_file:
+      - ../installations/${INSTALLATION}/gateway.env
+    depends_on:
+      - database
+    restart: unless-stopped
+    networks:
+      - network
+
 networks:
   network:
     name: vc_stack_network

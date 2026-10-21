@@ -27,7 +27,7 @@ jobs:
         with:
           python-version: "3.11"
 
-      - run: pip install -r portal/requirements.txt tzdata
+      - run: pip install -r portal/requirements.txt -r gateway/requirements.txt tzdata
 
       # The readiness test reads installations/ait/mimoto-issuers-config.json, which is git-ignored.
       - name: Render the issuer config
@@ -45,7 +45,9 @@ jobs:
             data/test_ait_courses.py \
             data/test_generate_csv.py \
             data/test_render_mimoto_issuers_config.py \
-            adapter/test_adapter.py
+            adapter/test_adapter.py \
+            gateway/tests/test_credential_types.py \
+            gateway/tests/test_issuances.py
           do
             echo "::group::$t"
             if python "$t"; then r=PASS; else r=FAIL; status=1; fi
