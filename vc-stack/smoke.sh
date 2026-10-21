@@ -5,6 +5,7 @@ set -euo pipefail
 STACK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$STACK_DIR"
 REPO_ROOT="$(cd "$STACK_DIR/.." && pwd)"
+source "$STACK_DIR/installation.sh"
 
 CLAIMS=(
   fullName dateOfBirth country registrationNo previousDegree yearAwarded
@@ -40,16 +41,17 @@ auth_srv=$(echo "$issuer_json" | jq -r '.authorization_servers[0] // empty')
   || fail "Certify authorization_servers must be http://keycloak:8080/realms/inji (got: ${auth_srv:-<empty>})"
 ok "Certify OID4VCI authorization_servers use Docker Keycloak URL"
 
-kc_users=$(jq -r '.users[].username' config/keycloak-realm.json | sorted_lines)
-csv_ids=$(python3 -c "import csv; from pathlib import Path
-p=Path('config/student_identity_data.csv')
+csv_file="$INSTALLATION_DIR/adapter/student_identity_data.csv"
+kc_users=$(jq -r '.users[].username' "$INSTALLATION_DIR/keycloak-realm.json" | sorted_lines)
+csv_ids=$(python3 -c "import csv, sys; from pathlib import Path
+p=Path(sys.argv[1])
 with p.open(newline='', encoding='utf-8') as f:
-  print('\n'.join(sorted(r['id'] for r in csv.DictReader(f))))")
+  print('\n'.join(sorted(r['id'] for r in csv.DictReader(f))))" "$csv_file")
 [[ "$kc_users" == "$csv_ids" ]] || fail "Keycloak usernames must match CSV id column row-for-row"
 ok "Keycloak users align with CSV ids"
 
-prop_cols=$(grep '^mosip.certify.mock.data-provider.csv.data-columns=' config/certify-csvdp-student.properties | cut -d= -f2-)
-csv_header=$(head -1 config/student_identity_data.csv | tr -d '\r')
+prop_cols=$(grep '^mosip.certify.mock.data-provider.csv.data-columns=' "$INSTALLATION_DIR/certify-csvdp-student.properties" | cut -d= -f2-)
+csv_header=$(head -1 "$csv_file" | tr -d '\r')
 prop_n=$(echo "$prop_cols" | awk -F, '{print NF}')
 csv_n=$(echo "$csv_header" | awk -F, '{print NF}')
 [[ "$prop_n" == "$csv_n" ]] || fail "data-columns count ($prop_n) != CSV header count ($csv_n)"

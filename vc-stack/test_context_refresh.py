@@ -45,8 +45,9 @@ def main() -> None:
                 break
             time.sleep(1)
         time.sleep(2)
-        # The seed creates and connects to inji_certify itself.
-        psql(name, stdin=(STACK / "certify_init.sql").read_text(), db="postgres")
+        # The schema and the AIT rows each connect to inji_certify themselves, in the stack's init order.
+        for seed in (STACK / "certify_init.sql", STACK.parent / "installations" / "ait" / "certify_seed.sql"):
+            psql(name, stdin=seed.read_text(), db="postgres")
 
         ctx, tpl = row(name)
         assert ctx == f"{LOCAL},{W3C}" and f'"{LOCAL}"' in tpl, "seed no longer matches the local default"

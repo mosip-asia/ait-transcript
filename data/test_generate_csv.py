@@ -59,6 +59,12 @@ def test_generated_csv_roundtrip() -> None:
     assert all("${" not in (r["courses"] or "") for r in read_rows)
 
 
+def test_csv_goes_to_the_ait_installation_adapter() -> None:
+    # Certify and, later, the mock adapter mount it from there (spec: Directory layout).
+    repo_root = Path(__file__).resolve().parent.parent
+    assert gc.OUT_CSV.resolve() == repo_root / "installations" / "ait" / "adapter" / "student_identity_data.csv"
+
+
 if __name__ == "__main__":
     tests = [v for k, v in list(globals().items()) if k.startswith("test_")]
     for t in tests:

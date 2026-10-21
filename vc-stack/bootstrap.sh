@@ -10,8 +10,10 @@
 #   ./bootstrap.sh --mode=a         # Mode A (esignet-mock); writes a compose override
 #   ./bootstrap.sh --validate       # only run end-to-end health checks
 #   ./bootstrap.sh --did-refresh    # only run the post-wipe did:key dance (§11.3)
+#   ./bootstrap.sh --prepare        # only write .env and create the Docker network
 #   ./bootstrap.sh --help
 #
+# INSTALLATION (environment, else .env) names the installations/ directory to run.
 # Exit codes: 0 ok, 1 prerequisite missing, 2 health check failed, 3 user input needed.
 
 set -euo pipefail
@@ -24,6 +26,7 @@ MODE="b"
 DO_WIPE=0
 ONLY_VALIDATE=0
 ONLY_DID=0
+ONLY_PREPARE=0
 P12_PASS_DEFAULT="xy4gh6swa2i"
 NETWORK_NAME="vc_stack_network"
 OVERRIDE_FILE="docker-compose.override.yaml"
@@ -57,13 +60,6 @@ keycloak_expected_issuer() {
   printf "%s%s" "$pub" "$KEYCLOAK_REALM_PATH"
 }
 
-env_value() {
-  local key="$1"
-  [[ -f .env ]] || return 0
-  awk -F= -v key="$key" '$1 == key { value=$2 } END { print value }' .env \
-    | sed 's/^[[:space:]]*//; s/[[:space:]]*$//'
-}
-
 # JSON-LD context URL baked into every transcript VC. Local runs keep the Docker-only name (nothing but
 # containers reads it). A public deployment (CERTIFY_PUBLIC_BASE_URL is https) uses the api. gateway, which
 # already serves the file, so a phone can load it when it verifies the VC after download.
@@ -89,13 +85,16 @@ for a in "$@"; do
     --wipe)            DO_WIPE=1 ;;
     --validate)        ONLY_VALIDATE=1 ;;
     --did-refresh)     ONLY_DID=1 ;;
+    --prepare)         ONLY_PREPARE=1 ;;
     -h|--help)
-      sed -n '2,16p' "$0" | sed 's/^# \?//'
+      sed -n '2,18p' "$0" | sed 's/^# \?//'
       exit 0
       ;;
     *) die "unknown arg: $a (use --help)" 3 ;;
   esac
 done
+
+source "$STACK_DIR/installation.sh"
 
 # -------- preflight --------
 preflight() {
@@ -215,6 +214,23 @@ ensure_keycloak_env() {
   fi
 }
 
+# -------- INSTALLATION in .env --------
+# installation.sh resolved it (environment over .env); keep .env naming the same one so the plain
+# `docker compose` form mounts what this run brought up.
+ensure_installation_env() {
+  step "Installation: $INSTALLATION"
+  if [[ "$(env_value INSTALLATION)" == "$INSTALLATION" ]]; then
+    ok ".env already names $INSTALLATION"
+    return
+  fi
+  local tmp
+  tmp=$(mktemp)
+  grep -v '^INSTALLATION=' .env > "$tmp" || true
+  printf 'INSTALLATION=%s\n' "$INSTALLATION" >> "$tmp"
+  mv "$tmp" .env
+  ok "set INSTALLATION=$INSTALLATION in .env"
+}
+
 # -------- network --------
 gen_network() {
   step "Docker network: $NETWORK_NAME"
@@ -266,7 +282,7 @@ sync_realm_cert() {
   step "Sync wallet-demo cert into keycloak-realm.json"
   local new_b64 cur_b64 tmp
   new_b64=$(cat certs/client-cert-b64.txt)
-  cur_b64=$(jq -r '.clients[] | select(.clientId=="wallet-demo") | .attributes."jwt.credential.certificate" // ""' config/keycloak-realm.json)
+  cur_b64=$(jq -r '.clients[] | select(.clientId=="wallet-demo") | .attributes."jwt.credential.certificate" // ""' "$INSTALLATION_DIR/keycloak-realm.json")
   if [[ "$new_b64" == "$cur_b64" ]]; then
     ok "realm cert already matches keystore"
     return
@@ -274,10 +290,10 @@ sync_realm_cert() {
   tmp=$(mktemp)
   jq --arg b64 "$new_b64" \
     '(.clients[] | select(.clientId=="wallet-demo") | .attributes."jwt.credential.certificate") = $b64' \
-    config/keycloak-realm.json > "$tmp"
+    "$INSTALLATION_DIR/keycloak-realm.json" > "$tmp"
   # mktemp creates the file 0600; Keycloak (uid 1000 in its container) must read the mounted realm.
   chmod 0644 "$tmp"
-  mv "$tmp" config/keycloak-realm.json
+  mv "$tmp" "$INSTALLATION_DIR/keycloak-realm.json"
   ok "patched keycloak-realm.json with new cert"
   warn "Keycloak re-imports the realm on boot — restart keycloak-server if it was already up"
 }
@@ -288,13 +304,13 @@ configure_mode() {
   if [[ "$MODE" == "a" ]]; then
     # Mode A: issuers point at esignet-mock; remove Mode B compose env via override
     local current_target
-    current_target=$(jq -r '.issuers[0].authorization_audience' config/mimoto-issuers-config.json)
+    current_target=$(jq -r '.issuers[0].authorization_audience' "$INSTALLATION_DIR/mimoto-issuers-config.json")
     if [[ "$current_target" == *"esignet-mock"* ]]; then
       ok "mimoto-issuers-config.json already targets esignet-mock"
     else
       # B → A
-      sed -i.bak "s|$KEYCLOAK_TOKEN_URL|$ESIGNET_TOKEN_URL|g" config/mimoto-issuers-config.json
-      rm -f config/mimoto-issuers-config.json.bak
+      sed -i.bak "s|$KEYCLOAK_TOKEN_URL|$ESIGNET_TOKEN_URL|g" "$INSTALLATION_DIR/mimoto-issuers-config.json"
+      rm -f "$INSTALLATION_DIR/mimoto-issuers-config.json.bak"
       ok "rewrote issuers config: keycloak → esignet-mock"
     fi
     # Override file: blank out Mode B-specific Certify env so it falls back to certify-default.properties
@@ -347,9 +363,9 @@ EOF
        | (.issuers[0].redirect_uri) = $redirect_uri
        | (.issuers[0].credential_issuer_host) = $credential_issuer_host
        | (.issuers[0].wellknown_endpoint) = $wellknown_endpoint' \
-      config/mimoto-issuers-config.json > "$tmp"
+      "$INSTALLATION_DIR/mimoto-issuers-config.json" > "$tmp"
     chmod 0644 "$tmp"
-    mv "$tmp" config/mimoto-issuers-config.json
+    mv "$tmp" "$INSTALLATION_DIR/mimoto-issuers-config.json"
     if [[ -n "$public_base_url" ]]; then
       ok "mimoto-issuers-config.json targets $public_base_url"
     else
@@ -486,7 +502,7 @@ did_refresh() {
   done <<< "$rows"
 
   # Patch every csvdp-*.properties file so a future wipe seeds with the correct DID.
-  for prop in config/certify-csvdp-*.properties; do
+  for prop in "$INSTALLATION_DIR"/certify-csvdp-*.properties; do
     [[ -f "$prop" ]] || continue
     if grep -q "^mosip.certify.data-provider-plugin.did-url=" "$prop"; then
       local cur_prop_did
@@ -630,7 +646,9 @@ main() {
   (( DO_WIPE )) && do_wipe
   gen_env
   ensure_keycloak_env
+  ensure_installation_env
   gen_network
+  if (( ONLY_PREPARE )); then exit 0; fi
   gen_keystore
   gen_client_cert
   sync_realm_cert

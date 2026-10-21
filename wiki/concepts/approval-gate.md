@@ -25,7 +25,7 @@ Stock Certify's `MockCSVDataProviderPlugin` issues a VC to any OIDC-authenticate
 
 ## Upgrade path (not built, not planned unless requested)
 
-If real enforcement is ever needed: on approval, write the student's row into `vc-stack/config/student_identity_data.csv` (or flip a "disabled" flag Certify's CSV provider respects) and enable/create the corresponding Keycloak user, then restart Certify/Keycloak per `inji/wiki/guides/credential-lab-pdf-csv-gotchas.md` (ConfigMap/file changes don't hot-reload). Do not build this speculatively — see [AGENTS.md](../../AGENTS.md) "Core scope decisions."
+If real enforcement is ever needed: on approval, write the student's row into `installations/ait/adapter/student_identity_data.csv` (or flip a "disabled" flag Certify's CSV provider respects) and enable/create the corresponding Keycloak user, then restart Certify/Keycloak per `inji/wiki/guides/credential-lab-pdf-csv-gotchas.md` (ConfigMap/file changes don't hot-reload). Do not build this speculatively — see [AGENTS.md](../../AGENTS.md) "Core scope decisions."
 
 ## Related
 

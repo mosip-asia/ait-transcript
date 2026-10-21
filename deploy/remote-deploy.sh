@@ -83,5 +83,7 @@ echo "checked out $SHA"
 docker network inspect "$NETWORK" >/dev/null 2>&1 || docker network create "$NETWORK" >/dev/null
 
 cp "$APP_ENV" vc-stack/.env
+# The VM runs the AIT installation unless app.env names another.
+grep -q '^INSTALLATION=' "$APP_ENV" || export INSTALLATION=ait
 ./run-demo.sh
 echo "deployed $SHA"

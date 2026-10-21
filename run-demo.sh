@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # Start the full AIT Transcript VC demo: CSV sync, Inji stack, demo app (all Docker).
+# INSTALLATION (environment, else vc-stack/.env) names the installations/ directory: INSTALLATION=ait ./run-demo.sh
 set -euo pipefail
 
 for bin in docker jq curl awk; do
@@ -8,16 +9,21 @@ done
 
 ROOT="$(cd "$(dirname "$0")" && pwd)"
 STACK="$ROOT/vc-stack"
+source "$STACK/installation.sh"
 mkdir -p "$ROOT/.demo-state"
 
 cd "$STACK"
 
+# .env and the external network must exist before the first Compose call below.
+"$STACK/bootstrap.sh" --prepare
+
+# The generators run as the host user, so the files they write stay the host's to edit and regenerate.
 echo "==> Regenerate Certify CSV from data/students.json"
 docker compose build demo-app
-docker compose run --rm --no-deps demo-app python data/generate_csv.py
+docker compose run --rm --no-deps --user "$(id -u):$(id -g)" demo-app python data/generate_csv.py
 
-echo "==> Render mimoto-issuers-config.json from its template"
-docker compose run --rm --no-deps demo-app python data/render_mimoto_issuers_config.py
+echo "==> Render mimoto-issuers-config.json from the installation's template"
+docker compose run --rm --no-deps --user "$(id -u):$(id -g)" demo-app python data/render_mimoto_issuers_config.py
 
 "$STACK/bootstrap.sh" "$@"
 

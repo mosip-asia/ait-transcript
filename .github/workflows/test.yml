@@ -10,6 +10,10 @@ on:
 permissions:
   contents: read
 
+# The installations/ directory every job runs against.
+env:
+  INSTALLATION: ait
+
 jobs:
   host-tests:
     name: Host tests (no Docker)
@@ -23,9 +27,9 @@ jobs:
         with:
           python-version: "3.11"
 
-      - run: pip install -r app/requirements.txt tzdata
+      - run: pip install -r portal/requirements.txt tzdata
 
-      # The readiness test reads vc-stack/config/mimoto-issuers-config.json, which is git-ignored.
+      # The readiness test reads installations/ait/mimoto-issuers-config.json, which is git-ignored.
       - name: Render the issuer config
         run: python data/render_mimoto_issuers_config.py
 
@@ -34,8 +38,9 @@ jobs:
           status=0
           for t in \
             vc-stack/test_inji_web_vc_readiness.py \
-            app/test_auth.py \
-            app/test_requests.py \
+            vc-stack/test_installation_guard.py \
+            portal/test_auth.py \
+            portal/test_requests.py \
             data/test_ait_courses.py \
             data/test_generate_csv.py \
             data/test_render_mimoto_issuers_config.py
@@ -57,16 +62,8 @@ jobs:
         with:
           persist-credentials: false
 
-      # run-demo.sh does `docker compose run demo-app` before bootstrap.sh creates this external network.
-      - name: Create the Docker network
-        run: docker network create vc_stack_network
-
       - name: Bring up the stack
         run: ./run-demo.sh
-
-      # The demo-app container writes the Certify CSV as root; smoke.sh rewrites it as the runner user.
-      - name: Give generated config back to the runner user
-        run: sudo chown -R "$(id -u):$(id -g)" vc-stack/config
 
       - run: ./vc-stack/smoke.sh
 

@@ -11,7 +11,7 @@ from fastapi import FastAPI, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
-from app import auth, certify_client, db, fixtures, requests as req_workflow
+from portal import auth, certify_client, db, fixtures, requests as req_workflow
 
 BANGKOK = ZoneInfo("Asia/Bangkok")
 

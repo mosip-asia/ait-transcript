@@ -30,10 +30,10 @@ From the repo root:
 
 ```sh
 chmod +x run-demo.sh vc-stack/bootstrap.sh vc-stack/smoke.sh
-./run-demo.sh
+INSTALLATION=ait ./run-demo.sh
 ```
 
-This builds the demo app image, regenerates `vc-stack/config/student_identity_data.csv` from `data/students.json` (inside Docker), runs `./vc-stack/bootstrap.sh` (full stack + demo app), and leaves everything running.
+This builds the demo app image, regenerates `installations/ait/adapter/student_identity_data.csv` from `data/students.json` (inside Docker), runs `./vc-stack/bootstrap.sh` (full stack + demo app), and leaves everything running.
 
 **Docker-only equivalent** (after first `./run-demo.sh` has created `vc-stack/.env` and the external network):
 
@@ -50,7 +50,7 @@ Request/approval SQLite state lives at **`.demo-state/demo_requests.db`** on the
 
 ### Developing the demo app
 
-`app/` and `data/` are **bind-mounted** into the container; `uvicorn` runs with **`--reload`**, so Python and template edits apply without rebuilding. Rebuild only when `app/requirements.txt` changes:
+`portal/` and `data/` are **bind-mounted** into the container; `uvicorn` runs with **`--reload`**, so Python and template edits apply without rebuilding. Rebuild only when `portal/requirements.txt` changes:
 
 ```sh
 docker compose -f vc-stack/docker-compose.yaml build demo-app
@@ -79,13 +79,13 @@ Guards regressions that broke issuer list, Keycloak login, or same-origin token/
 Demo app logic (host Python **or** inside the demo image):
 
 ```sh
-python3 app/test_auth.py
-python3 app/test_requests.py
+python3 portal/test_auth.py
+python3 portal/test_requests.py
 ```
 
 ```sh
-docker compose -f vc-stack/docker-compose.yaml run --rm --no-deps demo-app python app/test_auth.py
-docker compose -f vc-stack/docker-compose.yaml run --rm --no-deps demo-app python app/test_requests.py
+docker compose -f vc-stack/docker-compose.yaml run --rm --no-deps demo-app python portal/test_auth.py
+docker compose -f vc-stack/docker-compose.yaml run --rm --no-deps demo-app python portal/test_requests.py
 ```
 
 Data fixture tests still need Python on the host (or run similarly via `demo-app`):

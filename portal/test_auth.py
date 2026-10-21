@@ -1,4 +1,4 @@
-"""Phase 2 auth tests (PLAN.md). Run: python3 app/test_auth.py"""
+"""Phase 2 auth tests (PLAN.md). Run: python3 portal/test_auth.py"""
 
 from __future__ import annotations
 
@@ -16,9 +16,9 @@ os.environ["AIT_DEMO_DB"] = _db_file.name
 
 from fastapi.testclient import TestClient  # noqa: E402
 
-from app import db  # noqa: E402
-from app.fixtures import list_students  # noqa: E402
-from app.main import app  # noqa: E402
+from portal import db  # noqa: E402
+from portal.fixtures import list_students  # noqa: E402
+from portal.main import app  # noqa: E402
 
 db.reset_db()
 client = TestClient(app)
@@ -106,7 +106,7 @@ def main() -> None:
     test_student_without_session_redirects_to_login()
     test_cross_portal_isolation()
     test_two_students_separate_clients_see_own_data()
-    print("app/test_auth.py: all tests passed")
+    print("portal/test_auth.py: all tests passed")
 
 
 if __name__ == "__main__":

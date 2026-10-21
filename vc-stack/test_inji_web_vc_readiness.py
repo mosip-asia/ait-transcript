@@ -24,6 +24,7 @@ from pathlib import Path
 
 STACK_DIR = Path(__file__).resolve().parent
 REPO_ROOT = STACK_DIR.parent
+AIT_DIR = REPO_ROOT / "installations" / "ait"
 
 INJI_WEB_ORIGIN = "http://localhost:4004"
 KEYCLOAK_PUBLIC = "http://localhost:9080"
@@ -55,7 +56,7 @@ def _http_json(url: str, method: str = "GET", body: dict | None = None) -> tuple
 
 
 def test_issuers_config_token_endpoint_uses_inji_web_proxy() -> None:
-    cfg = json.loads((STACK_DIR / "config/mimoto-issuers-config.json").read_text(encoding="utf-8"))
+    cfg = json.loads((AIT_DIR / "mimoto-issuers-config.json").read_text(encoding="utf-8"))
     issuer = cfg["issuers"][0]
     token_ep = issuer["token_endpoint"]
     assert token_ep == EXPECTED_TOKEN, (
@@ -87,7 +88,7 @@ def test_mimoto_keycloak_external_is_browser_url() -> None:
 
 
 def test_keycloak_wallet_demo_redirect_includes_inji_web() -> None:
-    realm = json.loads((STACK_DIR / "config/keycloak-realm.json").read_text(encoding="utf-8"))
+    realm = json.loads((AIT_DIR / "keycloak-realm.json").read_text(encoding="utf-8"))
     client = next(c for c in realm["clients"] if c["clientId"] == "wallet-demo")
     redirects = client["redirectUris"]
     assert "http://localhost:4004/redirect" in redirects

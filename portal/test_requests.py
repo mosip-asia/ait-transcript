@@ -1,4 +1,4 @@
-"""Phase 3 + Phase 7 request workflow tests (PLAN.md). Run: python3 app/test_requests.py"""
+"""Phase 3 + Phase 7 request workflow tests (PLAN.md). Run: python3 portal/test_requests.py"""
 
 from __future__ import annotations
 
@@ -16,10 +16,10 @@ os.environ["AIT_DEMO_DB"] = _db_file.name
 
 from fastapi.testclient import TestClient  # noqa: E402
 
-from app import certify_client, db  # noqa: E402
-from app.fixtures import list_students  # noqa: E402
-from app.main import app  # noqa: E402
-from app import requests as req_workflow  # noqa: E402
+from portal import certify_client, db  # noqa: E402
+from portal.fixtures import list_students  # noqa: E402
+from portal.main import app  # noqa: E402
+from portal import requests as req_workflow  # noqa: E402
 
 # Tests run with no Certify stack available — default to "never issued" so the
 # reissue gate in create_request() doesn't make a real HTTP call. Individual
@@ -412,7 +412,7 @@ def main() -> None:
     test_registrar_reissue_button_hidden_while_awaiting_claim()
     test_reissue_after_revoke_shows_awaiting_and_hides_button()
     test_student_awaiting_claim_after_revoke_has_no_request_button_and_sees_refusal()
-    print("app/test_requests.py: all tests passed")
+    print("portal/test_requests.py: all tests passed")
 
 
 if __name__ == "__main__":

@@ -1,4 +1,4 @@
-"""Generate vc-stack/config/student_identity_data.csv from data/students.json.
+"""Generate installations/ait/adapter/student_identity_data.csv from data/students.json.
 
 data/students.json is the single source of truth (see PRD.md §7-8, AGENTS.md).
 Run: python3 data/generate_csv.py
@@ -16,10 +16,10 @@ from ait_courses import enrich_ait_transcript_subject  # noqa: E402
 
 REPO_ROOT = Path(__file__).parent.parent
 STUDENTS_JSON = Path(__file__).parent / "students.json"
-OUT_CSV = REPO_ROOT / "vc-stack" / "config" / "student_identity_data.csv"
+OUT_CSV = REPO_ROOT / "installations" / "ait" / "adapter" / "student_identity_data.csv"
 
 # Locked claim list — PRD.md §7. Order here becomes the CSV column order, which
-# must match vc-stack/config/certify-csvdp-student.properties' data-columns
+# must match installations/ait/certify-csvdp-student.properties' data-columns
 # exactly (Phase 1) — Certify maps CSV cells to claims by position.
 CLAIM_COLUMNS = [
     "fullName",

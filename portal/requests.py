@@ -6,7 +6,7 @@ import os
 from datetime import datetime, timezone
 from typing import Any
 
-from app import certify_client, db, fixtures
+from portal import certify_client, db, fixtures
 
 STATUS_PENDING = "pending"
 STATUS_APPROVED = "approved"
@@ -18,7 +18,7 @@ INJI_WEB_URL = os.environ.get("INJI_WEB_URL", "http://localhost:4004")
 INJI_VERIFY_URL = os.environ.get("INJI_VERIFY_URL", "http://localhost:4007")
 KEYCLOAK_PUBLIC_BASE_URL = os.environ.get("KEYCLOAK_PUBLIC_BASE_URL", "http://localhost:9080")
 KEYCLOAK_DEMO_PASSWORD = "inji"
-# Keycloak's browser flow has the Cookie/SSO step disabled (see vc-stack/config/
+# Keycloak's browser flow has the Cookie/SSO step disabled (see installations/ait/
 # keycloak-realm.json's "browser-no-sso" flow), so switching to a *different* degree's
 # identity in the same tab needs an explicit sign-out first — otherwise Keycloak refuses
 # with "already authenticated as different user" rather than silently mismatching.
