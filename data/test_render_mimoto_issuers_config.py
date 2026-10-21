@@ -63,6 +63,8 @@ def test_public_mobile_list_is_phone_reachable() -> None:
 
 def test_public_snippet_swaps_only_authorization_servers() -> None:
     snippet = r.render(PUBLIC)[r.GATEWAY_SNIPPET_OUT]
+    assert "${" not in snippet, "unreplaced placeholder in the rendered conf"
+    assert "alias " in snippet
     assert "location = /v1/mimoto/issuers" in snippet
     assert "location = /.well-known/openid-credential-issuer" in snippet
     assert (
