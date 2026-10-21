@@ -7,6 +7,8 @@ Needs fastapi and httpx (portal/requirements.txt): the claim test reads the mock
 
 from __future__ import annotations
 
+import csv
+import io
 import tempfile
 from pathlib import Path
 
@@ -92,12 +94,15 @@ def test_a_claim_the_record_lacks_or_serves_as_null_raises() -> None:
 def test_a_roster_row_missing_a_column_is_a_gateway_error_never_none() -> None:
     """Through the Gateway and the adapter in-process: a row shorter than the header (its trailing cells read as
     null), and a roster without a column a type needs, are 502 gateway_error, never a claim of "None" or ""."""
+    with ROSTER.open(encoding="utf-8", newline="") as f:
+        rows = list(csv.reader(f))
     header = ROSTER.read_text(encoding="utf-8").splitlines()[0]
     short = header + "\nhack-2026-0001,team-01,Sandbox Pioneers\n"
-    columns = header.split(",")
-    full = ROSTER.read_text(encoding="utf-8").splitlines()[1].split(",")
-    without_team_name = ",".join(c for c in columns if c != "teamName") + "\n" + \
-        ",".join(v for c, v in zip(columns, full) if c != "teamName") + "\n"
+    columns, full = rows[0], rows[1]
+    buf = io.StringIO()
+    csv.writer(buf, lineterminator="\n").writerows(
+        [v for c, v in zip(columns, row) if c != "teamName"] for row in (columns, full))
+    without_team_name = buf.getvalue()
     with tempfile.TemporaryDirectory() as td:
         for label, text, scopes in (("short row", short, (PASSPORT.scope, ACHIEVEMENT.scope)),
                                     ("no teamName column", without_team_name, (PASSPORT.scope,))):

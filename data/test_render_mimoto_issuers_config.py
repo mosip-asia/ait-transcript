@@ -74,7 +74,7 @@ def test_public_snippet_swaps_only_authorization_servers() -> None:
 
 
 def test_an_installation_without_the_mobile_wallet_renders_only_mimotos_list() -> None:
-    # The tracked phone files in vc-stack/config/ are AIT's: rendering the hackathon must not overwrite them.
+    # No public-gateway-mobile.conf.template in the installation: the tracked phone files in vc-stack/config/ stay untouched.
     for env in ({"INSTALLATION": "hackathon"}, {**PUBLIC, "INSTALLATION": "hackathon"}):
         out = r.render(env)
         hackathon_list = r.REPO_ROOT / "installations" / "hackathon" / "mimoto-issuers-config.json"

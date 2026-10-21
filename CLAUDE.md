@@ -8,7 +8,7 @@ A self-contained demo of one journey: an AIT student requests an academic transc
 
 The documents under `wiki/project/` (the issuer proposal of PR 4, and `issuer-v0.1/` with its responsibilities, contracts and deviations) and the glossary in `CONTEXT.md` describe the planned Issuer product, not the running demo. Do not treat them as a description of the code.
 
-`wallet/` carries patches, not a wallet: `wallet/apply.sh <platform>` clones Inji Wallet v0.22.1 and applies the `common/` and per-platform changes that let it talk to the GCP deployment. The phone app gets its own issuer list and metadata through the `api.` gateway (`vc-stack/config/mimoto-issuers-mobile.json`, `public-gateway-mobile.conf`); see `wiki/architecture/inji-mobile-wallet.md` and `wallet/README.md`.
+`wallet/` carries patches, not a wallet: `wallet/apply.sh <platform>` clones Inji Wallet v0.22.1 and applies the `common/` and per-platform changes that let it talk to the GCP deployment. The phone app gets its own issuer list and metadata through the `api.` gateway (`vc-stack/config/mimoto-issuers-mobile.json`, `public-gateway-mobile.conf`, both rendered by `data/render_mimoto_issuers_config.py` only for an installation that carries `public-gateway-mobile.conf.template`, today `ait`); see `wiki/architecture/inji-mobile-wallet.md` and `wallet/README.md`.
 
 ## Commands
 
