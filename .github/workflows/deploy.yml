@@ -21,7 +21,7 @@ on:
   workflow_dispatch:
     inputs:
       wipe:
-        description: "Wipe the VM database and volumes first (run-demo.sh --wipe); renews the signing key and did:key"
+        description: "Wipe the VM database and volumes first (bootstrap.sh --wipe --prepare), renewing the signing key and did:key, before the normal bring-up"
         type: boolean
         default: false
 
