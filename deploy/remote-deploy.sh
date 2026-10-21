@@ -13,14 +13,16 @@
 #   /etc/ait-transcript-demo/app.env        public URLs, copied to vc-stack/.env
 #   /run/lock/transcript-demo-deploy.lock   a deploy and a boot-time restart never overlap
 #
-# Usage (as root, token on stdin): bash remote-deploy.sh <40-hex commit> <owner/repo>
+# Usage (as root, token on stdin): bash remote-deploy.sh <40-hex commit> <owner/repo> [wipe]
+# "wipe" runs run-demo.sh --wipe: the Postgres volume is rebuilt from the seed, and the signing key and did:key are renewed.
 set -euo pipefail
 export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
 SHA="${1:-}"
 REPO="${2:-}"
-if [[ ! "$SHA" =~ ^[0-9a-f]{40}$ ]] || [[ ! "$REPO" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]]; then
-  echo "usage: remote-deploy.sh <40-hex commit> <owner/repo>" >&2
+WIPE="${3:-}"
+if [[ ! "$SHA" =~ ^[0-9a-f]{40}$ ]] || [[ ! "$REPO" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]] || [[ -n "$WIPE" && "$WIPE" != "wipe" ]]; then
+  echo "usage: remote-deploy.sh <40-hex commit> <owner/repo> [wipe]" >&2
   exit 2
 fi
 if [ "$(id -u)" -ne 0 ]; then
@@ -86,5 +88,5 @@ docker network inspect "$NETWORK" >/dev/null 2>&1 || docker network create "$NET
 INSTALLATION_NAME="$(awk -F= '$1 == "INSTALLATION" { value=$2 } END { print value }' "$APP_ENV" | tr -d '\r' | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"
 printf '%s\n' "${INSTALLATION_NAME:-ait}" > vc-stack/.installation
 cp "$APP_ENV" vc-stack/.env
-./run-demo.sh
+if [ "$WIPE" = "wipe" ]; then ./run-demo.sh --wipe; else ./run-demo.sh; fi
 echo "deployed $SHA"

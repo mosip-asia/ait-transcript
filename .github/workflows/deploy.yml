@@ -19,6 +19,11 @@ name: Deploy
 
 on:
   workflow_dispatch:
+    inputs:
+      wipe:
+        description: "Wipe the VM database and volumes first (run-demo.sh --wipe); renews the signing key and did:key"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -110,6 +115,7 @@ jobs:
           SERVER_HOST: ${{ vars.SERVER_HOST }}
           SERVER_USER: ${{ vars.SERVER_USER }}
           REPO_TOKEN: ${{ github.token }}
+          WIPE: ${{ inputs.wipe }}
         run: |
           set -euo pipefail
           # GitHub masks the token itself; mask the form git sends as well.
@@ -118,12 +124,14 @@ jobs:
                 -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$HOME/.ssh/known_hosts_demo"
                 -o ConnectTimeout=15 -o ServerAliveInterval=30 -o ServerAliveCountMax=10)
           remote="remote-deploy.${GITHUB_RUN_ID}.sh"
+          wipe_arg=""
+          if [ "$WIPE" = "true" ]; then wipe_arg="wipe"; fi
           scp "${opts[@]}" deploy/remote-deploy.sh "$SERVER_USER@$SERVER_HOST:$remote"
           # The token goes on stdin; the script reads it first and never prints it.
-          # $remote, $GITHUB_SHA and $GITHUB_REPOSITORY expand here, on the runner, on purpose.
+          # $remote, $GITHUB_SHA, $GITHUB_REPOSITORY and $wipe_arg expand here, on the runner, on purpose.
           # shellcheck disable=SC2029
           printf '%s\n' "$REPO_TOKEN" | ssh "${opts[@]}" "$SERVER_USER@$SERVER_HOST" \
-            "sudo bash ./$remote $GITHUB_SHA $GITHUB_REPOSITORY; rc=\$?; rm -f ./$remote; exit \$rc"
+            "sudo bash ./$remote $GITHUB_SHA $GITHUB_REPOSITORY $wipe_arg; rc=\$?; rm -f ./$remote; exit \$rc"
 
       - name: Health check (demo app and Keycloak)
         run: |

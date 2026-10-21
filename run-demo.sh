@@ -19,7 +19,7 @@ cd "$STACK"
 
 # The generators run as the host user, so the files they write stay the host's to edit and regenerate.
 echo "==> Regenerate Certify CSV from data/students.json"
-docker compose build demo-app
+docker compose build demo-app adapter
 docker compose run --rm --no-deps --user "$(id -u):$(id -g)" demo-app python data/generate_csv.py
 
 echo "==> Render mimoto-issuers-config.json from the installation's template"

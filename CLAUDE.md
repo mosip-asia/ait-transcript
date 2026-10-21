@@ -56,7 +56,7 @@ The full browser OAuth and PDF download is still manual (PRD §9); the readiness
 
 Local URLs: demo app `:4100` (`/student/login`, `/registrar/login`), Inji Web `:4004`, Inji Verify `:4007`, Keycloak admin `:9080` (admin / admin), Certify behind nginx `:9091`. Every host port is the upstream `inji/vc-stack` default plus 1000, so both stacks can run side by side; the Docker network is `vc_stack_network` for the same reason.
 
-Deployment is manual and ships one commit: push, then run the `Deploy` workflow (`workflow_dispatch` only) for a branch or tag. It copies `deploy/remote-deploy.sh` to the GCE VM, which checks out that commit into `/opt/ait-transcript-demo`, copies the VM's `app.env` to `vc-stack/.env`, writes the installation name (`ait` unless `app.env` names one) to `vc-stack/.installation` so it survives reboots, and runs `run-demo.sh`. Nothing on the VM pulls code by itself.
+Deployment is manual and ships one commit: push, then run the `Deploy` workflow (`workflow_dispatch` only) for a branch or tag. It copies `deploy/remote-deploy.sh` to the GCE VM, which checks out that commit into `/opt/ait-transcript-demo`, copies the VM's `app.env` to `vc-stack/.env`, writes the installation name (`ait` unless `app.env` names one) to `vc-stack/.installation` so it survives reboots, and runs `run-demo.sh`. Nothing on the VM pulls code by itself. The first deploy of a commit that changes the seed (`installations/ait/certify_seed.sql`) needs `wipe=true`, which also renews the signing key and `did:key`.
 
 ## Architecture
 

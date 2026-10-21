@@ -134,23 +134,38 @@ context_warnings=$(grep -E 'Cannot load context|is not an absolute IRI nor @json
 [[ -z "$context_warnings" ]] || fail "JSON-LD context warnings in the certify or verify-service log: $context_warnings"
 ok "no context-loading or datatype warnings in the certify and verify-service logs"
 
-# Step 1, for the record (expected versions: the research note's section 1); never fails the smoke run.
+# Step 1: the JSON-LD libraries each image carries must be the ones the research note's section 4 expects.
 jsonld_libs() {
   local jar tmp
   jar=$(docker compose exec -T "$1" sh -c 'ls /home/mosip/*.jar' 2>/dev/null | head -1 | tr -d '\r')
   [[ -n "$jar" ]] || { echo "no jar under /home/mosip"; return; }
   tmp=$(mktemp)
-  docker compose cp "$1:$jar" "$tmp" >/dev/null 2>&1 && python3 - "$tmp" <<'EOF'
+  docker compose cp "$1:$jar" "$tmp" >/dev/null 2>&1 && python3 - "$tmp" <<'PYEOF'
 import re, sys, zipfile
 names = zipfile.ZipFile(sys.argv[1]).namelist()
 print(" ".join(sorted(n.rsplit("/", 1)[-1] for n in names
                       if re.search(r"(jsonld|titanium|rdf-urdna|ld-signatures)[^/]*\.jar$", n))))
-EOF
+PYEOF
   rm -f "$tmp"
 }
-for svc in certify verify-service; do
-  echo "INFO: $svc JSON-LD libraries: $(jsonld_libs "$svc" || echo unreadable)"
-done
+assert_jsonld_libs() {
+  local svc="$1" found="$2" jar missing=""
+  shift 2
+  for jar in "$@"; do
+    grep -qxF "$jar" <<<"${found// /$'\n'}" || missing="$missing $jar"
+  done
+  [[ -z "$missing" ]] || fail "$svc JSON-LD libraries: missing${missing}; found: ${found:-nothing}"
+  if grep -qE '(^| )jsonld-java-' <<<"$found"; then
+    fail "$svc carries a jsonld-java jar; found: $found"
+  fi
+  ok "$svc JSON-LD libraries as expected: $found"
+}
+certify_libs=$(jsonld_libs certify || echo unreadable)
+assert_jsonld_libs certify "$certify_libs" titanium-json-ld-1.6.0.jar titanium-jcs-1.0.0.jar titanium-rdfc-2.0.0.jar \
+  jsonld-common-java-1.14.0.jar rdf-urdna-1.4.jar
+verify_libs=$(jsonld_libs verify-service || echo unreadable)
+assert_jsonld_libs verify-service "$verify_libs" titanium-json-ld-1.3.2.jar titanium-json-ld-jre8-1.3.1.jar \
+  jsonld-common-java-1.8.0.jar rdf-urdna-1.2.jar ld-signatures-java-1.11.0.jar
 
 python3 "$STACK_DIR/test_inji_web_vc_readiness.py" --live
 

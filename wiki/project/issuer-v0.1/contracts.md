@@ -85,6 +85,12 @@ Record fields, taken from the test data in `data/students.json`:
 | Credits | `courseworkCredits`, `thesisCredits`, `totalCredits` |
 | Courses | `courses[]`: `{ term, courses[]: { no, title, ... } }`; ordered arrays, numbers as strings |
 
+Values the implementation fixed, which the real adapter must keep:
+
+- `conferralStatus` is `Conferred` or `Pending`.
+- `balance` is a decimal string such as `"1250.00"` (`"0.00"` when nothing is owed), never a number.
+- `degreeId` equals the row's `id`. v0.1 holds one degree per `sub`, so `degrees` returns one entry and a `degreeId` that differs from the `sub` finds no record.
+
 Read-only, fetched once per request, not stored by the Issuer (§3.2). Which fields may leave the SIS is OSA's decision; this list is the demo's, not an agreed one. Until the real adapter exists, our CSV-backed mock implements this contract and its eligibility attributes are editable so the Checklist can be exercised.
 
 ## 3. Issuer admin API (ours)

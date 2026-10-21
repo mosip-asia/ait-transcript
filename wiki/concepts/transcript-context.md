@@ -43,7 +43,7 @@ A JSON-LD 1.1 processor: Titanium (Certify and Inji Verify), jsonld.js and other
 
 ## How it is checked
 
-`vc-stack/smoke.sh` runs the Compose check of the research note's section 4: it prints the JSON-LD library versions in the Certify and Verify images, checks the gateway serves `vc-lab/contexts/transcript/v1.json` at the URL the issuer metadata names, issues one transcript, and has `vc-stack/issue_and_verify.py` verify it (`SUCCESS`) and three tampered copies (the holder id, `fullName`, one grade inside `courses`), each of which must fail with `ERR_SIGNATURE_VERIFICATION_FAILED`. It then fails on any `Cannot load context` or `Datatype … is not an absolute IRI nor @json` line in the Certify or Verify logs. Until that has passed in CI, the behaviour above is expected, not observed.
+`vc-stack/smoke.sh` runs the Compose check of the research note's section 4: it prints the JSON-LD library versions in the Certify and Verify images, checks the gateway serves `vc-lab/contexts/transcript/v1.json` at the URL the issuer metadata names, issues one transcript, and has `vc-stack/issue_and_verify.py` verify it (`SUCCESS`) and three tampered copies (the holder id, `fullName`, one grade inside `courses`), each of which must fail with `ERR_SIGNATURE_VERIFICATION_FAILED`. It then fails on any `Cannot load context` or `Datatype … is not an absolute IRI nor @json` line in the Certify or Verify logs. This check has passed in CI (run 39539975939 at commit 506969a, 2026-10-21), so the behaviour above is observed.
 
 ## Related
 
