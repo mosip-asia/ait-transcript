@@ -307,6 +307,7 @@ Every committed value below is test-only; a deployment replaces each one.
 | Certify's keystore password | Certify, `mosip.kernel.keymanager.hsm.keystore-pass` in `certify-default.properties`, for the keystore in `vc-stack/data/CERTIFY_PKCS12/` (ask 2) | `local` |
 | Keycloak's admin credentials | `keycloak-server`, `KEYCLOAK_ADMIN` and `KEYCLOAK_ADMIN_PASSWORD` | `admin` / `admin` |
 | The Portal's client secret | None in this chain: the Portal does not sign in through OpenID Connect (`portal/auth.py` is a persona picker). Its session-cookie key, `AIT_DEMO_SESSION_SECRET`, is read by `portal/auth.py` and not set by Compose, so the committed default applies; a deployment adds it to the Portal's environment | A default in `portal/auth.py` |
+| Certify's Redis password | Certify, `spring.data.redis.password` in `certify-default.properties`, read only if the deployment scales Certify with Redis (`spring.cache.type=redis`, see the scaling note); the committed `spring.cache.type=simple` never connects, and Compose runs no Redis | `redis` |
 | Verify's keystore password | `verify-service`, `INJI_KEYSTORE_FILE_PASS` | `mosip` |
 | Realm users' passwords | `keycloak-realm.json` | `inji` for every user; fixtures, not deployed |
 

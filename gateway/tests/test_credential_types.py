@@ -79,6 +79,14 @@ def test_multiline_claims_are_escaped_for_the_quoted_template() -> None:
     assert claims["courses"][0]["courses"][0]["title"] == 'Thai "Basics"'  # substituted unquoted: left as it is
 
 
+def test_only_courses_may_stay_a_list_any_other_list_or_dict_becomes_an_escaped_string() -> None:
+    record = {**{k: "" for k in ct.TRANSCRIPT_CLAIMS}, "courses": [{"term": "T1"}], "notes": ["a\"b"], "faculty": {"k": "v"}}
+    claims = ct.claims(TRANSCRIPT, record)
+    assert claims["courses"] == [{"term": "T1"}]
+    assert claims["notes"] == ct.escape_vc_quoted_claim(str(["a\"b"])) and claims["faculty"] == "{'k': 'v'}"
+    assert isinstance(claims["notes"], str)
+
+
 def test_a_claim_the_record_lacks_or_serves_as_null_raises() -> None:
     record = {"teamId": "team-01", "teamName": "T", "oidcClientId": "c", "authEndpoint": "a", "issuerEndpoint": "i",
               "verifierEndpoint": "v"}
