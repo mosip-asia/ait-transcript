@@ -100,8 +100,14 @@ def compose_variables() -> set[str]:
     return found
 
 
+def host_port(binding: object) -> str:
+    """The published host port of a short-form binding, [ip:]host:container[/protocol]."""
+    parts = str(binding).split("/")[0].rsplit(":", 2)
+    return parts[-2] if len(parts) > 1 else parts[0]
+
+
 def compose_ports() -> dict[str, str]:
-    return {str(port).split(":")[0]: service
+    return {host_port(port): service
             for service, spec in compose()["services"].items() for port in spec.get("ports", [])}
 
 
@@ -182,6 +188,11 @@ def test_every_env_file_mount_and_port_is_in_the_page_and_nothing_else() -> None
 def test_every_compose_variable_is_in_the_page_and_nothing_else() -> None:
     expected, listed = compose_variables(), page_variables()
     assert expected == listed, f"in Compose only: {sorted(expected - listed)}; in the page only: {sorted(listed - expected)}"
+
+
+def test_the_host_port_is_read_from_every_binding_form() -> None:
+    for binding in ("9080:8080", "9080:8080/tcp", "127.0.0.1:9080:8080", "127.0.0.1:9080:8080/udp", "[::1]:9080:8080"):
+        assert host_port(binding) == "9080", (binding, host_port(binding))
 
 
 def test_every_host_port_is_public_or_internal_in_the_allowlist() -> None:
