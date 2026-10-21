@@ -46,8 +46,9 @@ jobs:
             data/test_render_mimoto_issuers_config.py
           do
             echo "::group::$t"
-            python "$t" || { echo "::error::$t failed"; status=1; }
+            if python "$t"; then r=PASS; else r=FAIL; status=1; fi
             echo "::endgroup::"
+            echo "$r $t"
           done
           exit "$status"
 
