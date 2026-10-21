@@ -19,7 +19,7 @@ SCRIPTS = ["run-demo.sh", "vc-stack/bootstrap.sh", "vc-stack/smoke.sh"]
 STUBS = ["docker", "jq", "curl"]
 
 
-def run(script: str, installation: str | None, dot_env: str = "") -> tuple[int, str, str]:
+def run(script: str, installation: str | None, dot_env: str = "", marker: str = "") -> tuple[int, str, str]:
     """Run one script from a fresh copy; return (exit code, stderr, recorded stub calls)."""
     with tempfile.TemporaryDirectory() as td:
         root = Path(td)
@@ -31,6 +31,8 @@ def run(script: str, installation: str | None, dot_env: str = "") -> tuple[int, 
             shutil.copy(path, root / "vc-stack" / path.name)
         if dot_env:
             (root / "vc-stack" / ".env").write_text(dot_env, newline="\n")
+        if marker:
+            (root / "vc-stack" / ".installation").write_text(marker, newline="\n")
         stubs = root / "stubs"
         stubs.mkdir()
         log = root / "calls.log"
@@ -70,6 +72,18 @@ def test_installation_from_dot_env_passes_the_guard() -> None:
     _, err, calls = run("run-demo.sh", installation=None, dot_env="INSTALLATION=ait\n")
     assert "INSTALLATION must name" not in err, err
     assert "docker" in calls, "run-demo.sh never reached Docker with INSTALLATION=ait in vc-stack/.env"
+
+
+def test_installation_from_marker_file_passes_the_guard() -> None:
+    _, err, calls = run("run-demo.sh", installation=None, marker="ait\n")
+    assert "INSTALLATION must name" not in err, err
+    assert "docker" in calls, "run-demo.sh never reached Docker with INSTALLATION=ait in vc-stack/.installation"
+
+
+def test_environment_wins_over_marker_file() -> None:
+    code, err, calls = run("run-demo.sh", installation="nope", marker="ait\n")
+    assert code != 0 and "'nope'" in err, f"the marker overrode the environment: {err!r}"
+    assert "docker" not in calls, calls
 
 
 if __name__ == "__main__":

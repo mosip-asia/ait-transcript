@@ -82,8 +82,9 @@ echo "checked out $SHA"
 # vc-stack/bootstrap.sh creates it, so create it first on a fresh VM.
 docker network inspect "$NETWORK" >/dev/null 2>&1 || docker network create "$NETWORK" >/dev/null
 
-# The reboot path copies app.env over vc-stack/.env and runs run-demo.sh with no variable, so persist the value there.
-grep -q '^INSTALLATION=' "$APP_ENV" || printf '\nINSTALLATION=ait\n' >> "$APP_ENV"
+# Reboots regenerate app.env and run run-demo.sh with no variable, so keep the value in a marker file the checkout owns.
+INSTALLATION_NAME="$(awk -F= '$1 == "INSTALLATION" { value=$2 } END { print value }' "$APP_ENV" | tr -d '\r' | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"
+printf '%s\n' "${INSTALLATION_NAME:-ait}" > vc-stack/.installation
 cp "$APP_ENV" vc-stack/.env
 ./run-demo.sh
 echo "deployed $SHA"

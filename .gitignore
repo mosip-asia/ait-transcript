@@ -13,6 +13,7 @@ portal/*.db
 .venv/
 venv/
 .env
+vc-stack/.installation
 .pytest_cache/
 
 # local-only notes, not shared

@@ -14,7 +14,7 @@ The documents under `wiki/project/` (the issuer proposal of PR 4, and `issuer-v0
 
 Everything runs through Docker; the host needs only Docker Desktop (Compose v2), `jq`, `curl` and `awk`. On Windows, use WSL2 with the repo cloned into the WSL filesystem, not Git Bash and not `/mnt/c`.
 
-`INSTALLATION` names the directory under `installations/` the stack runs (today only `ait`). The scripts read it from the environment, else from `vc-stack/.env`, and stop before any container starts when it names no directory; `bootstrap.sh` writes the value it ran with into `.env`.
+`INSTALLATION` names the directory under `installations/` the stack runs (today only `ait`). The scripts read it from the environment, else from `vc-stack/.env`, else from the git-ignored one-line marker `vc-stack/.installation` (written by `deploy/remote-deploy.sh` so a VM reboot keeps it), and stop before any container starts when it names no directory; `bootstrap.sh` writes the value it ran with into `.env`.
 
 ```sh
 INSTALLATION=ait ./run-demo.sh     # full bring-up: build demo app, regenerate the Certify CSV from data/students.json, render the installation's mimoto-issuers-config.json, then vc-stack/bootstrap.sh
@@ -55,7 +55,7 @@ The full browser OAuth and PDF download is still manual (PRD §9); the readiness
 
 Local URLs: demo app `:4100` (`/student/login`, `/registrar/login`), Inji Web `:4004`, Inji Verify `:4007`, Keycloak admin `:9080` (admin / admin), Certify behind nginx `:9091`. Every host port is the upstream `inji/vc-stack` default plus 1000, so both stacks can run side by side; the Docker network is `vc_stack_network` for the same reason.
 
-Deployment is manual and ships one commit: push, then run the `Deploy` workflow (`workflow_dispatch` only) for a branch or tag. It copies `deploy/remote-deploy.sh` to the GCE VM, which checks out that commit into `/opt/ait-transcript-demo`, copies the VM's `app.env` to `vc-stack/.env`, and runs `run-demo.sh` with `INSTALLATION=ait` unless `app.env` names one. Nothing on the VM pulls code by itself.
+Deployment is manual and ships one commit: push, then run the `Deploy` workflow (`workflow_dispatch` only) for a branch or tag. It copies `deploy/remote-deploy.sh` to the GCE VM, which checks out that commit into `/opt/ait-transcript-demo`, copies the VM's `app.env` to `vc-stack/.env`, writes the installation name (`ait` unless `app.env` names one) to `vc-stack/.installation` so it survives reboots, and runs `run-demo.sh`. Nothing on the VM pulls code by itself.
 
 ## Architecture
 
