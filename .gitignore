@@ -5,6 +5,8 @@ installations/*/mimoto-issuers-config.json
 vc-stack/.env
 vc-stack/certs/
 vc-stack/data/
+vc-stack/plugins/
+gateway/plugin/target/
 portal/*.db
 .demo-state/*
 !.demo-state/.gitkeep

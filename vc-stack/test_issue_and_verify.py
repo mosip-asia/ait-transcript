@@ -50,6 +50,20 @@ def test_token_request_is_a_password_grant_on_the_smoke_client() -> None:
     }
 
 
+def test_a_refused_credential_request_answers_its_openid4vci_error_code() -> None:
+    refused = httpx.Response(400, json={"error": "checklist_failed", "error_description": "checklist_failed"})
+    assert iv.refusal_code(refused) == "checklist_failed"
+
+
+def test_an_issued_credential_is_not_a_refusal() -> None:
+    try:
+        iv.refusal_code(httpx.Response(200, json={"credential": {"id": "urn:x"}}))
+    except RuntimeError as exc:
+        assert "200" in str(exc), exc
+    else:
+        raise AssertionError("an issued credential was read as a refusal")
+
+
 def b64url_decode(segment: str) -> bytes:
     return base64.urlsafe_b64decode(segment + "=" * (-len(segment) % 4))
 

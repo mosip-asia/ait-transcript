@@ -67,6 +67,12 @@ jobs:
         with:
           persist-credentials: false
 
+      # run-demo.sh builds the plugin jar in a Maven container with its repository in vc-stack/plugins/.m2.
+      - uses: actions/cache@v4
+        with:
+          path: vc-stack/plugins/.m2
+          key: plugin-m2-${{ hashFiles('gateway/plugin/pom.xml') }}
+
       - name: Bring up the stack
         run: ./run-demo.sh
 

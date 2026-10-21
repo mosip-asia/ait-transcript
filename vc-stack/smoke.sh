@@ -62,16 +62,18 @@ with p.open(newline='', encoding='utf-8') as f:
 [[ "$kc_users" == "$csv_ids" ]] || fail "Keycloak usernames must match CSV id column row-for-row"
 ok "Keycloak users align with CSV ids"
 
-prop_cols=$(grep '^mosip.certify.mock.data-provider.csv.data-columns=' "$INSTALLATION_DIR/certify-csvdp-student.properties" | cut -d= -f2-)
-csv_header=$(head -1 "$csv_file" | tr -d '\r')
-prop_n=$(echo "$prop_cols" | awk -F, '{print NF}')
-csv_n=$(echo "$csv_header" | awk -F, '{print NF}')
-[[ "$prop_n" -le "$csv_n" ]] || fail "data-columns count ($prop_n) exceeds CSV header count ($csv_n)"
-csv_prefix=$(echo "$csv_header" | cut -d, -f1-"$prop_n")
-[[ "$prop_cols" == "$csv_prefix" ]] || fail "data-columns must be the leading CSV header columns, in order (claim columns first)"
-extra_n=$((csv_n - prop_n))
-[[ "$extra_n" -eq 0 ]] || ok "$extra_n adapter-only column(s) after the claim columns: $(echo "$csv_header" | cut -d, -f"$((prop_n + 1))"-)"
-ok "CSV column alignment"
+# Certify's data provider is the Gateway plugin, configured by the six keys of contracts.md section 2a and nothing else.
+certify_props=$(tr -d '\r' <"$INSTALLATION_DIR/certify-csvdp-student.properties")
+plugin_keys=$( (grep -oE '^mosip\.certify\.(gateway\.[a-z-]+|integration\.(data-provider-plugin|scan-base-package))=' <<<"$certify_props" || true) \
+  | tr -d = | LC_ALL=C sort)
+want_keys=$(printf '%s\n' mosip.certify.gateway.{auth-token,connect-timeout-ms,read-timeout-ms,url} \
+  mosip.certify.integration.{data-provider-plugin,scan-base-package} | LC_ALL=C sort)
+[[ "$plugin_keys" == "$want_keys" ]] || fail "Certify's plugin keys must be the six of contracts.md section 2a (got: $plugin_keys)"
+! grep -q '^mosip\.certify\.mock\.data-provider\.' <<<"$certify_props" || fail "the CSV plugin's keys are still in Certify's properties"
+[[ "$(grep '^mosip.certify.gateway.auth-token=' <<<"$certify_props")" == \
+   "mosip.certify.gateway.auth-token=$(tr -d '\r' <"$INSTALLATION_DIR/gateway.env" | grep '^GATEWAY_AUTH_TOKEN=' | cut -d= -f2-)" ]] \
+  || fail "mosip.certify.gateway.auth-token must equal GATEWAY_AUTH_TOKEN in gateway.env"
+ok "Certify's plugin configuration is the six keys; its token is the Gateway's"
 
 template=config/AITUniversity-ait-transcript-template.html
 [[ -f "$template" ]] || fail "missing Mimoto PDF template $template"
@@ -82,6 +84,19 @@ docker compose up -d >/dev/null
 after=$(docker compose ps -q | wc -l | tr -d ' ')
 [[ "$after" -ge "$before" ]] || fail "bootstrap re-run reduced container count"
 ok "bootstrap idempotent re-run"
+
+# The plugin jar joins the four bundled ones (a single-file mount), and Certify started with it selected.
+certify_jars=$(docker compose exec -T certify ls /home/inji/additional_jars/ | tr -d '\r') \
+  || fail "cannot list Certify's additional_jars/"
+for jar in gateway-data-provider-plugin mock-certify-plugin sunbird-rc-certify-integration-impl \
+  postgres-dataprovider-plugin mosip-identity-certify-plugin; do
+  grep -qE "^$jar.*\.jar$" <<<"$certify_jars" || fail "additional_jars/ lacks $jar (has: $(tr '\n' ' ' <<<"$certify_jars"))"
+done
+certify_log=$(docker compose logs --no-color certify 2>&1) || fail "cannot read the certify log"
+! grep -qE 'NoSuchBeanDefinitionException|NoUniqueBeanDefinitionException' <<<"$certify_log" \
+  || fail "missing-bean or duplicate-bean error in the certify log"
+grep -q 'GatewayDataProviderPlugin selected' <<<"$certify_log" || fail "the certify log does not name GatewayDataProviderPlugin"
+ok "Certify loads the Gateway plugin beside the four bundled jars"
 
 issuer=$(curl -sf http://localhost:9080/realms/inji/.well-known/openid-configuration | jq -r '.issuer')
 [[ "$issuer" == "http://keycloak:8080/realms/inji" ]] || fail "Keycloak issuer must be http://keycloak:8080/realms/inji (got: ${issuer:-<empty>})"
@@ -154,6 +169,30 @@ issue_and_verify issue "$INSTALLATION" ait-2026-0001 ait_transcript_vc_ldp "$smo
 jq -e --arg u "$ctx_url" '."@context" | index($u)' "$REPO_ROOT/$smoke_vc" >/dev/null \
   || fail "issued credential does not name $ctx_url in its @context"
 issue_and_verify verify "$smoke_vc" || fail "credential verification (vc-stack/issue_and_verify.py verify)"
+
+# A persona the Gateway's checklist refuses (a hold on the record) gets the OpenID4VCI error body with its code.
+issue_and_verify refused "$INSTALLATION" ait-2026-0002 ait_transcript_vc_ldp checklist_failed \
+  || fail "refused persona through Certify (vc-stack/issue_and_verify.py refused ... checklist_failed)"
+
+# With the Gateway down, Certify still starts (the plugin calls nothing at startup) and a credential request is
+# gateway_error. The Gateway is started again whether or not the checks pass, so later steps still see it.
+docker compose stop gateway >/dev/null || fail "cannot stop the Gateway"
+docker compose restart certify >/dev/null || fail "cannot restart certify"
+retry() { local tries=$1; shift; for _ in $(seq 1 "$tries"); do "$@" >/dev/null 2>&1 && return 0; sleep 2; done; return 1; }
+certify_up=0
+retry 90 curl -sf http://localhost:9091/.well-known/openid-credential-issuer && certify_up=1
+gateway_down_rc=1
+if [[ "$certify_up" == 1 ]]; then
+  gateway_down_rc=0
+  issue_and_verify refused "$INSTALLATION" ait-2026-0001 ait_transcript_vc_ldp gateway_error || gateway_down_rc=$?
+fi
+docker compose start gateway >/dev/null || fail "cannot restart the Gateway"
+[[ "$certify_up" == 1 ]] || fail "Certify did not start while the Gateway was down"
+[[ "$gateway_down_rc" == 0 ]] || fail "with the Gateway down a credential request must be refused with gateway_error"
+retry 30 docker compose exec -T gateway python -c \
+  "import httpx; httpx.get('http://gateway:8000/docs', timeout=3).raise_for_status()" \
+  || fail "the Gateway did not answer again after restart"
+ok "Certify starts with the Gateway down and then answers gateway_error; the Gateway is back"
 
 stack_logs=$(docker compose logs --no-color certify verify-service 2>&1) || fail "cannot read the certify and verify-service logs"
 context_warnings=$(grep -E 'Cannot load context|is not an absolute IRI nor @json' <<<"$stack_logs" | head -5 || true)

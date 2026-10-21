@@ -80,10 +80,7 @@ def seed_template() -> dict:
 
 
 def test_certify_configuration_names_the_generated_columns() -> None:
-    # Certify maps CSV cells to claims by position and fills the template from them.
-    props = (AIT / "certify-csvdp-student.properties").read_text(encoding="utf-8")
-    columns = ",".join(["id", *gc.CLAIM_COLUMNS])  # the adapter columns after them are not Certify's
-    assert re.search(r"^mosip\.certify\.mock\.data-provider\.csv\.data-columns=(.*)$", props, re.M)[1].strip() == columns
+    columns = ",".join(["id", *gc.CLAIM_COLUMNS])  # the adapter columns after them are not claims
     (plugin_config,) = json.loads(seed_value(r"'(\[\{\"mosip\.certify\.mock[^']*)'::JSONB"))
     assert plugin_config["mosip.certify.mock.data-provider.csv.data-columns"] == columns
     assert list(json.loads(seed_value(r"'(\{\"fullName\": \{\"display\"[^']*)'::JSONB"))) == gc.CLAIM_COLUMNS

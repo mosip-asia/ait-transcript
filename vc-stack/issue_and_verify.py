@@ -6,6 +6,8 @@ issue:  a token from the installation's realm (direct-access grant on the test-o
 verify: verify-service's v2 vc-verification must answer SUCCESS for that file, and
         ERR_SIGNATURE_VERIFICATION_FAILED for each copy with one claim changed: the holder DID
         (credentialSubject.id), fullName, and one grade inside courses.
+refused: the same credential request must be refused with the OpenID4VCI error body whose `error` is the given
+        code (checklist_failed for a persona the Gateway's checklist refuses, gateway_error with the Gateway down).
 
 Deviation from the ticket's "Ed25519": the proof key is ES256 (P-256), because the seed's proof_types_supported
 allows RS256/ES256 only, and Inji Web uses ES256.
@@ -18,6 +20,7 @@ installations/<name>/keycloak-realm.json). demo-app does not mount vc-stack/, so
       -v "$PWD/vc-stack/issue_and_verify.py:/demo/vc-stack/issue_and_verify.py:ro" demo-app \\
       python vc-stack/issue_and_verify.py issue ait ait-2026-0001 ait_transcript_vc_ldp .demo-state/smoke-credential.json
   (same, ending in: python vc-stack/issue_and_verify.py verify .demo-state/smoke-credential.json)
+  (same, ending in: python vc-stack/issue_and_verify.py refused ait ait-2026-0002 ait_transcript_vc_ldp checklist_failed)
 """
 
 from __future__ import annotations
@@ -78,8 +81,8 @@ def build_proof(key: ec.EllipticCurvePrivateKey, client_id: str, audience: str, 
     return f"{signing_input}.{_b64url(r.to_bytes(32, 'big') + s.to_bytes(32, 'big'))}"
 
 
-def issue(client: httpx.Client, installation: str, persona: str, scope: str) -> dict:
-    """One credential for the persona, through the same OpenID4VCI request a wallet makes."""
+def credential_request(client: httpx.Client, installation: str, persona: str, scope: str) -> httpx.Response:
+    """The persona's OpenID4VCI credential request, the same one a wallet makes, answered as Certify answers it."""
     realm = json.loads((Path("installations") / installation / "keycloak-realm.json").read_text(encoding="utf-8"))
     user = next(u for u in realm["users"] if u["username"] == persona)
     password = next(c["value"] for c in user["credentials"] if c["type"] == "password")
@@ -91,7 +94,7 @@ def issue(client: httpx.Client, installation: str, persona: str, scope: str) -> 
     token = request_token(client, realm["realm"], persona, password, scope)
     proof = build_proof(ec.generate_private_key(ec.SECP256R1()), SMOKE_CLIENT, metadata["credential_issuer"],
                         token["c_nonce"], int(time.time()))
-    return _json(client.post(
+    return client.post(
         f"{CERTIFY}/v1/certify/issuance/credential",
         headers={"Authorization": f"Bearer {token['access_token']}"},
         json={
@@ -99,7 +102,19 @@ def issue(client: httpx.Client, installation: str, persona: str, scope: str) -> 
             "credential_definition": {"@context": definition["@context"], "type": definition["type"]},
             "proof": {"proof_type": "jwt", "jwt": proof},
         },
-    ))["credential"]
+    )
+
+
+def issue(client: httpx.Client, installation: str, persona: str, scope: str) -> dict:
+    """One credential for the persona."""
+    return _json(credential_request(client, installation, persona, scope))["credential"]
+
+
+def refusal_code(resp: httpx.Response) -> str:
+    """The `error` of Certify's OpenID4VCI error body for a refused credential request."""
+    if not resp.is_error:
+        raise RuntimeError(f"expected a refusal, got {resp.status_code}: {resp.text}")
+    return resp.json().get("error", "")
 
 
 def verify(client: httpx.Client, credential: dict) -> str:
@@ -157,9 +172,21 @@ def main() -> int:
     p_issue.add_argument("out", type=Path)
     p_verify = steps.add_parser("verify", help="verify a credential file, then a tampered copy")
     p_verify.add_argument("credential", type=Path)
+    p_refused = steps.add_parser("refused", help="the credential request must be refused with CODE")
+    p_refused.add_argument("installation")
+    p_refused.add_argument("persona")
+    p_refused.add_argument("scope")
+    p_refused.add_argument("code", help="the expected OpenID4VCI error code, e.g. checklist_failed")
     args = parser.parse_args()
 
     with httpx.Client(timeout=60) as client:
+        if args.step == "refused":
+            code = refusal_code(credential_request(client, args.installation, args.persona, args.scope))
+            if code != args.code:
+                print(f"FAIL: {args.persona}: expected the error {args.code}, got {code!r}", file=sys.stderr)
+                return 1
+            print(f"OK: {args.scope} for {args.persona} refused with {code}")
+            return 0
         if args.step == "issue":
             credential = issue(client, args.installation, args.persona, args.scope)
             args.out.parent.mkdir(parents=True, exist_ok=True)

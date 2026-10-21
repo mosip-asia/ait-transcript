@@ -46,8 +46,15 @@ services:
       - ./config/certify-default.properties:/home/mosip/config/certify-default.properties
       - ../installations/${INSTALLATION}/certify-csvdp-student.properties:/home/mosip/config/certify-csvdp-student.properties
       - ./data/CERTIFY_PKCS12:/home/inji/CERTIFY_PKCS12
-      - ../installations/${INSTALLATION}/adapter/student_identity_data.csv:/home/mosip/config/student_identity_data.csv
       - ./config/vp_request_config.json:/home/mosip/config/vp_request_config.json
+      # The Gateway data-provider plugin, built by run-demo.sh. A single file, never the directory, so the four
+      # jars bundled in additional_jars/ stay visible; a missing jar fails here instead of mounting an empty directory.
+      - type: bind
+        source: ./plugins/gateway-data-provider-plugin.jar
+        target: /home/inji/additional_jars/gateway-data-provider-plugin.jar
+        read_only: true
+        bind:
+          create_host_path: false
     networks:
       - network
     depends_on:
