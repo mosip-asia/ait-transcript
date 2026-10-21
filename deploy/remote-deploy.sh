@@ -82,8 +82,8 @@ echo "checked out $SHA"
 # vc-stack/bootstrap.sh creates it, so create it first on a fresh VM.
 docker network inspect "$NETWORK" >/dev/null 2>&1 || docker network create "$NETWORK" >/dev/null
 
+# The reboot path copies app.env over vc-stack/.env and runs run-demo.sh with no variable, so persist the value there.
+grep -q '^INSTALLATION=' "$APP_ENV" || printf '\nINSTALLATION=ait\n' >> "$APP_ENV"
 cp "$APP_ENV" vc-stack/.env
-# The VM runs the AIT installation unless app.env names another.
-grep -q '^INSTALLATION=' "$APP_ENV" || export INSTALLATION=ait
 ./run-demo.sh
 echo "deployed $SHA"

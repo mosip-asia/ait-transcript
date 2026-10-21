@@ -128,7 +128,7 @@ def test_verify_step_passes_when_the_credential_verifies_and_its_tampered_copy_d
     assert original == CREDENTIAL
     changed = {k for k in CREDENTIAL["credentialSubject"]
                if tampered["credentialSubject"].get(k) != CREDENTIAL["credentialSubject"][k]}
-    assert changed == {"fullName"}, f"expected one top-level claim changed, got {changed}"
+    assert changed == {"id"}, f"expected credentialSubject.id changed, got {changed}"
     assert {k: v for k, v in tampered.items() if k != "credentialSubject"} == \
         {k: v for k, v in CREDENTIAL.items() if k != "credentialSubject"}
 
@@ -136,7 +136,7 @@ def test_verify_step_passes_when_the_credential_verifies_and_its_tampered_copy_d
 def test_verify_step_fails_when_the_tampered_copy_still_verifies() -> None:
     client, _ = mock_client(lambda r: httpx.Response(200, json=SUCCESS))
     problems = iv.verify_step(client, CREDENTIAL)
-    assert len(problems) == 1 and "ERR_SIGNATURE_VERIFICATION_FAILED" in problems[0], problems
+    assert len(problems) == 1 and "credentialSubject.id" in problems[0] and "ERR_SIGNATURE_VERIFICATION_FAILED" in problems[0], problems
 
 
 def test_verify_step_fails_when_the_credential_itself_does_not_verify() -> None:

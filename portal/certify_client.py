@@ -1,7 +1,7 @@
 """Thin HTTP client for Certify's ledger-search / credential-status APIs.
 
 Certify tracks every issued VC in its own ledger, indexed by claim values
-(not by our student_id) — see vc-stack/certify_init.sql. The AIT
+(not by our student_id) — see installations/ait/certify_seed.sql. The AIT
 Transcript's identifier claim is `registrationNo`, so lookups translate
 student_id -> registrationNo via fixtures before calling Certify.
 """

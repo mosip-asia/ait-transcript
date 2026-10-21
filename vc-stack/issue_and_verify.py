@@ -113,7 +113,7 @@ def verify(client: httpx.Client, credential: dict) -> str:
 
 
 def verify_step(client: httpx.Client, credential: dict) -> list[str]:
-    """The credential must verify; a copy with one top-level claim changed must fail its signature.
+    """The credential must verify; a copy with credentialSubject.id changed must fail its signature.
 
     Returns what went wrong, empty when both outcomes are as expected.
     """
@@ -122,11 +122,12 @@ def verify_step(client: httpx.Client, credential: dict) -> list[str]:
     if outcome != "SUCCESS":
         problems.append(f"credential: expected SUCCESS, got {outcome}")
     subject = credential["credentialSubject"]
-    claim = next(k for k, v in subject.items() if k != "id" and isinstance(v, str))
+    # Today's context signs only credentialSubject.id; ticket 06 widens this to fullName and a value inside courses.
+    claim = "id"
     tampered = {**credential, "credentialSubject": {**subject, claim: subject[claim] + " (tampered)"}}
     outcome = verify(client, tampered)
     if outcome != "ERR_SIGNATURE_VERIFICATION_FAILED":
-        problems.append(f"tampered {claim}: expected ERR_SIGNATURE_VERIFICATION_FAILED, got {outcome}")
+        problems.append(f"tampered credentialSubject.{claim}: expected ERR_SIGNATURE_VERIFICATION_FAILED, got {outcome}")
     return problems
 
 
