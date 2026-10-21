@@ -76,7 +76,7 @@ Service topology, ports, and bootstrap approach: PostgreSQL, Inji Certify (+ ngi
 
 ## What's different
 
-- **One credential type**: AIT Transcript only (see [Transcript credential design](../concepts/transcript-credential.md)) — no `StudentIDCredential`, no Credential Lab `lab-*` types.
+- **One credential type**: AIT Transcript only (see [Transcript credential design](../concepts/transcript-credential.md)) — no Credential Lab `lab-*` types.
 - **Mock data source of truth**: `data/students.json` in this repo, not `inji/vc-stack/config/student_identity_data.csv` — the Certify CSV here is generated from that fixture, not hand-maintained.
 - **Certify/Keycloak identity is per-degree, not per-student**: a student who holds both a Masters and a PhD is one `students.json` entry with `degrees: [...]`, but each degree gets its own CSV row / Keycloak user (`degree.keycloakId`) so it can be claimed as a distinct VC. The demo-app login/session is still per-student; only the claim-panel's "Keycloak username" is degree-specific.
 - **New component**: the demo app (`portal/`, the Portal) sits in front of Inji Web/Verify with its own SQLite-backed request/approval state. It **is** a service in the same `docker-compose.yaml` (`PLAN.md` Phase 5) — not a separate host `uvicorn` process. A colleague picking up this repo should only ever need Docker. Through Phase 5 it made no server-to-server calls into the Inji stack (browser-only deep links); Phase 6 (registrar revoke/reissue, [VC revocation](../concepts/vc-revocation.md)) added its first ones, so it now joins `vc_stack_network` too.

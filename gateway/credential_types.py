@@ -3,8 +3,8 @@
 Each type names its scope, its credential type, its checks (evaluated in order over the adapter's eligibility
 attributes, each reading the attributes it names) and the template's variable names, each taken from the
 adapter's record field of that name unless the type derives it. The installation's settings say which scopes are
-enabled; nothing else differs between installations. The transcript (AIT) and the Developer Passport
-(hackathon) are registered; the Achievement joins them as a further entry.
+enabled; nothing else differs between installations. The transcript (AIT) and the hackathon's Developer
+Passport and Achievement are registered.
 """
 
 from __future__ import annotations
@@ -109,4 +109,15 @@ DEVELOPER_PASSPORT = CredentialType(
     claim_names=PASSPORT_CLAIMS,
 )
 
-REGISTRY: dict[str, CredentialType] = {t.scope: t for t in (TRANSCRIPT, DEVELOPER_PASSPORT)}
+# Roster columns again: the team and the award it won. The roster's `winner` column holds "true" for a winning team.
+ACHIEVEMENT = CredentialType(
+    scope="achievement_certificate_vc_ldp",
+    credential_type="AchievementCertificateCredential",
+    checks=(
+        *DEVELOPER_PASSPORT.checks,
+        Check("winner", lambda e: e["winner"].strip().lower() == "true", lambda e: "The team did not win an award"),
+    ),
+    claim_names=("teamId", "award"),
+)
+
+REGISTRY: dict[str, CredentialType] = {t.scope: t for t in (TRANSCRIPT, DEVELOPER_PASSPORT, ACHIEVEMENT)}

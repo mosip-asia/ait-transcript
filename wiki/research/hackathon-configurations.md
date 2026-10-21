@@ -1,5 +1,7 @@
 # What the hackathon credential configurations look like today
 
+> **Note (2026-10-21).** The Issuer carries the two hackathon types, Developer Passport and Achievement, as VCDM 2.0 configurations on roster predicates (`on_roster`; `on_roster` then `winner`), not the chain below. This note is the inventory they were migrated from and is otherwise unchanged.
+
 Research note, recorded 2026-10-20. Decided the same day, after this inventory: the chain is not carried into the Issuer; the VPID is dropped, and Developer Passport and Achievement are issued on two roster predicates (on the roster; `winner`), so the presentation, anchor and validity rows of the migration table below reduce to those two checks (`wiki/project/issuer-v0.1/responsibilities.md`, sections 5 and 7). Inventory of the three hackathon credential types (VPID, Developer Passport, Achievement Certificate) as they exist in `mosip-asia/ait-vc` on branch `playground/transcript-demo`, read only, for the work of absorbing them into the Issuer as VCDM 2.0 configurations with Bitstring status lists, issued by Certify behind a Gateway checklist. Nothing here has been applied; the `ait-vc` repository is frozen and untouched. Paths below are relative to `D:\MOSIP\ait-vc\local-stack\` unless they name another repository.
 
 ## Short answer

@@ -54,6 +54,28 @@
           }
         }
       ]
+    },
+    {
+      "name": "achievement_certificate_vc_ldp",
+      "description": "OpenID4VCI scope for the hackathon Achievement Certificate credential",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "false"
+      },
+      "protocolMappers": [
+        {
+          "name": "audience-certify",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.custom.audience": "http://certify-nginx/v1/certify/issuance/credential",
+            "id.token.claim": "false",
+            "access.token.claim": "true"
+          }
+        }
+      ]
     }
   ],
   "users": [
@@ -135,7 +157,8 @@
         "openid",
         "offline_access",
         "microprofile-jwt",
-        "developer_passport_vc_ldp"
+        "developer_passport_vc_ldp",
+        "achievement_certificate_vc_ldp"
       ],
       "attributes": {
         "jwt.credential.certificate": "MIIDdTCCAl2gAwIBAgIIO62X1GcESxkwDQYJKoZIhvcNAQEMBQAwaTELMAkGA1UE\rBhMCVVMxDjAMBgNVBAgTBWxvY2FsMQ4wDAYDVQQHEwVsb2NhbDEOMAwGA1UEChMF\rbG9jYWwxDTALBgNVBAsTBGluamkxGzAZBgNVBAMTEndhbGxldC1kZW1vLWNsaWVu\rdDAeFw0yNjA5MTcxNTA3MjFaFw0zNjA5MTQxNTA3MjFaMGkxCzAJBgNVBAYTAlVT\rMQ4wDAYDVQQIEwVsb2NhbDEOMAwGA1UEBxMFbG9jYWwxDjAMBgNVBAoTBWxvY2Fs\rMQ0wCwYDVQQLEwRpbmppMRswGQYDVQQDExJ3YWxsZXQtZGVtby1jbGllbnQwggEi\rMA0GCSqGSIb3DQEBAQUAA4IBDwAwggEKAoIBAQCZD4MObecCBmPaVWr5oRGGa1tB\rQk6kX/0UBBocbiD6kDq4++d5zYzSKO6y8rRcXFtXLdDF0rHYteRc112GCyXfFQRz\rVpBlBIas2NOA26QyZ0ZON9Tah+firxVg6pDCdOf64WgsvW9HKKsXzJMlnIOoWsUY\rDNEUc5X6j4VQMFOmIw7IyqHqdzN9yLfJYM6YJXuQqXROSZAQYarQ68RpPs+MrjRy\rVeZTfTXxFoAB9ZX9QvoFXArGPqM4MukyCPcOZwRFGyNuTaimCI0ZjufLjnJ0GrNJ\rw6t3kypwxbKiFP+4uTOOMPQh1g7MWnlv0Yhg1S+MBpPS+g465K0TXkgg5pOVAgMB\rAAGjITAfMB0GA1UdDgQWBBQlSdnCGipzfRkVuZgGIC4v6jlleTANBgkqhkiG9w0B\rAQwFAAOCAQEAfzemjhdd1EyG3Han+YmohH3l5KIjckNQJGFkllE2UGGRjU+CPpdI\rCWAaez9OjLxkWQSfzu6Hb75Hxl7MGI4NUxyDWimsuD44jySzXMYgm/ZVN1AHCkeJ\rW4Nn4z6jOAC1vYwEtVGdpMDR5xm4X2nT0uQV48s4xC5o5aShxgny4fdLf89Tjd7I\rSX0/H80CAtfPurMpMPdUTx6KhrTsd4mCMWt2dzVHA15xcJFSyMRGW+Rferg6JPh7\rJeqKI56psNqU5J/0JdvOt71jvTUBRQWCQtO/6QhgJQZExn9/v5qC9qoWYu7PhxHj\roy7nB0Xd0QYd740BIxm5D2aYUxf8Vz+bPA==",
@@ -229,7 +252,8 @@
       "fullScopeAllowed": true,
       "defaultClientScopes": [],
       "optionalClientScopes": [
-        "developer_passport_vc_ldp"
+        "developer_passport_vc_ldp",
+        "achievement_certificate_vc_ldp"
       ],
       "protocolMappers": [
         {

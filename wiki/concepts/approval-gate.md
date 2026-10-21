@@ -19,7 +19,7 @@ Stock Certify's `MockCSVDataProviderPlugin` issues a VC to any OIDC-authenticate
 
 ## What this means in practice
 
-- All mock students are pre-seeded and always issuable in Certify/Keycloak, exactly like `inji/vc-stack`'s existing `StudentIDCredential` pilot.
+- All mock students are pre-seeded and always issuable in Certify/Keycloak, exactly like `inji/vc-stack`'s existing pilot.
 - Before approval, the demo app simply does not show the Inji Web deep link or the mock Keycloak credentials needed to claim the VC.
 - A student who already knew the mock Keycloak username/password for another persona could technically claim a transcript VC without going through the demo app's approval flow. This is a known, accepted gap — call it out proactively if a stakeholder asks "what stops someone from skipping approval?"
 

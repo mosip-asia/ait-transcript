@@ -1,9 +1,21 @@
-{
-  "credentialConfig": "developer-passport",
-  "scope": "developer_passport_vc_ldp",
-  "eligible": "hack-2026-0001",
-  "refused": {
-    "hack-2026-0003": "on_roster"
+[
+  {
+    "credentialConfig": "developer-passport",
+    "scope": "developer_passport_vc_ldp",
+    "eligible": "hack-2026-0001",
+    "refused": {
+      "hack-2026-0003": "on_roster"
+    },
+    "tamper": ["teamName"]
   },
-  "tamper": ["teamName"]
-}
+  {
+    "credentialConfig": "achievement-certificate",
+    "scope": "achievement_certificate_vc_ldp",
+    "eligible": "hack-2026-0001",
+    "refused": {
+      "hack-2026-0002": "winner",
+      "hack-2026-0003": ["on_roster", "winner"]
+    },
+    "tamper": ["award"]
+  }
+]

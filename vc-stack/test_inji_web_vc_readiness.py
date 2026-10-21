@@ -33,7 +33,7 @@ INJI_WEB_ORIGIN = "http://localhost:4004"
 KEYCLOAK_PUBLIC = "http://localhost:9080"
 ISSUER_ID = json.loads((INSTALLATION_DIR / "mimoto-issuers-config.json.template").read_text(encoding="utf-8"))[
     "issuers"][0]["issuer_id"]
-CREDENTIAL_CONFIG = json.loads((INSTALLATION_DIR / "smoke.json").read_text(encoding="utf-8"))["credentialConfig"]
+CREDENTIAL_CONFIGS = {f["credentialConfig"] for f in json.loads((INSTALLATION_DIR / "smoke.json").read_text(encoding="utf-8"))}
 MIMOTO_ISSUERS = f"{INJI_WEB_ORIGIN}/v1/mimoto/issuers"
 MIMOTO_CONFIG = f"{INJI_WEB_ORIGIN}/v1/mimoto/issuers/{ISSUER_ID}/configuration"
 MIMOTO_DOWNLOAD = f"{INJI_WEB_ORIGIN}/v1/mimoto/credentials/download"
@@ -112,7 +112,7 @@ def test_live_issuer_list_and_configuration() -> None:
     auth_ep = resp.get("authorization_endpoint", "")
     assert auth_ep.startswith(f"{KEYCLOAK_PUBLIC}/"), auth_ep
     supported = resp.get("credentials_supported") or []
-    assert any(c.get("name") == CREDENTIAL_CONFIG for c in supported), supported
+    assert {c.get("name") for c in supported} >= CREDENTIAL_CONFIGS, supported
 
     status, payload = _http_json(f"{MIMOTO_ISSUERS}/{ISSUER_ID}")
     assert status == 200

@@ -103,6 +103,42 @@ def test_passport_claims_are_the_roster_columns() -> None:
     }
 
 
+# --- Achievement (the hackathon installation) ---
+
+ACHIEVEMENT = ct.REGISTRY["achievement_certificate_vc_ldp"]
+
+
+def test_the_achievement_scope_names_its_credential_type() -> None:
+    assert ACHIEVEMENT.credential_type == "AchievementCertificateCredential"
+
+
+def test_a_winning_team_member_passes_on_roster_then_winner() -> None:
+    assert ct.evaluate(ACHIEVEMENT, {"teamId": "team-01", "winner": "true"}) == [
+        {"check": "on_roster", "passed": True}, {"check": "winner", "passed": True}]
+
+
+def test_a_member_of_a_team_that_did_not_win_fails_only_winner() -> None:
+    for winner in ("false", ""):
+        assert_only_failing(ct.evaluate(ACHIEVEMENT, {"teamId": "team-02", "winner": winner}), "winner", ACHIEVEMENT)
+
+
+def test_a_participant_without_a_team_fails_on_roster_and_winner_is_still_evaluated() -> None:
+    checks = ct.evaluate(ACHIEVEMENT, {"teamId": "", "winner": "false"})
+    assert [(c["check"], c["passed"]) for c in checks] == [("on_roster", False), ("winner", False)]
+    assert all(c["reason"] for c in checks)
+
+
+def test_the_winner_column_is_read_as_true_whatever_its_case() -> None:
+    for winner in ("true", "TRUE", " True "):
+        assert ct.evaluate(ACHIEVEMENT, {"teamId": "t", "winner": winner})[1]["passed"] is True, winner
+
+
+def test_achievement_claims_are_the_team_id_and_the_award() -> None:
+    with mock_adapter(ROSTER) as (adapter, _, _):
+        record = adapter.get("/students/hack-2026-0001/transcript").json()
+    assert ct.claims(ACHIEVEMENT, record) == {"teamId": "team-01", "award": "Best Use of Verifiable Credentials"}
+
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("test_") and callable(fn):

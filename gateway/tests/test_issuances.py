@@ -44,18 +44,19 @@ def stringify(claims: dict) -> dict:
             for k, v in claims.items()}
 
 
-def assert_only_failing(checks: list[dict], failing: str, ctype: ct.CredentialType) -> None:
-    """Every check of the type listed in order; `reason` on the failing one only."""
+def assert_only_failing(checks: list[dict], failing: str | list[str], ctype: ct.CredentialType) -> None:
+    """Every check of the type listed in order; `reason` on the failing one(s) only."""
     assert [c["check"] for c in checks] == [check.name for check in ctype.checks], checks
     for c in checks:
-        if c["check"] == failing:
+        if c["check"] in ([failing] if isinstance(failing, str) else failing):
             assert c["passed"] is False and isinstance(c["reason"], str) and c["reason"], c
         else:
             assert c == {"check": c["check"], "passed": True}, c
 
 
-def read_fixtures(path: Path) -> dict:
-    """An installation's smoke.json: the scope, the eligible persona and each refused persona's failing check."""
+def read_fixtures(path: Path) -> list[dict]:
+    """An installation's smoke.json: one entry per credential type, each with the scope, the eligible persona and
+    each refused persona's failing check (one name, or a list when several fail together)."""
     return json.loads(path.read_text(encoding="utf-8"))
 
 
@@ -84,7 +85,7 @@ def mock_adapter(csv_path: Path | None = None):
 
 def check_gateway(post, rows, token: str, csv_path: Path, fixtures: dict) -> None:
     """`post(body, token)` returns (status, body); `rows()` the issuance rows as (sub, type, scope, client_id).
-    `fixtures` is the installation's smoke.json."""
+    `fixtures` is one entry of the installation's smoke.json."""
     scope, eligible = fixtures["scope"], fixtures["eligible"]
     ctype = ct.REGISTRY[scope]
     with open(csv_path, newline="", encoding="utf-8") as f:
@@ -156,7 +157,8 @@ def test_issuances_with_the_mock_adapter_for_every_installation() -> None:
         with mock_adapter(csv_path) as (adapter, served_csv, _), \
                 host_gateway(adapter, store, enabled_scopes(installation)) as client:
             assert store.schema_ready, "the schema is created on start"
-            check_gateway(post_with(client), lambda: store.rows, "test-token", served_csv, fixtures)
+            for fixture in fixtures:
+                check_gateway(post_with(client), lambda: store.rows, "test-token", served_csv, fixture)
 
 
 def test_starts_while_the_adapter_is_down_and_answers_gateway_error() -> None:
@@ -214,7 +216,7 @@ def test_a_scope_the_installation_does_not_enable_is_unknown() -> None:
         assert post_with(client)({"sub": ELIGIBLE, "scope": SCOPE}, "test-token") == (400, {"error": "unknown_scope"})
 
 
-def run_live(url: str, csv_path: Path, fixtures: dict) -> None:
+def run_live(url: str, csv_path: Path, fixtures: list[dict]) -> None:
     import httpx
     import psycopg
 
@@ -223,15 +225,16 @@ def run_live(url: str, csv_path: Path, fixtures: dict) -> None:
             return conn.execute("SELECT sub, credential_type, scope, client_id FROM gateway.issuances ORDER BY id").fetchall()
 
     with httpx.Client(base_url=url, timeout=10) as client:
-        check_gateway(post_with(client), rows, os.environ["GATEWAY_AUTH_TOKEN"], csv_path, fixtures)
+        for fixture in fixtures:
+            check_gateway(post_with(client), rows, os.environ["GATEWAY_AUTH_TOKEN"], csv_path, fixture)
 
 
-def run_live_adapter_down(url: str, fixtures: dict) -> None:
+def run_live_adapter_down(url: str, fixtures: list[dict]) -> None:
     """With the adapter stopped, an issuance request is a Gateway error (502), not a crash."""
     import httpx
 
     with httpx.Client(base_url=url, timeout=30) as client:
-        status, body = post_with(client)({"sub": fixtures["eligible"], "scope": fixtures["scope"]},
+        status, body = post_with(client)({"sub": fixtures[0]["eligible"], "scope": fixtures[0]["scope"]},
                                          os.environ["GATEWAY_AUTH_TOKEN"])
     assert (status, body.get("error")) == (502, "gateway_error"), (status, body)
 

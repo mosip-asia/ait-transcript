@@ -49,7 +49,8 @@ def test_smoke_personas_can_sign_in() -> None:
     for installation in NAMES:
         fixtures = json.loads((INSTALLATIONS / installation / "smoke.json").read_text(encoding="utf-8"))
         users = set(realm_usernames(installation))
-        assert {fixtures["eligible"], *fixtures["refused"]} <= users, installation
+        for fixture in fixtures:
+            assert {fixture["eligible"], *fixture["refused"]} <= users, (installation, fixture["scope"])
 
 
 if __name__ == "__main__":

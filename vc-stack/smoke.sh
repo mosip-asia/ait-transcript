@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Automated smoke checks for Phase 1 (curl/jq). Run from vc-stack/ after bootstrap.
 # The same script for every installation: what differs comes from installations/$INSTALLATION (the realm and the
-# Mimoto issuer id, set by installation.sh, and smoke.json: the credential configuration, its scope, the eligible persona, each refused
-# persona with the check it fails, the claims to tamper and, optionally, the Mimoto PDF template).
+# Mimoto issuer id, set by installation.sh, and smoke.json: a list with one entry per credential type, each with the
+# credential configuration, its scope, the eligible persona, each refused persona with the check it fails, the claims
+# to tamper and, optionally, the Mimoto PDF template). Every issued, refused and tampered case runs for every type.
 set -euo pipefail
 
 STACK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -12,15 +13,23 @@ source "$STACK_DIR/installation.sh"
 
 FIXTURES="$INSTALLATION_DIR/smoke.json"
 fixture() { jq -r "$1" "$FIXTURES"; }
-CONFIG=$(fixture .credentialConfig)
-SCOPE=$(fixture .scope)
-ELIGIBLE=$(fixture .eligible)
-mapfile -t REFUSED < <(fixture '.refused | keys_unsorted[]')
-mapfile -t TAMPER < <(fixture '.tamper[]')
-MIMOTO_TEMPLATE=$(fixture '.mimotoTemplate // empty')
-# The claims the Gateway answers for the scope (gateway/credential_types.py), which Certify's metadata must list.
-CLAIMS=$(python3 -c "import sys; sys.path.insert(0, sys.argv[1]); import credential_types as ct
+TYPE_COUNT=$(fixture length)
+ALL_CONFIGS=$(fixture '[.[].credentialConfig] | sort | join(" ")')
+# Sets the variables the per-type checks read from the i-th entry of smoke.json.
+load_type() {
+  local entry=".[$1]"
+  CONFIG=$(fixture "$entry.credentialConfig")
+  SCOPE=$(fixture "$entry.scope")
+  ELIGIBLE=$(fixture "$entry.eligible")
+  mapfile -t REFUSED < <(fixture "$entry.refused | keys_unsorted[]")
+  mapfile -t TAMPER < <(fixture "$entry.tamper[]")
+  MIMOTO_TEMPLATE=$(fixture "$entry.mimotoTemplate // empty")
+  # The claims the Gateway answers for the scope (gateway/credential_types.py), which Certify's metadata must list.
+  CLAIMS=$(python3 -c "import sys; sys.path.insert(0, sys.argv[1]); import credential_types as ct
 print('\n'.join(ct.REGISTRY[sys.argv[2]].claim_names))" "$REPO_ROOT/gateway" "$SCOPE")
+  # The context on the VDR's /contexts/ that the configuration names (the research note's Compose check, step 2).
+  ctx_url=$(jq -r --arg c "$CONFIG" '[.credential_configurations_supported[$c].credential_definition["@context"][] | select(contains("/contexts/"))][0] // empty' <<<"$issuer_json")
+}
 
 fail() { echo "FAIL: $*" >&2; exit 1; }
 ok() { echo "OK: $*"; }
@@ -34,14 +43,16 @@ python3 "$REPO_ROOT/data/generate_csv.py" >/dev/null
 issuer_json=$(curl -sf http://localhost:9091/.well-known/openid-credential-issuer) \
   || fail "certify issuer metadata not reachable on :9091"
 
-configs=$(echo "$issuer_json" | jq -r '.credential_configurations_supported | keys | join(" ")')
-[[ "$configs" == "$CONFIG" ]] || fail "expected exactly the credential config $CONFIG, got: $configs"
+configs=$(echo "$issuer_json" | jq -r '.credential_configurations_supported | keys | sort | join(" ")')
+[[ "$configs" == "$ALL_CONFIGS" ]] || fail "expected exactly the credential configs $ALL_CONFIGS, got: $configs"
 
-got_claims=$(echo "$issuer_json" | jq -r --arg c "$CONFIG" \
-  '.credential_configurations_supported[$c].credential_definition.credentialSubject | keys[]' | sorted_lines)
-want_claims=$(sorted_lines <<<"$CLAIMS")
-[[ "$got_claims" == "$want_claims" ]] || fail "issuer metadata claim names for $CONFIG differ from the Gateway's for $SCOPE"
-ok "issuer lists $CONFIG with the Gateway's claims for $SCOPE"
+for ((i = 0; i < TYPE_COUNT; i++)); do
+  load_type "$i"
+  got_claims=$(echo "$issuer_json" | jq -r --arg c "$CONFIG" '.credential_configurations_supported[$c].credential_definition.credentialSubject | keys[]' | sorted_lines)
+  want_claims=$(sorted_lines <<<"$CLAIMS")
+  [[ "$got_claims" == "$want_claims" ]] || fail "issuer metadata claim names for $CONFIG differ from the Gateway's for $SCOPE"
+  ok "issuer lists $CONFIG with the Gateway's claims for $SCOPE"
+done
 
 auth_srv=$(echo "$issuer_json" | jq -r '.authorization_servers[0] // empty')
 [[ "$auth_srv" == "http://keycloak:8080/realms/$REALM" ]] \
@@ -50,15 +61,16 @@ ok "Certify OID4VCI authorization_servers use the Docker Keycloak URL of realm $
 
 # The Compose check of wiki/research/certify-json-literal.md section 4 runs below: step 2 here, steps 3 to 5
 # after issuance, step 1 (library versions) printed for the record.
-ctx_url=$(echo "$issuer_json" | jq -r --arg c "$CONFIG" \
-  '[.credential_configurations_supported[$c].credential_definition["@context"][] | select(contains("/contexts/"))][0] // empty')
-[[ -n "$ctx_url" ]] || fail "$CONFIG @context names no context on the VDR's /contexts/"
-ctx_path="${ctx_url#*/contexts/}"
-served_ctx=$(curl -sf "http://localhost:9098/contexts/$ctx_path") \
-  || fail "public gateway does not serve /contexts/$ctx_path (vdr container)"
-[[ "$(jq -S . <<<"$served_ctx")" == "$(jq -S . "$REPO_ROOT/vc-lab/contexts/$ctx_path")" ]] \
-  || fail "served context differs from vc-lab/contexts/$ctx_path"
-ok "context $ctx_path served by the VDR through the public gateway"
+for ((i = 0; i < TYPE_COUNT; i++)); do
+  load_type "$i"
+  [[ -n "$ctx_url" ]] || fail "$CONFIG @context names no context on the VDR's /contexts/"
+  ctx_path="${ctx_url#*/contexts/}"
+  served_ctx=$(curl -sf "http://localhost:9098/contexts/$ctx_path") \
+    || fail "public gateway does not serve /contexts/$ctx_path (vdr container)"
+  [[ "$(jq -S . <<<"$served_ctx")" == "$(jq -S . "$REPO_ROOT/vc-lab/contexts/$ctx_path")" ]] \
+    || fail "served context differs from vc-lab/contexts/$ctx_path"
+  ok "context $ctx_path served by the VDR through the public gateway"
+done
 
 csv_file="$INSTALLATION_DIR/adapter/student_identity_data.csv"
 kc_users=$(jq -r '.users[].username' "$INSTALLATION_DIR/keycloak-realm.json" | sorted_lines)
@@ -82,10 +94,13 @@ want_keys=$(printf '%s\n' mosip.certify.gateway.{auth-token,connect-timeout-ms,r
   || fail "mosip.certify.gateway.auth-token must equal GATEWAY_AUTH_TOKEN in gateway.env"
 ok "Certify's plugin configuration is the six keys; its token is the Gateway's"
 
-if [[ -n "$MIMOTO_TEMPLATE" ]]; then
-  [[ -f "config/$MIMOTO_TEMPLATE" ]] || fail "missing Mimoto PDF template config/$MIMOTO_TEMPLATE"
-  ok "Mimoto template filename $MIMOTO_TEMPLATE present"
-fi
+for ((i = 0; i < TYPE_COUNT; i++)); do
+  load_type "$i"
+  if [[ -n "$MIMOTO_TEMPLATE" ]]; then
+    [[ -f "config/$MIMOTO_TEMPLATE" ]] || fail "missing Mimoto PDF template config/$MIMOTO_TEMPLATE"
+    ok "Mimoto template filename $MIMOTO_TEMPLATE present"
+  fi
+done
 
 before=$(docker compose ps -q | wc -l | tr -d ' ')
 docker compose up -d >/dev/null
@@ -149,6 +164,8 @@ docker compose run --rm --no-deps -T \
   || fail "Gateway (gateway/tests/test_issuances.py)"
 ok "Gateway: 200, 403 per failing check, 404, 400, 401, one issuance row per 200"
 
+load_type 0  # the adapter-down and Gateway-down checks below run for the first type
+
 # An adapter failure during a request is a Gateway error (502), not a crash. The adapter is restarted
 # whether or not the check passes, so later steps still see it.
 docker compose stop adapter >/dev/null || fail "cannot stop the adapter"
@@ -176,25 +193,30 @@ issue_and_verify() {
 issuance_rows() {
   docker compose exec -T database psql -U postgres -d inji_certify -tAc "select count(*) from gateway.issuances"     | tr -d '[:space:]'
 }
-rows_before=$(issuance_rows) || fail "cannot count gateway.issuances"
-smoke_vc=.demo-state/smoke-credential.json
-issue_and_verify issue "$INSTALLATION" "$ELIGIBLE" "$SCOPE" "$smoke_vc" \
-  || fail "scripted issuance (vc-stack/issue_and_verify.py issue)"
-jq -e --arg u "$ctx_url" '."@context" | index($u)' "$REPO_ROOT/$smoke_vc" >/dev/null \
-  || fail "issued credential does not name $ctx_url in its @context"
-issue_and_verify verify "$smoke_vc" "${TAMPER[@]}" || fail "credential verification (vc-stack/issue_and_verify.py verify)"
-rows_issued=$(issuance_rows) || fail "cannot count gateway.issuances"
-[[ "$rows_issued" == "$((rows_before + 1))" ]]   || fail "the Certify-path issuance must add one gateway.issuances row (before: $rows_before, after: $rows_issued)"
-ok "the Certify-path issuance wrote one gateway.issuances row"
+for ((i = 0; i < TYPE_COUNT; i++)); do
+  load_type "$i"
+  rows_before=$(issuance_rows) || fail "cannot count gateway.issuances"
+  smoke_vc=.demo-state/smoke-credential.json
+  issue_and_verify issue "$INSTALLATION" "$ELIGIBLE" "$SCOPE" "$smoke_vc" \
+    || fail "scripted issuance of $CONFIG (vc-stack/issue_and_verify.py issue)"
+  jq -e --arg u "$ctx_url" '."@context" | index($u)' "$REPO_ROOT/$smoke_vc" >/dev/null \
+    || fail "issued credential does not name $ctx_url in its @context"
+  issue_and_verify verify "$smoke_vc" "${TAMPER[@]}" || fail "verification of $CONFIG (vc-stack/issue_and_verify.py verify)"
+  rows_issued=$(issuance_rows) || fail "cannot count gateway.issuances"
+  [[ "$rows_issued" == "$((rows_before + 1))" ]] \
+    || fail "the Certify-path issuance of $CONFIG must add one gateway.issuances row (before: $rows_before, after: $rows_issued)"
+  ok "the Certify-path issuance of $CONFIG wrote one gateway.issuances row"
 
-# Each persona the Gateway's checklist refuses gets the OpenID4VCI error body with its code.
-for persona in "${REFUSED[@]}"; do
-  issue_and_verify refused "$INSTALLATION" "$persona" "$SCOPE" checklist_failed \
-    || fail "refused persona $persona through Certify (vc-stack/issue_and_verify.py refused ... checklist_failed)"
+  # Each persona the Gateway's checklist refuses gets the OpenID4VCI error body with its code.
+  for persona in "${REFUSED[@]}"; do
+    issue_and_verify refused "$INSTALLATION" "$persona" "$SCOPE" checklist_failed \
+      || fail "refused persona $persona for $CONFIG through Certify (vc-stack/issue_and_verify.py refused ... checklist_failed)"
+  done
+  rows_refused=$(issuance_rows) || fail "cannot count gateway.issuances"
+  [[ "$rows_refused" == "$rows_issued" ]] \
+    || fail "the refused personas of $CONFIG must add no gateway.issuances row (before: $rows_issued, after: $rows_refused)"
+  ok "the refused personas of $CONFIG wrote no gateway.issuances row"
 done
-rows_refused=$(issuance_rows) || fail "cannot count gateway.issuances"
-[[ "$rows_refused" == "$rows_issued" ]]   || fail "the refused personas must add no gateway.issuances row (before: $rows_issued, after: $rows_refused)"
-ok "the refused personas wrote no gateway.issuances row"
 
 # With the Gateway down, Certify still starts (the plugin calls nothing at startup) and a credential request is
 # gateway_error. The Gateway is started again whether or not the checks pass, so later steps still see it.
