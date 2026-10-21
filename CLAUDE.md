@@ -35,7 +35,8 @@ docker compose -f vc-stack/docker-compose.yaml up -d demo-app
 Tests are plain Python scripts, not pytest. Run one by name:
 
 ```sh
-./vc-stack/smoke.sh                                   # stack smoke checks over curl/jq; stack must be up; also runs the readiness script
+./vc-stack/smoke.sh                                   # stack smoke checks over curl/jq; stack must be up; also runs the readiness script and issue_and_verify.py
+python3 vc-stack/test_issue_and_verify.py             # issue_and_verify.py's token request, proof JWT and verify outcomes, HTTP mocked; needs portal/requirements.txt, no Docker
 python3 vc-stack/test_inji_web_vc_readiness.py        # config checks for the Inji Web download path, no Docker needed
 python3 vc-stack/test_inji_web_vc_readiness.py --live # same plus live Mimoto/Inji Web checks
 python3 vc-stack/test_installation_guard.py           # the scripts refuse a missing INSTALLATION; bash only, no Docker
@@ -47,6 +48,8 @@ python3 data/test_render_mimoto_issuers_config.py      # issuer-list rendering, 
 python3 vc-stack/test_context_refresh.py              # context_refresh.sql against a throwaway Postgres; needs Docker
 docker compose -f vc-stack/docker-compose.yaml run --rm --no-deps demo-app python portal/test_requests.py   # the in-container form
 ```
+
+`vc-stack/issue_and_verify.py` issues a credential without a browser (direct-access grant on the realm's test-only `smoke` client, an ES256 proof JWT as `did:jwk`, Certify's `/issuance/credential`), writes it to a file, then checks it in verify-service's `v2/vc-verification`: `SUCCESS`, and `ERR_SIGNATURE_VERIFICATION_FAILED` once one top-level claim is changed. It needs the stack up and runs inside the Docker network (Certify accepts only tokens issued as `http://keycloak:8080`) from the demo-app image, which carries `httpx` and `cryptography`; rebuild demo-app first if `portal/requirements.txt` changed. demo-app does not mount `vc-stack/`, so the run mounts the script; the exact commands are in its docstring and in `smoke.sh`.
 
 The full browser OAuth and PDF download is still manual (PRD §9); the readiness script only guards the misconfigurations that broke it before.
 

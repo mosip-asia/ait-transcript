@@ -93,6 +93,17 @@ auth_aud=$(curl -sf http://localhost:4004/v1/mimoto/issuers/AITUniversity | jq -
   || fail "authorization_audience must be keycloak:8080 token URL (got: ${auth_aud:-<empty>})"
 ok "Issuer authorization_audience matches Docker Keycloak token URL"
 
+# Scripted issuance, then verification with a tampered copy, inside the Docker network (see the script's docstring).
+issue_and_verify() {
+  docker compose run --rm --no-deps -T \
+    -v "$STACK_DIR/issue_and_verify.py:/demo/vc-stack/issue_and_verify.py:ro" \
+    demo-app python vc-stack/issue_and_verify.py "$@"
+}
+smoke_vc=.demo-state/smoke-credential.json
+issue_and_verify issue "$INSTALLATION" ait-2026-0001 ait_transcript_vc_ldp "$smoke_vc" \
+  || fail "scripted issuance (vc-stack/issue_and_verify.py issue)"
+issue_and_verify verify "$smoke_vc" || fail "credential verification (vc-stack/issue_and_verify.py verify)"
+
 python3 "$STACK_DIR/test_inji_web_vc_readiness.py" --live
 
 echo "All smoke checks passed."

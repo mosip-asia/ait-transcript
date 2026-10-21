@@ -39,6 +39,7 @@ jobs:
           for t in \
             vc-stack/test_inji_web_vc_readiness.py \
             vc-stack/test_installation_guard.py \
+            vc-stack/test_issue_and_verify.py \
             portal/test_auth.py \
             portal/test_requests.py \
             data/test_ait_courses.py \
