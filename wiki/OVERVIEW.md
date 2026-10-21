@@ -37,6 +37,11 @@ Vocabulary for the Issuer product is in [CONTEXT.md](../CONTEXT.md).
 - [Responsibilities](./project/issuer-v0.1/responsibilities.md) — who owns which component of the Issuer, the external contracts, the design decisions that bound v0.1, and the verifier conformance profile.
 - [Interface contracts](./project/issuer-v0.1/contracts.md) — sign-in, record data, admin API, VDR publishing, credential offer and deployment configuration, and who provides each.
 - [Deviations from the proposal](./project/issuer-v0.1/deviations.md) — every place v0.1 departs from the issuer proposal (PR 4), why, and when it is revisited.
+- [Hackathon chain spec](./project/issuer-v0.1/spec-hackathon-chain.md) — the buildable spec for the part of v0.1 deployed before the holidays: directory layout, Compose changes, mock adapter, Gateway checklist runner, Certify data-provider plugin, context fix, hackathon configurations, and what the configuration contract to infra must list, each with its acceptance check.
 - [Signing coverage](./research/signing-coverage.md) — why the transcript claims were not covered by the issuer signature, and the context fix chosen for v0.1.
+- [Certify data-provider plugin](./research/certify-data-provider-plugin.md) — the one-method SPI, how a plugin jar loads into the 0.14 image, what the CSV plugin does, the shipped REST example, and the loading risks with a sub-day test plan.
+- [JSON literals in Certify and Verify](./research/certify-json-literal.md) — Titanium JSON-LD 1.1 on both the signing and verifying paths accepts `@json`; versions, determinism caveats, and the Compose check that makes it observed.
+- [Pre-authorized flow and the data-provider plugin](./research/certify-preauth-flow.md) — why one Certify 0.14 cannot serve pre-authorized offers and wallet-initiated issuance together, the flow traced, and the costed alternatives for the hard copy.
+- [Hackathon credential configurations](./research/hackathon-configurations.md) — what VPID, Developer Passport and Achievement consist of in `ait-vc` today, and what a VCDM 2.0 migration into the Issuer changes.
 - [Diagrams](./diagrams/) — the issuer proposal overview and its ITserv view, in draw.io format.
 - [Schemas](./schemas/) — the transcript credential JSON Schema and examples (VCDM 1.1 variant), and the proposed corrected JSON-LD context.
