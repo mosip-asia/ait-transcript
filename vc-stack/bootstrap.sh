@@ -407,7 +407,7 @@ compose_up() {
 ensure_certify_nginx_up() {
   step "Certify nginx (depends on Docker DNS for upstream certify)"
   docker compose up -d certify
-  local deadline=$(( $(date +%s) + 120 ))
+  local deadline=$(( $(date +%s) + 300 ))
   while ! curl -sf -o /dev/null http://localhost:9091/.well-known/did.json; do
     if (( $(date +%s) > deadline )); then
       die "certify .well-known not reachable on :9091 — is certify healthy?" 2
