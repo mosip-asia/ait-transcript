@@ -97,7 +97,7 @@ To eliminate phishing risks and avoid maintaining extraneous external SMS gatewa
 
 1. **Modality 1: Claiming with a Digital Wallet (Standard OpenID4VCI)**:
    - **Target Audience**: Students, alumni, or faculty who use a digital wallet (e.g., Inji Mobile, Inji Web in persistent mode, or any compliant OpenID4VCI wallet).
-   - **Protocol Flow**: Standard **OpenID4VCI Authorization Code Flow**. The wallet initiates the connection to `issuer.credentials.ait.ac.th`, redirects the student to AIT Campus SSO via our OAuth Adapter (`oauth.credentials.ait.ac.th`, bridging campus directory / LDAP) for subject authentication, and receives the signed credential (JSON-LD / SD-JWT) cryptographically bound to the wallet’s private key.
+   - **Protocol Flow**: Standard **OpenID4VCI Authorization Code Flow**. The wallet initiates the connection to `issuer.credentials.ait.ac.th`, which redirects the student to the institutional Authorization Server (`oauth.credentials.ait.ac.th`) for subject authentication and authorization. Eligibility gating (academic standing, Senate graduation conferral, and financial holds) is evaluated directly by the Authorization Server during this OAuth flow before issuing access tokens with the required credential scope. Once authorized, Inji Certify receives the token, derives the student identifier strictly from the validated `sub` claim, queries the SIS Adapter for academic records, and signs the credential (JSON-LD / SD-JWT) cryptographically bound to the wallet’s private key.
    - **Metadata Discovery**: Exposes standard `.well-known/openid-credential-issuer` metadata detailing supported credential formats, cryptographic suites, and claim display properties.
    - **Presentation**: Presented dynamically to relying parties via OpenID4VP.
 
@@ -108,7 +108,7 @@ To eliminate phishing risks and avoid maintaining extraneous external SMS gatewa
    - **Execution Flow**:
      - The student navigates directly to the **Student VC Catalog** (hosted at `my.credentials.ait.ac.th` in Walletless Mode).
      - The catalog operates in **Walletless Mode** (powered by Inji Web configured to bypass wallet account creation).
-     - The student selects their credential (e.g., Official Academic Transcript), clicks **Claim**, and authenticates via familiar AIT Campus SSO through the OAuth Adapter (`oauth.credentials.ait.ac.th`).
+     - The student selects their credential (e.g., Official Academic Transcript), clicks **Claim**, and authenticates via familiar AIT Campus SSO through the Authorization Server (`oauth.credentials.ait.ac.th`).
      - Inji Certify signs the W3C Verifiable Credential, and the wallet presentation layer (Inji Web) compiles the signed claims, visual template, and verification QR code into an official, print-accurate **A4 Verifiable PDF**.
      - The student directly downloads the `.pdf` file to their local machine or smartphone.
    - **Lifespan Policy (Temporary / Time-Bound Expiration)**: Because digital PDF files and home-printed copies on plain paper are rarely carefully maintained—they are frequently left on public computers, forgotten in download folders, or forwarded insecurely—self-service downloads are configured with a **time-bound expiration window** (e.g., valid for 90 days via `validUntil`). If an employer or embassy scans a self-printed copy after 90 days, the verifier indicates that the temporary download has expired and instructs them to request a fresh copy (which active students and alumni can re-generate in 1 click via AIT SSO).
@@ -163,24 +163,25 @@ flowchart LR
 ```
 
 ### 3.1 Identity & Access Management (OAuth Adapter & Campus Directory)
-- **Subject Authentication & OAuth Adapter Architecture (`oauth.credentials.ait.ac.th`)**:
-  - *Decoupling from Legacy Protocols*: The exact URL and protocol of AIT's central Identity Provider are currently unconfirmed, but assumed to be institutional LDAP or Active Directory. Standard digital wallet issuance (OpenID4VCI) and modern web management consoles require standard OAuth 2.0 / OpenID Connect (OIDC).
-  - *Dedicated OAuth Adapter Deployment*: To isolate the VC Issuer stack from legacy directory protocols and avoid altering AIT's campus IT infrastructure, the project introduces a dedicated **OAuth Adapter** (leveraging **eSignet** or an equivalent OIDC bridge) deployed at **`oauth.credentials.ait.ac.th`**.
-  - *Protocol Translation & Downstream Bridging*:
-    - **Downstream**: The adapter interfaces directly with AIT's campus directory (assumed LDAP) to verify student and staff login credentials.
-    - **Upstream**: The adapter exposes standard OIDC endpoints (`/.well-known/openid-configuration`, `/authorize`, `/token`, `/userinfo`, `/jwks.json`) to Inji Certify, Inji Web (Student Catalog), and the AIT Admin Portal.
+- **Subject Authentication, Authorization & Scope Boundary (`oauth.credentials.ait.ac.th`)**:
+  - *Repository Scope Boundary*: The **OAuth / OIDC component is outside the scope of this repository**. It is treated as an external campus identity service exposing standard OIDC endpoints (`/.well-known/openid-configuration`, `/authorize`, `/token`, `/userinfo`, `/jwks.json`). It can be implemented using **Keycloak** (which natively supports LDAP/Active Directory user federation out of the box), **MOSIP eSignet** (with custom plugins or for national ID bridging), or another enterprise OIDC solution.
+  - *Unified Authentication & Authorization (Eligibility Gating)*:
+    - **Authentication (`authen`)**: Verifies student and staff campus credentials against the campus directory.
+    - **Authorization (`authorize` / Eligibility)**: Evaluates institutional eligibility (e.g., confirming student status, degree conferral, and zero outstanding administrative or financial holds) before issuing an access token with transcript credential scopes. If the user is ineligible, the Authorization Server rejects the token request at the source.
+    - **Upstream Integration**: Exposes standard OIDC endpoints to Inji Certify, Inji Web (Student Catalog), and the AIT Admin Portal.
   - *Forward Compatibility (Campus-Wide Identity Cards)*: While Phase 1 targets student academic transcripts, this identity boundary is architected for institutional extensibility. Extending authentication to the entire AIT community (students, faculty, and administrative staff) directly enables issuing **Verifiable Credentials for Institutional Identity Cards** (e.g., digital Student ID cards, Faculty & Staff credentials, and campus access passes) using the same core Issuer infrastructure.
 - **Authoritative Identity Binding**: Validates that the authenticated campus identity (`sub` claim in the OIDC ID token) matches the recipient's institutional identifier in the authoritative database (`studentId` in SIS or future `employeeId` in HRIS). Cryptographically binds the credential payload to the recipient (via wallet public key for in-wallet credentials, or directly in the signed verifiable document for PDF issuance).
-- **Middleware-Enabled Advanced Verification via eSignet (Future Capability)**:
-  - Higher-assurance verification mechanisms—such as photo liveness checks, facial biometric matching against institutional records, MOSIP identity bridging, or step-up MFA—are **not an operational responsibility of AIT IT**.
-  - *Enabled by the OAuth Adapter Layer*: Because the integration team owns the OAuth Adapter at `oauth.credentials.ait.ac.th` (leveraging eSignet or modular OAuth plugins), these advanced verification capabilities can be activated natively at the identity boundary with zero development burden or configuration changes required on AIT's central directory or Inji Certify.
+- **Advanced Identity Bridging & Future Capabilities**:
+  - Higher-assurance verification mechanisms—such as photo liveness checks, facial biometric matching, MOSIP identity bridging (e.g. via eSignet in Milestone 2), or step-up MFA—are isolated to this identity boundary.
+  - Because the Issuer stack strictly consumes standard OIDC tokens and validates signatures against the AS JWKS, advanced verification capabilities can be evolved at the identity boundary with zero development burden or configuration changes required in Inji Certify.
 
 ### 3.2 Student Information System (SIS) & Authoritative Data Ownership
 - **AIT Office of Student Affairs (OSA) as Authoritative Data Owner**:
   - The **AIT Office of Student Affairs (OSA)** is the institutional Data Owner for all official student academic records, grades, course histories, and degree conferrals.
   - The VC Issuer does not replace, alter, or maintain a secondary authoritative system of record; it strictly interfaces with SIS on demand to extract validated records for cryptographic signing.
-- **Co-Owned REST Adapter for Transparency & Auditability**:
+- **Focused REST Adapter (Anti-Corruption Layer)**:
   - To prevent tight coupling to legacy databases or custom vendor plugins, the integration plan establishes a **co-owned REST Adapter** (temporary hostname: `api.credentials.ait.ac.th`) functioning as an Anti-Corruption Layer between SIS and Inji Certify.
+  - *Single Responsibility*: The SIS Adapter does not manage authentication sessions or complex eligibility workflows; it strictly receives the validated student identifier (`sub`) extracted by Inji Certify and replies with the corresponding academic transcript data needed to populate the VC payload.
   - *Full Auditability for AIT OSA*: AIT OSA maintains complete transparency and governance over all data leaving the SIS boundary:
     - *Code & Query Inspection*: OSA can directly inspect the adapter's source code, including the exact SQL queries executed against the SIS database.
     - *Payload Verification*: OSA can audit and inspect the runtime query outputs and JSON payloads fetched during issuance events, guaranteeing that only explicitly authorized academic fields are exposed.
@@ -201,15 +202,15 @@ To ensure institutional sovereignty and facilitate a smooth long-term handover t
 
 ```mermaid
 flowchart LR
-  subgraph PolicyEngine["Function 1: Issuance Policy & Workflow Engine<br/>(Pre-Issuance Pipeline)"]
+  subgraph PolicyEngine["Function 1: Issuance Policy & Clearance Gate<br/>(Pre-Issuance Pipeline)"]
     direction TB
-    P1["1. Automated Checklist<br/>(SIS & Finance Checks)"]
-    P2["2. Request Queue & Review Page<br/>(Human-in-the-Loop Review)"]
-    P1 --> P2
+    P1["1. Automated Eligibility Checks<br/>(Graduation Conferral & Clearance)"]
+    P2["2. Exception Review Queue<br/>(Optional Human-in-the-Loop Review)"]
+    P1 -->|If Holds or Discrepancies| P2
   end
 
   subgraph CertifyBox["Inji Certify Engine<br/>(Cryptographic Core)"]
-    Certify["Signs & Issues VC<br/>(OpenID4VCI)"]
+    Certify["Signs & Issues VC<br/>(OpenID4VCI on Wallet Claim)"]
   end
 
   subgraph SharedData["Shared Operational Data Layer<br/>(Decoupled Database — Provisioned via Inji Certify Stack)"]
@@ -222,7 +223,8 @@ flowchart LR
     D_Revoke["Cryptographic<br/>Revocation Trigger"]
   end
 
-  P2 -->|"Approved by Officer"| Certify
+  P1 -->|"Straight-Through Cleared"| Certify
+  P2 -->|"Flagged Hold Cleared by Officer"| Certify
   Certify -->|"1. Persist Index & Metadata"| LocalPG
   D_Search -.->|"Query & Aggregate Data"| LocalPG
   D_Revoke -.->|"2. Revoke Status API (~60s Sync)"| Certify
@@ -231,14 +233,13 @@ flowchart LR
 
 #### Function 1: The Issuance Policy & Workflow Engine (Pre-Issuance Pipeline)
 - **Mission & Core Responsibilities**:
-  - Governs the end-to-end journey from **student request submission to cryptographic issuance** for both **Modality 1 (Digital Wallet Claiming via OpenID4VCI)** and **Modality 2 (Walletless Verifiable PDF)**.
-  - **Automated Prerequisite Checklist**:
-    - *Academic Eligibility*: Queries the SIS Adapter to confirm degree conferral, curriculum completion, and formal Senate graduation approval.
-    - *Financial Clearance*: Verifies zero outstanding tuition, library fines, or housing holds.
-  - **Dedicated Request Queue & Review Page (Human-in-the-Loop)**:
-    - Hosts the operational inbox where authorized AIT OSA officers review pending student claims and inspect checklist evaluation results.
-    - Officers click **Approve** (releasing the credential to Inji Certify for signing) or **Reject** (with audit reasons returned to the student).
-    - AIT retains full institutional autonomy to toggle this queue between manual review and automated straight-through issuance.
+  - Governs institutional eligibility before cryptographic issuance for both **Modality 1 (Digital Wallet Claiming via OpenID4VCI)** and **Modality 2 (Walletless Verifiable PDF)**.
+  - **Automated Straight-Through Issuance (Production Default)**:
+    - In standard production operations, issuance operates primarily on a straight-through model: when an eligible graduate logs in via Campus SSO, the Authorization Server validates their academic standing and clearance attributes. If fully cleared, authorization is granted immediately with zero manual staff friction.
+  - **Human-in-the-Loop Exception Queue (Audit & Discrepancy Handling)**:
+    - If a student record is flagged (e.g. outstanding library holds, pending bursar fees, or manual graduation audit requirements), the request is routed to an operational review inbox.
+    - Officers review the exception and click **Approve** (updating the clearance status attribute in the workflow/SIS system) or **Reject** (with audit reasons returned to the student).
+    - *Note on Architecture*: Officers do not "release" or push credentials directly to Inji Certify. Setting the clearance attribute enables the student to successfully authorize and claim their credential via the standard pull-based OpenID4VCI flow.
 - **Architectural Flexibility & Implementation Paths**:
   - **Option A (On-Prem Low-Code Orchestrator, e.g., On-Prem Windmill)**: A self-hosted visual workflow engine that provides the **approval inbox and review page natively out-of-the-box**. Campus staff can drag-and-drop checklist steps and modify approval routing without frontend or backend coding.
   - **Option B (Custom Declarative Python Engine Developed In-House)**: A lightweight policy runner embedded into the gateway that evaluates declarative YAML/JSON checklists and serves a streamlined review queue page.
@@ -338,7 +339,7 @@ flowchart TD
 | Capability Area | VC Ecosystem Facing (Boundary 1) | University Campus Facing (Boundary 2) |
 |---|---|---|
 | **Identity & Authentication** | Holder key binding, wallet DID negotiation | Campus SSO / Keycloak / LDAP student login |
-| **Protocol & Transport** | OpenID4VCI endpoints (`/credential`, `/token`) | Internal REST APIs, event queues, CSV ingestion |
+| **Protocol & Transport** | OpenID4VCI issuance endpoints (`/credential`, `/.well-known/...`); external AS handles `/token` | Internal REST APIs (SIS Adapter), event queues, CSV ingestion |
 | **Data & Claims** | W3C VCDM 2.0 / JSON-LD / SD-JWT schemas | SIS database queries, course catalog models |
 | **Pre-Issuance Policy & Pipeline (Function 1)** | OpenID4VCI credential offer & format validation | Pluggable policy engine (On-prem Windmill / declarative Python) with human-in-the-loop review queue |
 | **Operational Data Layer (Decoupled)** | Status list bit mapping (`studentId` $\leftrightarrow$ `statusListIndex`) | PostgreSQL operational persistence (zero grades/GPAs, administrative metadata only) |
@@ -381,14 +382,14 @@ flowchart TD
     subgraph DockerCompose["Docker Compose Stack (Internal HTTP Network)"]
       AdminApp["Admin VC Management Portal (:4100)<br/>• Restricted to Authorized OSA Officers<br/>• Function 1: Request Queue & Policy Review<br/>• Function 2: Registry Search & Revocation"]
 
-      Certify["Inji Certify Engine (:8090)<br/>• OpenID4VCI Endpoints (/token, /credential)<br/>• W3C VC Signing & Proof Generation<br/>• Bitstring Revocation Engine"]
+      Certify["Inji Certify Engine (:8090)<br/>• OpenID4VCI Credential Endpoint (/credential)<br/>• W3C VC Signing & Proof Generation<br/>• Bitstring Revocation Engine"]
 
       LocalPG[("Operational PostgreSQL (:5432)<br/>• Decoupled Shared Operational Ledger<br/>• Bitstring State & Index Mapping<br/>• Zero Grades / GPAs Stored")]
     end
 
     Proxy -->|portal.credentials.ait.ac.th| AdminApp
     Proxy -->|issuer.credentials.ait.ac.th| Certify
-    AdminApp -->|Internal API: Trigger Issuance / Revoke| Certify
+    AdminApp -->|Internal API: Revoke Credential| Certify
     Certify <--> LocalPG
     AdminApp <--> LocalPG
   end
@@ -403,7 +404,7 @@ flowchart TD
   subgraph ExternalServices["External Campus Infrastructure (Hosted Elsewhere)"]
     direction LR
     SIS["AIT SIS Adapter<br/>(temporary: api.credentials.ait.ac.th)"]
-    OAuthAdapter["OAuth Adapter (eSignet / OIDC)<br/>(oauth.credentials.ait.ac.th)<br/>↳ Bridges campus directory (assumed LDAP)"]
+    OAuthAdapter["OAuth Adapter (Out of Repo Scope)<br/>(oauth.credentials.ait.ac.th)<br/>↳ Keycloak / eSignet / Campus OIDC"]
   end
 
   Certify -->|Fetch Academic Records| SIS
@@ -421,18 +422,19 @@ flowchart TD
    - Binds to host ports `80` and `443` on the VM.
    - Terminates public HTTPS and automatically issues/renews **Let's Encrypt TLS certificates** strictly for the two subdomains served by this VM: `portal.credentials.ait.ac.th` and `issuer.credentials.ait.ac.th`.
    - Forwards traffic to internal Docker services over plain HTTP, eliminating the need to manage complex Java keystores (`.jks`) inside containers.
-   - Protects internal endpoints by blocking `/admin` and `/actuator` paths from unauthorized public networks.
+   - Enforces a **strict public ingress allowlist** on `issuer.credentials.ait.ac.th`, exposing only standard OpenID4VCI discovery and issuance endpoints (`/.well-known/*`, `/v1/certify/issuance/credential`) and static schema contexts. All internal operational APIs (`/v1/certify/ledger-search`, `/v1/certify/credentials/status`, `/actuator/*`, `/swagger-ui/*`) are strictly blocked from public ingress and accessible only within the internal Docker/campus network.
 
 2. **Inji Certify as the Pure Cryptographic & Signing Engine**:
    - Runs Spring Boot with an embedded Apache Tomcat web server (listening on internal HTTP `:8090`).
-   - **Owns 100% of OpenID4VCI**: Student wallets communicate directly with Certify through the edge proxy (`issuer.credentials.ait.ac.th`) for all protocol endpoints (`/.well-known/...`, `/token`, `/credential`).
-   - **Pure Cryptographic Output**: Certify accepts holder keys and academic claims, verifies OIDC tokens against the OAuth Adapter's JWKS (`oauth.credentials.ait.ac.th`), and signs W3C Verifiable Credentials (JSON-LD / SD-JWT). It has zero knowledge of visual styling or PDF compilation.
-   - **Relieved of User Authentication**: Certify strictly verifies signed OIDC tokens against `oauth.credentials.ait.ac.th`'s JWKS and signs W3C Verifiable Credentials.
-   - **Zero Recompilation for Authentication Upgrades**: When layering advanced verification (such as biometric face matching, MOSIP identity bridging, or step-up MFA via eSignet / our OAuth adapter), **zero code changes or redeployments** are required in Inji Certify or AIT's central directory.
+   - **Hosts OpenID4VCI Credential Issuance Endpoints**: Student wallets communicate directly with Certify through the edge proxy (`issuer.credentials.ait.ac.th`) for OpenID4VCI metadata and issuance (`/.well-known/openid-credential-issuer`, `/.well-known/did.json`, `/credential`). Protocol authentication and token issuance endpoints (`/authorize`, `/token`, and `/jwks.json`) are handled upstream by the Authorization Server (`oauth.credentials.ait.ac.th`).
+   - **Pure Cryptographic Output**: Certify accepts holder keys and academic claims, verifies OIDC tokens against the Authorization Server's JWKS (`oauth.credentials.ait.ac.th`), and signs W3C Verifiable Credentials (JSON-LD / SD-JWT). It has zero knowledge of visual styling or PDF compilation.
+   - **Relieved of User Authentication & Eligibility Gating**: Certify strictly verifies signed OIDC tokens against `oauth.credentials.ait.ac.th`'s JWKS and signs W3C Verifiable Credentials.
+   - **Zero Recompilation for Authentication Upgrades**: When layering advanced verification (such as biometric face matching, MOSIP identity bridging, or step-up MFA via external IdP / eSignet bridging), **zero code changes or redeployments** are required in Inji Certify or AIT's central directory.
    - **Stateless Operation**: Holds zero user sessions and sets zero cookies.
 
 3. **Stateless University Integration via Co-Owned REST Adapter (Temporary Hostname: `api.credentials.ait.ac.th`)**:
-   - Instead of coupling Inji Certify directly to legacy campus databases or custom Java plugins, Certify invokes an external, standard **REST Data Provider** (`GET /students/:id/transcript`).
+   - Instead of coupling Inji Certify directly to legacy campus databases or custom Java plugins, Certify validates the incoming access token against the Authorization Server's JWKS, extracts the student identifier strictly from the validated token's `sub` claim, and invokes the external **REST Data Provider** (`GET /students/{sub}/transcript`).
+   - **Single Responsibility**: Deriving `:id` strictly from the cryptographically validated token's `sub` claim eliminates client-side parameter tampering and IDOR vulnerabilities. The SIS Adapter strictly returns the corresponding student academic records to build the VC payload without managing auth sessions or eligibility business logic.
    - **Co-Owned by AIT OSA & Integration Team**: The **AIT SIS Adapter Middleware** acts as a transparent Anti-Corruption Layer. AIT OSA (authoritative Data Owner) retains full audit rights over the adapter's source code, SQL queries, and fetched JSON payloads to verify exactly what data leaves the SIS boundary.
    - **Strict Data Minimization & Privacy (Zero Redundant PII Storage)**: Inji Certify persists zero student grades, course lists, or GPAs—only retaining minimal identifiers (`studentId`, `name`, `school`) necessary for registrar search, filtering, and revocation lifecycle operations. Academic records are fetched on-the-fly at the millisecond of issuance.
    - **Multi-Credential & Multi-Device Governance**:
@@ -442,14 +444,14 @@ flowchart TD
 
 4. **The AIT Admin VC Management Portal (AIT OSA Governance & Control Center — `:4100`)**:
    - A dedicated web application serving strictly as the **administrative and governance control center for AIT OSA** at `portal.credentials.ait.ac.th`.
-   - **Restricted Staff Access**: Only authorized AIT OSA officers and administrators log in via Campus SSO through the OAuth Adapter (`oauth.credentials.ait.ac.th`).
+   - **Restricted Staff Access**: Only authorized AIT OSA officers and administrators log in via Campus SSO through the Authorization Server (`oauth.credentials.ait.ac.th`).
    - **Governance & Policy Scope (Unifying Functions 1 & 2)**:
      - *Function 1 (Pre-Issuance)*: Evaluates automated prerequisite checklists (academic Senate eligibility, financial clearance) and hosts the human-in-the-loop request review inbox where registrars approve or reject student claims.
      - *Function 2 (Post-Issuance)*: Directly queries the shared operational PostgreSQL database to search and filter issued credentials, displays aggregation KPI dashboards, and executes real-time Bitstring credential revocations (~60s sync with Certify).
 
 5. **The Student VC Catalog in Walletless Mode (`my.credentials.ait.ac.th`)**:
    - Powered by Inji Web configured in **Walletless Mode** (bypassing persistent wallet storage and PIN setup) at `my.credentials.ait.ac.th`.
-   - Students select the AIT Official Transcript, click Claim, authenticate with their familiar AIT Campus credentials via the OAuth Adapter (`oauth.credentials.ait.ac.th`), and claim their credential.
+   - Students select the AIT Official Transcript, click Claim, authenticate with their familiar AIT Campus credentials via the Authorization Server (`oauth.credentials.ait.ac.th`), and claim their credential.
    - **Client-Side / Wallet PDF Compilation**: When the student downloads their transcript, the wallet layer (Inji Web) compiles the signed VC claims and offline verification QR code into the VC Lab HTML template, generating the official A4 PDF directly for the student.
 
 6. **The Public CDN as VDR, Bitstring Status Cache & Presentation Template Host (Edge Offloading)**:
@@ -462,11 +464,11 @@ flowchart TD
 | Subdomain / URL | Target Component | Protocol & Ports | Hosting Location | Purpose |
 |---|---|---|---|---|
 | **`portal.credentials.ait.ac.th`** | Admin VC Management Portal | HTTPS (443) $\rightarrow$ `:4100` | 🖥️ **Issuer VM** | Administrative control center for AIT OSA to govern policies, review clearances, audit, and revoke credentials |
-| **`issuer.credentials.ait.ac.th`** | Inji Certify Engine | HTTPS (443) $\rightarrow$ `:8090` | 🖥️ **Issuer VM** | **Machine API Entrance**: OpenID4VCI machine-to-machine wallet endpoints (`/.well-known/openid-credential-issuer`, `/token`, `/credential`) |
+| **`issuer.credentials.ait.ac.th`** | Inji Certify Engine | HTTPS (443) $\rightarrow$ `:8090` | 🖥️ **Issuer VM** | **Machine API Entrance**: OpenID4VCI machine-to-machine wallet endpoints (`/.well-known/openid-credential-issuer`, `/.well-known/did.json`, `/credential`) |
 | **`credentials.ait.ac.th`** | VDR Root & Public Edge CDN | HTTPS (443) | ☁️ **External CDN / GCS** | **Canonical VDR, Bitstring Cache & Template Host**: Updated by the Issuer; serves `did.json`, cached Status Lists, and VC Lab presentation templates (`/templates/*`) to wallets and verifiers |
 | **`my.credentials.ait.ac.th`** | Student VC Catalog (Inji Web) | HTTPS (443) | 🌐 **Web Hosting / Cloud** | **Student Credential Portal**: Self-service student catalog running Inji Web in Walletless Mode (1-click transcript claim via SSO, instant PDF download) |
 | **`verify.credentials.ait.ac.th`** | AIT Web Verifier | HTTPS (443) | ⚡ **Google Cloud Run** | Stateless public verifier for printed PDF QR codes and uploaded documents ($0 scale-to-zero) |
-| **`oauth.credentials.ait.ac.th`** | OAuth / OIDC Adapter (eSignet) | HTTPS (443) | 🏫 **Campus IT / DMZ** | **Identity Adapter**: Bridges unconfirmed campus directory (assumed AIT LDAP) to standard OIDC authorization code flow & JWKS for Inji Certify, Inji Web, and Admin Portal |
+| **`oauth.credentials.ait.ac.th`** | Authorization Server / IdP Bridge (Out of Repo Scope) | HTTPS (443) | 🏫 **Campus IT / DMZ** | **Identity & Eligibility Authority**: Handles student/staff authen & authorize (eligibility checks) via standard OIDC (`/authorize`, `/token`, `/jwks.json`). Can be implemented via Keycloak, eSignet, or campus IdP bridge. |
 | **`api.credentials.ait.ac.th`** *(temporary)* | SIS Adapter Middleware | HTTP (Private VPC / `:8082`) | 🏫 **Campus IT (Ext.)** | Anti-Corruption Layer co-owned with AIT OSA for auditable database queries and clean JSON payload translation |
 | **`trust.credentials.ait.ac.th`** | AIT Institutional VCGA | HTTPS (443) | 🌐 **Consortium / Web** | **AIT-Owned Governance Registry**: Canonical schema registry, accreditation declarations, and credential governance policies owned and operated by AIT |
 
@@ -508,7 +510,7 @@ flowchart LR
   subgraph M1["Milestone 1: Integrate Boundary AIT"]
     direction TB
     M1_Data["AIT SIS Adapter Middleware<br/>(api.credentials.ait.ac.th)"]
-    M1_Id["OAuth Adapter / eSignet<br/>(oauth.credentials.ait.ac.th)"]
+    M1_Id["OAuth Adapter / Campus IdP<br/>(oauth.credentials.ait.ac.th)<br/>• Out of repo scope (Keycloak/eSignet/OIDC)"]
     M1_Gov["AIT OSA Admin Portal<br/>(Pre-Issuance & Revocation)"]
     M1_Trust["AIT Institutional VCGA<br/>(trust.credentials.ait.ac.th)<br/>• AIT-Owned Schema & Policies"]
     M1_Lab["VC Lab & Card Display Lab<br/>(A4 Template & Wallet Styling)"]
@@ -531,7 +533,7 @@ flowchart LR
 ### Milestone 1: Integrate Boundary AIT (Campus Systems & Governance)
 The foundational milestone focuses on **Integration Boundary 2 with AIT**, establishing the internal data pipelines, campus authentication, registrar governance, and presentation fidelity:
 1. **Academic Data Authority Integration**: Deploy the co-owned REST Adapter (`api.credentials.ait.ac.th`) to query the AIT Student Information System (SIS), guaranteeing full data auditability for the Office of Student Affairs (OSA) with zero persistent student PII in the issuer database.
-2. **Campus Identity Bridging**: Implement and deploy the dedicated OAuth Adapter (`oauth.credentials.ait.ac.th`, leveraging eSignet or modular OIDC) bridging AIT's campus directory (assumed LDAP) to standard OpenID Connect authorization code flow and JWKS.
+2. **Campus Identity & Eligibility Bridging**: Integrate with the institutional Authorization Server (`oauth.credentials.ait.ac.th`, an external component out of scope for this repository, achievable via Keycloak, eSignet, or campus IdP) to provide subject authentication and eligibility authorization checks prior to token issuance.
 3. **Institutional Governance & Console**: Deliver the unified AIT Admin Portal (`portal.credentials.ait.ac.th`):
    - *Function 1 (Pre-Issuance)*: Prerequisite checklist and human-in-the-loop registrar review queue.
    - *Function 2 (Post-Issuance)*: Historical student record search, aggregated analytics, and real-time cryptographic Bitstring revocation.
@@ -682,18 +684,18 @@ flowchart LR
 ```
 
 #### Why Revocation is Batched in Production
-In an active university, flipping bits one-by-one and immediately pushing to the public CDN creates severe operational anti-patterns:
-1. **Cryptographic Re-Signing Penalty**: Re-computing an Ed25519/ECDSA signature over the bitstring for every individual record wastes compute.
-2. **CDN Cache Thrashing**: Invalidation requests sent across 300+ global CDN nodes cause cache misses, high cache-purge API costs, and degraded verifier performance.
-3. **The Batch Publishing Solution**:
-   - Registrars flag revocations in the local PostgreSQL database throughout the day.
-   - An automated background worker runs periodically (e.g. hourly, nightly, or on registrar batch sign-off):
+Flipping bits and re-signing synchronously on every single individual revocation request creates operational inefficiencies:
+1. **Cryptographic Re-Signing Overhead**: Re-computing an Ed25519/ECDSA signature over the bitstring array on every individual revocation call wastes unnecessary compute.
+2. **CDN Cache Churn**: Purging edge caches on every single bit mutation can cause unnecessary cache thrashing.
+3. **The Automated Batch Cadence Solution (~60-Second Sync)**:
+   - When an authorized officer triggers a revocation via the Admin Console, Inji Certify logs the mutation in the operational ledger (`credential_status_transaction`).
+   - Inji Certify's automated background worker (`StatusListUpdateBatchJob`) runs on a regular **~60-second sync cycle**:
      1. Compiles all pending bit flips into the active bitstring array.
-     2. Performs **one** cryptographic signature using AIT's private key.
-     3. Uploads the compressed 0.8 KB static file to the public CDN / GCS bucket.
-     4. Sets the HTTP caching policy:
-        - **Permanent Transcripts**: `Cache-Control: public, max-age=86400` (24-hour cache).
-        - **Active Student IDs**: `Cache-Control: public, max-age=300` (5-minute cache).
+     2. Performs a single cryptographic re-signing operation using AIT's signing key.
+     3. Uploads the compressed 0.8 KB static Bitstring Status List file to the public CDN / VDR edge (`/status/transcripts/1`).
+     4. Sets an efficient HTTP caching policy:
+        - `Cache-Control: public, max-age=60, stale-while-revalidate=30` alongside `ETag` / `If-None-Match` support.
+        - This allows global verifiers to verify instantly from the nearest edge while ensuring revocations take effect worldwide within approximately one minute, without incurring CDN purge overhead.
 
 #### Architectural Benefits:
 - **Zero Verifier Load on VM**: Even during peak global hiring seasons when millions of employers scan transcripts, AIT's Issuer VM experiences zero traffic and zero CPU load.
