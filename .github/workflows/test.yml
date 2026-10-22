@@ -1,9 +1,11 @@
 # Tests only: never publishes images and never deploys (deploy.yml does that, by hand).
+# Most tests run locally (see CLAUDE.md); CI runs on merges, releases and by hand.
 name: Test
 
 on:
   push:
-    branches-ignore: [main]
+    branches: [main]
+    tags: ['v*']
   pull_request:
   workflow_dispatch:
 

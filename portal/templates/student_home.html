@@ -21,6 +21,7 @@
 {% endif %}
 
 {% if degree_views|length > 1 %}
+<nav class="subtitle" style="margin:0 0 1rem;">Jump to: {% for view in degree_views %}<a href="#degree-{{ view.degree.degreeId }}">{{ view.degree.level }}</a>{% if not loop.last %} · {% endif %}{% endfor %}</nav>
 {% set claimable = degree_views | selectattr('has_wallet_access') | list %}
 {% if claimable|length > 1 %}
 <p class="subtitle" style="margin:0 0 1.5rem;">You have Inji Web access for more than one degree below. Each uses its own Keycloak login, and switching straight from one to the other in the same tab gets refused with "already authenticated as different user". <a href="{{ claimable[0].claim_panel.keycloak_logout_url }}" target="_blank" rel="noopener">sign out here</a> in between.</p>

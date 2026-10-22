@@ -13,16 +13,28 @@
 #   /etc/ait-transcript-demo/app.env        public URLs, copied to vc-stack/.env
 #   /run/lock/transcript-demo-deploy.lock   a deploy and a boot-time restart never overlap
 #
-# Usage (as root, token on stdin): bash remote-deploy.sh <40-hex commit> <owner/repo> [wipe]
+# Usage (as root, token on stdin): bash remote-deploy.sh <40-hex commit> <owner/repo> [wipe] [installation]
 # "wipe" wipes the stack (vc-stack/bootstrap.sh --wipe --prepare: the Postgres volume is rebuilt from the seed, and the signing key and did:key are renewed) before the normal bring-up.
+# "installation" (ait or hackathon) overrides the installation in app.env.
 set -euo pipefail
 export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
 SHA="${1:-}"
 REPO="${2:-}"
-WIPE="${3:-}"
-if [[ ! "$SHA" =~ ^[0-9a-f]{40}$ ]] || [[ ! "$REPO" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]] || [[ -n "$WIPE" && "$WIPE" != "wipe" ]]; then
-  echo "usage: remote-deploy.sh <40-hex commit> <owner/repo> [wipe]" >&2
+shift 2 || { echo "usage: remote-deploy.sh <40-hex commit> <owner/repo> [wipe] [installation]" >&2; exit 2; }
+
+WIPE=""
+INSTALL_OVERRIDE=""
+for arg in "$@"; do
+  case "$arg" in
+    wipe) WIPE=wipe ;;
+    ait|hackathon) INSTALL_OVERRIDE="$arg" ;;
+    "") ;;
+    *) echo "unknown argument: $arg" >&2; exit 2 ;;
+  esac
+done
+if [[ ! "$SHA" =~ ^[0-9a-f]{40}$ ]] || [[ ! "$REPO" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]]; then
+  echo "usage: remote-deploy.sh <40-hex commit> <owner/repo> [wipe] [installation]" >&2
   exit 2
 fi
 if [ "$(id -u)" -ne 0 ]; then
@@ -86,6 +98,7 @@ docker network inspect "$NETWORK" >/dev/null 2>&1 || docker network create "$NET
 
 # Reboots regenerate app.env and run run-demo.sh with no variable, so keep the value in a marker file the checkout owns.
 INSTALLATION_NAME="$(awk -F= '$1 == "INSTALLATION" { value=$2 } END { print value }' "$APP_ENV" | tr -d '\r' | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"
+[ -n "$INSTALL_OVERRIDE" ] && INSTALLATION_NAME="$INSTALL_OVERRIDE"
 # bootstrap.sh sources installation.sh, which needs the marker, so write it before the wipe (the wipe does not delete it).
 printf '%s\n' "${INSTALLATION_NAME:-ait}" > vc-stack/.installation
 # The wipe deletes vc-stack/.env, so run it before copying app.env in (--prepare stops after the wipe and .env).
