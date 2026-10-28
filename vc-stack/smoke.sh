@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Automated smoke checks for Phase 1 (curl/jq). Run from vc-stack/ after bootstrap.
-# The same script for every installation: what differs comes from installations/$INSTALLATION (the realm and the
-# Mimoto issuer id, set by installation.sh, and smoke.json: a list with one entry per credential type, each with the
+# The same script for every installation: what differs comes from installations/$INSTALLATION (the stand-in realm and
+# the Mimoto issuer id, set by installation.sh, the Authorization Server settings, which must name the stand-in, and smoke.json: a list with one entry per credential type, each with the
 # credential configuration, its scope, the eligible persona (or a list of them), each refused persona with the check it fails, the claims
 # to tamper and, optionally, the Mimoto PDF template). Every issued, refused and tampered case runs for every type.
 set -euo pipefail
@@ -10,6 +10,7 @@ STACK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$STACK_DIR"
 REPO_ROOT="$(cd "$STACK_DIR/.." && pwd)"
 source "$STACK_DIR/installation.sh"
+load_auth_server_settings
 
 FIXTURES="$INSTALLATION_DIR/smoke.json"
 fixture() { jq -r "$1" "$FIXTURES"; }
@@ -56,9 +57,9 @@ for ((i = 0; i < TYPE_COUNT; i++)); do
 done
 
 auth_srv=$(echo "$issuer_json" | jq -r '.authorization_servers[0] // empty')
-[[ "$auth_srv" == "http://keycloak:8080/realms/$REALM" ]] \
-  || fail "Certify authorization_servers must be http://keycloak:8080/realms/$REALM (got: ${auth_srv:-<empty>})"
-ok "Certify OID4VCI authorization_servers use the Docker Keycloak URL of realm $REALM"
+[[ "$auth_srv" == "$AUTH_SERVER_ISSUER" ]] \
+  || fail "Certify authorization_servers must be AUTH_SERVER_ISSUER, $AUTH_SERVER_ISSUER (got: ${auth_srv:-<empty>})"
+ok "Certify OID4VCI authorization_servers name the configured issuer $AUTH_SERVER_ISSUER"
 
 # The Compose check of wiki/research/certify-json-literal.md section 4 runs below: step 2 here, steps 3 to 5
 # after issuance, step 1 (library versions) printed for the record.
@@ -123,12 +124,12 @@ grep -q 'GatewayDataProviderPlugin selected' <<<"$certify_log" || fail "the cert
 ok "Certify loads the Gateway plugin beside the four bundled jars"
 
 issuer=$(curl -sf "http://localhost:9080/realms/$REALM/.well-known/openid-configuration" | jq -r '.issuer')
-[[ "$issuer" == "http://keycloak:8080/realms/$REALM" ]] || fail "Keycloak issuer must be http://keycloak:8080/realms/$REALM (got: ${issuer:-<empty>})"
+[[ "$issuer" == "$AUTH_SERVER_ISSUER" ]] || fail "the stand-in realm $REALM must be the configured issuer $AUTH_SERVER_ISSUER (got: ${issuer:-<empty>})"
 ok "Keycloak OIDC issuer aligned for Mimoto token aud"
 
 auth_endpoint=$(curl -sf "http://localhost:4004/v1/mimoto/issuers/$ISSUER_ID/configuration" | jq -r '.response.authorization_endpoint // empty')
-[[ "$auth_endpoint" == http://localhost:9080/* ]] \
-  || fail "Inji Web auth URL must be http://localhost:9080/... (got: ${auth_endpoint:-<empty>})"
+[[ "$auth_endpoint" == "$AUTH_SERVER_PUBLIC_URL"/* ]] \
+  || fail "Inji Web auth URL must be $AUTH_SERVER_PUBLIC_URL/... (got: ${auth_endpoint:-<empty>})"
 ok "Mimoto exposes browser Keycloak auth URL for Inji Web"
 
 config_errors=$(curl -sf "http://localhost:4004/v1/mimoto/issuers/$ISSUER_ID/configuration" | jq -r '.errors | length')
@@ -143,9 +144,9 @@ token_ep=$(curl -sf "http://localhost:4004/v1/mimoto/issuers/$ISSUER_ID" | jq -r
 ok "Issuer token_endpoint uses Inji Web same-origin :4004"
 
 auth_aud=$(curl -sf "http://localhost:4004/v1/mimoto/issuers/$ISSUER_ID" | jq -r '.response.authorization_audience // empty')
-[[ "$auth_aud" == http://keycloak:8080/* ]] \
-  || fail "authorization_audience must be keycloak:8080 token URL (got: ${auth_aud:-<empty>})"
-ok "Issuer authorization_audience matches Docker Keycloak token URL"
+[[ "$auth_aud" == "$AUTH_SERVER_TOKEN_ENDPOINT" ]] \
+  || fail "authorization_audience must be AUTH_SERVER_TOKEN_ENDPOINT, $AUTH_SERVER_TOKEN_ENDPOINT (got: ${auth_aud:-<empty>})"
+ok "Issuer authorization_audience is the configured token endpoint"
 
 # The mock adapter answers contract 2b's three paths and a 404, and serves an edited CSV value at once. The edit
 # case runs on a copy of the CSV served by a second adapter container, so the installation's file is never rewritten.

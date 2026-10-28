@@ -5,7 +5,7 @@ location = /v1/mimoto/issuers {
     alias ${MOBILE_MOUNT}/mimoto-issuers-mobile.json;
 }
 
-# Certify's metadata names the Docker-internal Keycloak, which Mimoto needs; the phone needs the public one.
+# Certify's metadata names the issuer as the Docker network reaches it, which Mimoto needs; the phone needs the public one.
 location = /.well-known/openid-credential-issuer {
     set $certify_nginx_upstream certify-nginx:80;
     proxy_pass http://$certify_nginx_upstream;
@@ -17,5 +17,5 @@ location = /.well-known/openid-credential-issuer {
     proxy_set_header Connection "";
     proxy_set_header Accept-Encoding "";
     sub_filter_types application/json;
-    sub_filter '"authorization_servers":["${INTERNAL_AS}/realms/${REALM}"]' '"authorization_servers":["${KEYCLOAK_URL}/realms/${REALM}"]';
+    sub_filter '"authorization_servers":["${AUTH_SERVER_ISSUER}"]' '"authorization_servers":["${AUTH_SERVER_PUBLIC_URL}"]';
 }

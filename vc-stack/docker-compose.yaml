@@ -32,16 +32,14 @@ services:
       - enable_certify_artifactory=false
       - download_hsm_client=false
       - mosip_certify_domain_url=${CERTIFY_PUBLIC_BASE_URL:-http://certify-nginx}
-      # Keycloak's --hostname-url=http://keycloak:8080 (see keycloak-server service) makes every
-      # token it issues carry iss=http://keycloak:8080/realms/<realm>, regardless of which URL the
-      # browser used to log in (that's rewritten separately by keycloak-nginx's sub_filter for
-      # localhost:9080). Certify's resource-server issuer-uri must match that iss exactly or JWT
-      # validation fails — so it uses the same KEYCLOAK_DOCKER_AUTH_SERVER as the authorization URL,
-      # not KEYCLOAK_PUBLIC_BASE_URL. The realm is the installation's: its Certify properties build
-      # the authorization URL, issuer URI and JWK set URI from these two variables.
-      - KEYCLOAK_DOCKER_AUTH_SERVER=${KEYCLOAK_DOCKER_AUTH_SERVER:-http://keycloak:8080}
-      - KEYCLOAK_INTERNAL_BASE_URL=${KEYCLOAK_INTERNAL_BASE_URL:-http://host.docker.internal:9080}
-      - MOSIP_CERTIFY_AUTHN_ALLOWED_AUDIENCES={ 'wallet-demo', 'http://certify-nginx:80/v1/certify/issuance/credential', 'http://certify-nginx/v1/certify/issuance/credential', '${CERTIFY_PUBLIC_BASE_URL:-http://certify-nginx}/v1/certify/issuance/credential' }
+    # The Authorization Server: the installation's settings, each set per environment in .env. With the stand-in,
+    # Keycloak's --hostname-url=http://keycloak:8080 (see keycloak-server service) makes every token it issues carry
+    # iss=http://keycloak:8080/realms/<realm>, regardless of which URL the browser used to log in (that's rewritten
+    # separately by keycloak-nginx's sub_filter for localhost:9080). Certify's resource-server issuer-uri must match
+    # that iss exactly or JWT validation fails, so AUTH_SERVER_ISSUER is the Docker URL, not the browser's. The
+    # installation's Certify properties read the issuer, the JWK set URL and the wallet client (an allowed audience).
+    env_file:
+      - ../installations/${INSTALLATION}/authorization-server.env
     volumes:
       - ./config/certify-default.properties:/home/mosip/config/certify-default.properties
       - ../installations/${INSTALLATION}/certify-csvdp-student.properties:/home/mosip/config/certify-csvdp-student.properties
@@ -277,12 +275,14 @@ services:
       # of this compose file, localhost by default for local dev.
       - INJI_WEB_URL=${INJI_WEB_URL:-http://localhost:4004}
       - INJI_VERIFY_URL=${INJI_VERIFY_URL:-http://localhost:4007}
-      - KEYCLOAK_PUBLIC_BASE_URL=${KEYCLOAK_PUBLIC_BASE_URL:-http://localhost:9080}
-      # Only data/render_mimoto_issuers_config.py reads these two (phone-only gateway files).
+      # Only data/render_mimoto_issuers_config.py reads this one (phone-only gateway files).
       - CERTIFY_PUBLIC_BASE_URL=${CERTIFY_PUBLIC_BASE_URL:-http://certify-nginx}
-      - KEYCLOAK_DOCKER_AUTH_SERVER=${KEYCLOAK_DOCKER_AUTH_SERVER:-http://keycloak:8080}
       # Which installations/ directory data/render_mimoto_issuers_config.py renders into.
       - INSTALLATION=${INSTALLATION}
+    # The Authorization Server's settings: the sign-out link (portal/requests.py), the issuer-list render, and the
+    # smoke's token request (vc-stack/issue_and_verify.py runs in this image).
+    env_file:
+      - ../installations/${INSTALLATION}/authorization-server.env
     volumes:
       - ../portal:/demo/portal
       - ../data:/demo/data
@@ -293,7 +293,7 @@ services:
       - network
     # Server-to-server calls to Certify's ledger-search/credentials/status (registrar VC lifecycle);
     # student-facing wallet/verify links are still browser-only deep links, built from
-    # INJI_WEB_URL/INJI_VERIFY_URL/KEYCLOAK_PUBLIC_BASE_URL above (see portal/requests.py).
+    # INJI_WEB_URL/INJI_VERIFY_URL and AUTH_SERVER_PUBLIC_URL above (see portal/requests.py).
 
   # Mock data adapter (contracts.md section 2b): read-only, reads the installation's CSV on every request.
   # Reached as http://adapter:8000 from the other services; no host port.

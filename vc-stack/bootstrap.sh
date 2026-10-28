@@ -50,14 +50,6 @@ warn() { printf "  %s!%s %s\n" "$YLW" "$RST" "$*"; }
 die()  { printf "  %sx%s %s\n" "$RED" "$RST" "$*" >&2; exit "${2:-1}"; }
 skip() { printf "  %s·%s %s\n" "$DIM" "$RST" "$*"; }
 
-keycloak_expected_issuer() {
-  local pub
-  pub="$(env_value KEYCLOAK_PUBLIC_BASE_URL)"
-  [[ -n "$pub" ]] || pub="$LOCAL_KEYCLOAK_PUBLIC_BASE_URL"
-  pub="${pub%/}"
-  printf "%s%s" "$pub" "$KEYCLOAK_REALM_PATH"
-}
-
 # JSON-LD context URL baked into every transcript VC (the AIT installation's; context_refresh.sql moves only that row). Local runs keep the Docker-only name (nothing but
 # containers reads it). Both go through the public gateway's /contexts/ route to the vdr container. A public
 # deployment (CERTIFY_PUBLIC_BASE_URL is https) uses the api. gateway's public name, so a phone can load the
@@ -95,7 +87,8 @@ done
 
 source "$STACK_DIR/installation.sh"
 
-KEYCLOAK_TOKEN_URL="http://host.docker.internal:9080/realms/$REALM/protocol/openid-connect/token"
+# The stand-in Keycloak's own realm, for its health checks; what Certify and Mimoto trust is the installation's
+# Authorization Server settings (load_auth_server_settings, installation.sh).
 KEYCLOAK_REALM_PATH="/realms/$REALM"
 
 # -------- preflight --------
@@ -311,7 +304,7 @@ configure_mode() {
       ok "mimoto-issuers-config.json already targets esignet-mock"
     else
       # B → A
-      sed -i.bak "s|$KEYCLOAK_TOKEN_URL|$ESIGNET_TOKEN_URL|g" "$INSTALLATION_DIR/mimoto-issuers-config.json"
+      sed -i.bak "s|$AUTH_SERVER_TOKEN_ENDPOINT|$ESIGNET_TOKEN_URL|g" "$INSTALLATION_DIR/mimoto-issuers-config.json"
       rm -f "$INSTALLATION_DIR/mimoto-issuers-config.json.bak"
       ok "rewrote issuers config: keycloak → esignet-mock"
     fi
@@ -329,13 +322,16 @@ services:
 EOF
     ok "wrote $OVERRIDE_FILE"
   else
-    # Mode B: issuers must point at keycloak; remove any override file from a prior Mode A run
+    # Mode B: issuers must point at the installation's Authorization Server; remove any override file from a prior Mode A run
     local tmp public_base_url token_endpoint authorization_audience proxy_token_endpoint credential_issuer_host wellknown_endpoint redirect_uri
     public_base_url="$(env_value PUBLIC_BASE_URL)"
     if [[ -n "$public_base_url" ]]; then
       public_base_url="${public_base_url%/}"
       token_endpoint="$public_base_url/v1/mimoto/get-token/$ISSUER_ID"
-      authorization_audience="$public_base_url$KEYCLOAK_REALM_PATH/protocol/openid-connect/token"
+      # The stand-in's token endpoint is served on the single public host; any other server's stays as configured.
+      authorization_audience="$AUTH_SERVER_TOKEN_ENDPOINT"
+      [[ "$AUTH_SERVER_TOKEN_ENDPOINT" == "$KEYCLOAK_DOCKER_AUTH_SERVER"/* ]] \
+        && authorization_audience="$public_base_url/${AUTH_SERVER_TOKEN_ENDPOINT#"$KEYCLOAK_DOCKER_AUTH_SERVER"/}"
       proxy_token_endpoint="$authorization_audience"
       credential_issuer_host="$public_base_url"
       wellknown_endpoint="$public_base_url/.well-known/openid-credential-issuer"
@@ -343,7 +339,7 @@ EOF
     else
       token_endpoint="$LOCAL_MIMOTO_PUBLIC_BASE_URL/v1/mimoto/get-token/$ISSUER_ID"
       # Mimoto 0.21.x uses auth-server well-known token_endpoint for JWT aud (must match Keycloak :9080), not these fields alone.
-      authorization_audience="$KEYCLOAK_DOCKER_AUTH_SERVER$KEYCLOAK_REALM_PATH/protocol/openid-connect/token"
+      authorization_audience="$AUTH_SERVER_TOKEN_ENDPOINT"
       proxy_token_endpoint="$authorization_audience"
       redirect_uri="$LOCAL_INJI_WEB_OAUTH_REDIRECT_URI"
       # Mimoto (in Docker) reaches host-published Certify via host.docker.internal.
@@ -371,7 +367,7 @@ EOF
     if [[ -n "$public_base_url" ]]; then
       ok "mimoto-issuers-config.json targets $public_base_url"
     else
-      ok "mimoto-issuers-config.json targets local Keycloak and Certify"
+      ok "mimoto-issuers-config.json targets $AUTH_SERVER_ISSUER and local Certify"
     fi
     if [[ -f "$OVERRIDE_FILE" ]]; then
       rm "$OVERRIDE_FILE"
@@ -614,9 +610,8 @@ validate() {
     kc_iss=$(curl -sf "http://localhost:9080$KEYCLOAK_REALM_PATH/.well-known/openid-configuration" | jq -r '.issuer')
     expected_kc_iss="$KEYCLOAK_DOCKER_AUTH_SERVER$KEYCLOAK_REALM_PATH"
     [[ "$kc_iss" == "$expected_kc_iss" ]] && ok "keycloak realm: $kc_iss (browser :9080, token aud via keycloak:8080)" || die "keycloak issuer wrong: $kc_iss (expected $expected_kc_iss)" 2
-    # The browser-facing Keycloak base: KEYCLOAK_PUBLIC_BASE_URL from .env on a
-    # public deploy, http://localhost:9080 locally (keycloak_expected_issuer).
-    expected_auth_prefix="$(keycloak_expected_issuer)/"
+    # The configured server as a browser reaches it: the stand-in's KEYCLOAK_PUBLIC_BASE_URL realm by default.
+    expected_auth_prefix="$AUTH_SERVER_PUBLIC_URL/"
     auth_endpoint=$(curl -sS "http://localhost:4004/v1/mimoto/issuers/$ISSUER_ID/configuration" | jq -r '.response.authorization_endpoint // empty')
     [[ -n "$auth_endpoint" ]] \
       && [[ "$auth_endpoint" == "$expected_auth_prefix"* ]] \
@@ -648,8 +643,8 @@ validate() {
 
 # -------- main --------
 main() {
-  if (( ONLY_VALIDATE )); then validate; exit 0; fi
-  if (( ONLY_DID ));      then did_refresh; context_refresh; validate; exit 0; fi
+  if (( ONLY_VALIDATE )); then load_auth_server_settings; validate; exit 0; fi
+  if (( ONLY_DID ));      then load_auth_server_settings; did_refresh; context_refresh; validate; exit 0; fi
 
   preflight
   (( DO_WIPE )) && do_wipe
@@ -658,6 +653,7 @@ main() {
   ensure_installation_env
   gen_network
   if (( ONLY_PREPARE )); then exit 0; fi
+  load_auth_server_settings
   gen_keystore
   gen_client_cert
   sync_realm_cert

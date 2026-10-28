@@ -1,8 +1,8 @@
 """Scripted issuance and verification for vc-stack/smoke.sh, without a browser or a wallet.
 
-issue:  a token from the installation's realm (direct-access grant on the test-only `smoke` client, for the
-        persona and the credential scope), a proof JWT signed with a fresh key as did:jwk, Certify's
-        /issuance/credential; the credential is written to a file.
+issue:  a token from the installation's stand-in realm (direct-access grant on the test-only `smoke` client at
+        AUTH_SERVER_TOKEN_ENDPOINT, for the persona and the credential scope), a proof JWT signed with a fresh key
+        as did:jwk, Certify's /issuance/credential; the credential is written to a file.
 verify: verify-service's v2 vc-verification must answer SUCCESS for that file, and
         ERR_SIGNATURE_VERIFICATION_FAILED for each copy with one claim changed: the holder DID
         (credentialSubject.id) and each claim path given (the installation's smoke.json `tamper`, e.g. fullName
@@ -14,8 +14,8 @@ Deviation from the ticket's "Ed25519": the proof key is ES256 (P-256), because t
 allows RS256/ES256 only, and Inji Web uses ES256.
 
 It runs in the demo-app image (httpx, cryptography) inside the Docker network, where the URLs below resolve and
-the token issuer is http://keycloak:8080 (the one Certify accepts), from the repository root (it reads
-installations/<name>/keycloak-realm.json). demo-app does not mount vc-stack/, so the run mounts this file:
+demo-app's environment carries AUTH_SERVER_TOKEN_ENDPOINT (from the installation's authorization-server.env), from
+the repository root: it reads the personas' passwords from installations/<name>/keycloak-realm.json. demo-app does not mount vc-stack/, so the run mounts this file:
 
   docker compose -f vc-stack/docker-compose.yaml run --rm --no-deps \\
       -v "$PWD/vc-stack/issue_and_verify.py:/demo/vc-stack/issue_and_verify.py:ro" demo-app \\
@@ -41,8 +41,6 @@ from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.hazmat.primitives.asymmetric.utils import decode_dss_signature
 
-# The same variable sets Certify's accepted token issuer (docker-compose.yaml).
-KEYCLOAK = os.environ.get("KEYCLOAK_DOCKER_AUTH_SERVER", "http://keycloak:8080")
 CERTIFY = "http://certify-nginx"
 VERIFY_SERVICE = "http://verify-service:8080"
 SMOKE_CLIENT = "smoke"
@@ -63,10 +61,10 @@ def _b64url_json(obj: dict) -> str:
     return _b64url(json.dumps(obj, separators=(",", ":")).encode())
 
 
-def request_token(client: httpx.Client, realm: str, persona: str, password: str, scope: str) -> dict:
+def request_token(client: httpx.Client, token_endpoint: str, persona: str, password: str, scope: str) -> dict:
     """Direct-access grant on the test-only smoke client; the response carries the access token and c_nonce."""
     return _json(client.post(
-        f"{KEYCLOAK}/realms/{realm}/protocol/openid-connect/token",
+        token_endpoint,
         data={"grant_type": "password", "client_id": SMOKE_CLIENT, "username": persona, "password": password,
               "scope": scope},
     ))
@@ -93,7 +91,7 @@ def credential_request(client: httpx.Client, installation: str, persona: str, sc
     config = next(c for c in metadata["credential_configurations_supported"].values() if c.get("scope") == scope)
     definition = config["credential_definition"]
 
-    token = request_token(client, realm["realm"], persona, password, scope)
+    token = request_token(client, os.environ["AUTH_SERVER_TOKEN_ENDPOINT"], persona, password, scope)
     proof = build_proof(ec.generate_private_key(ec.SECP256R1()), SMOKE_CLIENT, metadata["credential_issuer"],
                         token["c_nonce"], int(time.time()))
     return client.post(

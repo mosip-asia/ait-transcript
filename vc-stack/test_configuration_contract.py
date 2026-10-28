@@ -83,8 +83,13 @@ def compose_rows() -> set[tuple[str, str, str, str, str]]:
 
 
 def compose_variables() -> set[str]:
-    """Every ${VARIABLE} Compose interpolates from vc-stack/.env or the environment."""
+    """Every ${VARIABLE} Compose interpolates from vc-stack/.env or the environment, in the file or its env files."""
     found: set[str] = set()
+    for spec in compose()["services"].values():
+        for env_file in spec.get("env_file", []):
+            for name in NAMES:
+                found.update(VARIABLE.findall((REPO_ROOT / repo_path(env_file).replace("<name>", name))
+                                              .read_text(encoding="utf-8")))
 
     def walk(node: object) -> None:
         if isinstance(node, dict):

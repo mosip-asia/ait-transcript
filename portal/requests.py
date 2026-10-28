@@ -16,15 +16,17 @@ STATUS_REJECTED = "rejected"
 # defaults for local dev, set in vc-stack/.env for a public deployment.
 INJI_WEB_URL = os.environ.get("INJI_WEB_URL", "http://localhost:4004")
 INJI_VERIFY_URL = os.environ.get("INJI_VERIFY_URL", "http://localhost:4007")
-KEYCLOAK_PUBLIC_BASE_URL = os.environ.get("KEYCLOAK_PUBLIC_BASE_URL", "http://localhost:9080")
+# The installation's Authorization Server, from its authorization-server.env (Compose's env_file); no host default.
+AUTH_SERVER_PUBLIC_URL = os.environ.get("AUTH_SERVER_PUBLIC_URL", "")
+AUTH_SERVER_WALLET_CLIENT_ID = os.environ.get("AUTH_SERVER_WALLET_CLIENT_ID", "")
 KEYCLOAK_DEMO_PASSWORD = "inji"
 # Keycloak's browser flow has the Cookie/SSO step disabled (see installations/ait/
 # keycloak-realm.json's "browser-no-sso" flow), so switching to a *different* degree's
 # identity in the same tab needs an explicit sign-out first — otherwise Keycloak refuses
 # with "already authenticated as different user" rather than silently mismatching.
 KEYCLOAK_LOGOUT_URL = (
-    KEYCLOAK_PUBLIC_BASE_URL + "/realms/inji/protocol/openid-connect/logout"
-    "?client_id=wallet-demo&post_logout_redirect_uri=" + INJI_WEB_URL + "/redirect"
+    AUTH_SERVER_PUBLIC_URL + "/protocol/openid-connect/logout"
+    "?client_id=" + AUTH_SERVER_WALLET_CLIENT_ID + "&post_logout_redirect_uri=" + INJI_WEB_URL + "/redirect"
 )
 
 # ponytail: fixed TTL guard, not a retry/cancel flow — if Certify's status-list

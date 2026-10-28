@@ -50,15 +50,20 @@ Every environment variable, env file, mounted file and host port of the Compose 
 
 ### Compose variables
 
-Compose substitutes these from `vc-stack/.env` (written by `bootstrap.sh` with the local defaults, copied from the VM's `app.env` by the `Deploy` workflow).
+Compose substitutes these from `vc-stack/.env` (written by `bootstrap.sh` with the local defaults, copied from the VM's `app.env` by the `Deploy` workflow), in the Compose file and in the installation's `authorization-server.env`.
 
 | Variable | Used by | Local default | A deployment sets |
 |---|---|---|---|
 | `INSTALLATION` | every per-installation mount and env file; `demo-app` | none, required | `ait` or `hackathon` |
 | `CERTIFY_PUBLIC_BASE_URL` | `certify` (domain URL, allowed audience), `demo-app` | `http://certify-nginx` | Certify's public base URL: the public gateway's hostname (ask 1, [URLs](#urls-in-credentials-or-fetched-by-verifiers)) |
-| `KEYCLOAK_DOCKER_AUTH_SERVER` | `certify` (authorization URL, issuer URI), `keycloak-server` (`--hostname-url`), `demo-app` | `http://keycloak:8080` | the Authorization Server's issuer base; tokens carry `iss=<this>/realms/<realm>` (ask 1) |
-| `KEYCLOAK_INTERNAL_BASE_URL` | `certify` (JWK set URI) | `http://host.docker.internal:9080` | a URL from which Certify fetches the realm's keys |
-| `KEYCLOAK_PUBLIC_BASE_URL` | `keycloak-server` (`--hostname-admin-url`), `keycloak`, `mimoto-service`, `demo-app` | `http://localhost:9080` | Keycloak's browser-facing URL |
+| `AUTH_SERVER_ISSUER` | `certify`, `demo-app`, through `authorization-server.env` | the stand-in realm's ([Authorization Server](#authorization-server)) | the environment's Authorization Server, when it is not the stand-in (ask 1) |
+| `AUTH_SERVER_JWKS_URL` | `certify`, `demo-app`, through `authorization-server.env` | the stand-in realm's ([Authorization Server](#authorization-server)) | the environment's Authorization Server, when it is not the stand-in |
+| `AUTH_SERVER_TOKEN_ENDPOINT` | `certify`, `demo-app`, through `authorization-server.env` | the stand-in realm's ([Authorization Server](#authorization-server)) | the environment's Authorization Server, when it is not the stand-in |
+| `AUTH_SERVER_PUBLIC_URL` | `certify`, `demo-app`, through `authorization-server.env` | the stand-in realm's ([Authorization Server](#authorization-server)) | the environment's Authorization Server, when it is not the stand-in |
+| `AUTH_SERVER_WALLET_CLIENT_ID` | `certify`, `demo-app`, through `authorization-server.env` | the stand-in realm's ([Authorization Server](#authorization-server)) | the environment's Authorization Server, when it is not the stand-in |
+| `KEYCLOAK_DOCKER_AUTH_SERVER` | `keycloak-server` (`--hostname-url`); the stand-in values of `AUTH_SERVER_ISSUER` and `AUTH_SERVER_TOKEN_ENDPOINT` | `http://keycloak:8080` | the stand-in's issuer base; its tokens carry `iss=<this>/realms/<realm>` |
+| `KEYCLOAK_INTERNAL_BASE_URL` | the stand-in value of `AUTH_SERVER_JWKS_URL` | `http://host.docker.internal:9080` | a URL from which Certify fetches the stand-in realm's keys |
+| `KEYCLOAK_PUBLIC_BASE_URL` | `keycloak-server` (`--hostname-admin-url`), `keycloak`, `mimoto-service`; the stand-in value of `AUTH_SERVER_PUBLIC_URL` | `http://localhost:9080` | the stand-in Keycloak's browser-facing URL |
 | `INJI_WEB_URL` | `mimoto-service`, `inji-web`, `demo-app` | `http://localhost:4004` | test harness only |
 | `INJI_VERIFY_URL` | `demo-app` | `http://localhost:4007` | the Verify UI's public URL |
 | `INJI_VERIFY_PUBLIC_BASE_URL` | `verify-service` | `http://localhost:9095` | the verifier service's URL |
@@ -95,11 +100,14 @@ Runs as `root` with `host.docker.internal` mapped to the host (the local context
 | env | `enable_certify_artifactory` | | shared | `false`: configuration from the mounts, nothing downloaded |
 | env | `download_hsm_client` | | shared | `false`; a PKCS#11 deployment changes it (ask 2) |
 | env | `mosip_certify_domain_url` | | environment | From `CERTIFY_PUBLIC_BASE_URL`: the credential issuer and the host of every status-list URL |
-| env | `KEYCLOAK_DOCKER_AUTH_SERVER` | | environment | The properties build the authorization URL and issuer URI from it |
-| env | `KEYCLOAK_INTERNAL_BASE_URL` | | environment | The properties build the JWK set URI from it |
-| env | `MOSIP_CERTIFY_AUTHN_ALLOWED_AUDIENCES` | | environment | The token audiences Certify accepts: `wallet-demo`, the in-network credential endpoints and `<CERTIFY_PUBLIC_BASE_URL>/v1/certify/issuance/credential` |
+| env_file | `installations/<name>/authorization-server.env` | | installation | The Authorization Server's five settings ([Authorization Server](#authorization-server)), each overridable in `vc-stack/.env` |
+| env | `AUTH_SERVER_ISSUER` | | installation | The properties' authorization URL and issuer URI |
+| env | `AUTH_SERVER_JWKS_URL` | | installation | The properties' JWK set URI |
+| env | `AUTH_SERVER_TOKEN_ENDPOINT` | | installation | Not read by Certify |
+| env | `AUTH_SERVER_PUBLIC_URL` | | installation | Not read by Certify |
+| env | `AUTH_SERVER_WALLET_CLIENT_ID` | | installation | The first of the properties' allowed audiences |
 | mount | `/home/mosip/config/certify-default.properties` | `vc-stack/config/certify-default.properties` | shared | Base settings: database, keystore (type, path, password), cache, status list |
-| mount | `/home/mosip/config/certify-csvdp-student.properties` | `installations/<name>/certify-csvdp-student.properties` | installation | The per-instance properties: the Authorization Server (realm, issuer URI, JWK set URI), the plugin's six keys including the Gateway token, the issuer display, `did-url`, the indexed mappings. `bootstrap.sh` rewrites its `did-url` line after a fresh keystore |
+| mount | `/home/mosip/config/certify-csvdp-student.properties` | `installations/<name>/certify-csvdp-student.properties` | installation | The per-instance properties: the Authorization Server keys read from the settings (authorization URL, issuer URI, JWK set URI, and the allowed audiences: the wallet client, the in-network credential endpoints and `<CERTIFY_PUBLIC_BASE_URL>/v1/certify/issuance/credential`), the plugin's six keys including the Gateway token, the issuer display, `did-url`, the indexed mappings. `bootstrap.sh` rewrites its `did-url` line after a fresh keystore |
 | mount | `/home/inji/CERTIFY_PKCS12` | `vc-stack/data/CERTIFY_PKCS12` | shared | The keystore directory; Certify creates `local.p12`, the signing key, on first start (git-ignored; ask 2) |
 | mount | `/home/mosip/config/vp_request_config.json` | `vc-stack/config/vp_request_config.json` | shared | Stock Certify file |
 | mount | `/home/inji/additional_jars/gateway-data-provider-plugin.jar` | `vc-stack/plugins/gateway-data-provider-plugin.jar` | shared | The plugin jar, a single read-only file ([Plugin jar](#plugin-jar)) |
@@ -219,10 +227,14 @@ The Portal. Its image already contains `portal/` and `data/`; the source mounts 
 | env | `AIT_DEMO_DB` | | shared | `/demo/.demo-state/demo_requests.db`, the request database (SQLite) |
 | env | `INJI_WEB_URL` | | environment | Student deep links (test harness) |
 | env | `INJI_VERIFY_URL` | | environment | Links to the Verify UI |
-| env | `KEYCLOAK_PUBLIC_BASE_URL` | | environment | The sign-out link |
 | env | `CERTIFY_PUBLIC_BASE_URL` | | environment | Read only by the issuer-list render |
-| env | `KEYCLOAK_DOCKER_AUTH_SERVER` | | environment | Read only by the issuer-list render |
 | env | `INSTALLATION` | | installation | Which directory the render writes into |
+| env_file | `installations/<name>/authorization-server.env` | | installation | The Authorization Server's five settings ([Authorization Server](#authorization-server)), each overridable in `vc-stack/.env` |
+| env | `AUTH_SERVER_ISSUER` | | installation | The issuer-list render (phone metadata) |
+| env | `AUTH_SERVER_JWKS_URL` | | installation | Not read |
+| env | `AUTH_SERVER_TOKEN_ENDPOINT` | | installation | The issuer-list render, and the smoke's token request (`vc-stack/issue_and_verify.py` runs in this image) |
+| env | `AUTH_SERVER_PUBLIC_URL` | | installation | The sign-out link, and the issuer-list render (phone metadata) |
+| env | `AUTH_SERVER_WALLET_CLIENT_ID` | | installation | The sign-out link, and the issuer-list render |
 | mount | `/demo/portal` | `portal` | shared | Development only |
 | mount | `/demo/data` | `data` | shared | Development only |
 | mount | `/demo/.demo-state` | `.demo-state` | shared | The request database; persistent |
@@ -282,7 +294,7 @@ The values in `installations/<name>/`; each directory's `README.md` lists its fi
 
 | Setting | `ait` | `hackathon` |
 |---|---|---|
-| Keycloak realm (Authorization Server) | `inji` | `hackathon` |
+| Stand-in Keycloak realm, the default Authorization Server ([Authorization Server](#authorization-server)) | `inji` | `hackathon` |
 | Scopes | `ait_transcript_vc_ldp` | `developer_passport_vc_ldp`, `achievement_certificate_vc_ldp` |
 | Credential configurations and types | `ait-transcript` (`AitTranscriptCredential`) | `developer-passport` (`DeveloperPassportCredential`), `achievement-certificate` (`AchievementCertificateCredential`) |
 | JSON-LD contexts (`vc-lab/contexts/`) | `transcript/v1.json` | `developer-passport/v1.json`, `achievement/v1.json` |
@@ -294,6 +306,20 @@ The values in `installations/<name>/`; each directory's `README.md` lists its fi
 | Wallet client; test-only client | `wallet-demo`; `smoke` | `wallet-demo`; `smoke` |
 | Mimoto issuer template (local only) | `mimoto-issuers-config.json.template` (issuer id `AITUniversity`) and `public-gateway-mobile.conf.template` | `mimoto-issuers-config.json.template` (issuer id `AITHackathon`) |
 | Test fixtures | `smoke.json` | `smoke.json` |
+
+## Authorization Server
+
+What an installation trusts is five settings in `installations/<name>/authorization-server.env`, the only configuration files that name a realm path. Compose reads that file as an `env_file` of `certify` and `demo-app`; `bootstrap.sh` and `smoke.sh` read it back through `docker compose config`, so every reader sees the same values. Each line is `KEY=${KEY:-<stand-in value>}`: an environment that sets the variable in `vc-stack/.env` (on the VM, `app.env`) wins, and one that does not runs against the installation's stand-in Keycloak realm. Pointing an installation at another server, the campus realm for instance, is setting the five variables there; no file changes. The stand-in values follow the `KEYCLOAK_*` [Compose variables](#compose-variables).
+
+| Setting | Read by | `ait`, local and CI | `hackathon`, local and CI | Another environment |
+|---|---|---|---|---|
+| `AUTH_SERVER_ISSUER` | Certify (`mosip.certify.authorization.url`, `mosip.certify.authn.issuer-uri`, so its metadata's `authorization_servers`); the phone metadata's rewrite | `http://keycloak:8080/realms/inji` | `http://keycloak:8080/realms/hackathon` | The server's issuer, exactly as its tokens carry `iss`, reachable from Mimoto in the network |
+| `AUTH_SERVER_JWKS_URL` | Certify (`mosip.certify.authn.jwk-set-uri`) | `http://host.docker.internal:9080/realms/inji/protocol/openid-connect/certs` | `http://host.docker.internal:9080/realms/hackathon/protocol/openid-connect/certs` | The server's JWKS URL, reachable from Certify |
+| `AUTH_SERVER_TOKEN_ENDPOINT` | Mimoto's issuer list (`authorization_audience`, `proxy_token_endpoint`), rendered by `data/render_mimoto_issuers_config.py` and patched by `bootstrap.sh`; the smoke's token request | `http://keycloak:8080/realms/inji/protocol/openid-connect/token` | `http://keycloak:8080/realms/hackathon/protocol/openid-connect/token` | The server's token endpoint, reachable in the network |
+| `AUTH_SERVER_PUBLIC_URL` | The Portal's sign-out link; `bootstrap.sh` and `smoke.sh` (Mimoto's `authorization_endpoint` must start with it); the phone metadata | `http://localhost:9080/realms/inji` | `http://localhost:9080/realms/hackathon` | The issuer as a browser reaches it; for a server with one public name, the issuer itself |
+| `AUTH_SERVER_WALLET_CLIENT_ID` | Mimoto's issuer list (`client_id`); Certify's first allowed audience; the Portal's sign-out link | `wallet-demo` | `wallet-demo` | The client the server registers for Mimoto (test harness) |
+
+Dev runs the stand-in today: `app.env` sets no `AUTH_SERVER_*` variable, so its values are the stand-in's with the VM's `KEYCLOAK_PUBLIC_BASE_URL`. `smoke.sh` runs only against the stand-in, because its direct-access grant on the `smoke` client needs the realm's test users; it fails unless the stand-in realm is the configured issuer. The Keycloak containers keep running whichever server is configured.
 
 ## Secrets
 
@@ -322,8 +348,8 @@ Each needs a stable public hostname from the first real issuance (ask 1). Dev an
 | JSON-LD context, one per credential type | The template's `@context` and the row's `context` column in `installations/<name>/certify_seed.sql` | `http://host.docker.internal:9098/contexts/<type>/v1.json`, through `public-gateway` to `vdr` | Embedded in every credential; fetched by every verifier |
 | Status-list URL | Certify, from `mosip_certify_domain_url` (`CERTIFY_PUBLIC_BASE_URL`) | `http://certify-nginx/v1/certify/credentials/status-list/<id>` | Embedded in every credential (`credentialStatus.statusListCredential`); fetched by every verifier for revocation |
 | Issuer identifier | `mosip.certify.data-provider-plugin.did-url` in the installation's properties and every `credential_config` row, refreshed by `bootstrap.sh` from the live keystore | `did:key:…` | Embedded; a `did:key` needs no host, the `did:web` that arrives with the mock VDR publisher task resolves on its host's `/.well-known/did.json` |
-| Credential issuer (OpenID4VCI) | `mosip.certify.identifier`, Certify's domain URL | `http://certify-nginx` | Wallets fetch its metadata. It is not the access tokens' audience: Certify accepts a token whose `aud` holds one of `MOSIP_CERTIFY_AUTHN_ALLOWED_AUDIENCES`, which are `wallet-demo` (the wallet client's own audience mapper, in both realms) and the credential endpoint `…/v1/certify/issuance/credential`, in the network or on `CERTIFY_PUBLIC_BASE_URL` (the `smoke` client's mapper and, in `hackathon`, both scopes' mappers add `http://certify-nginx/v1/certify/issuance/credential`) |
-| The Authorization Server's issuer | `KEYCLOAK_DOCKER_AUTH_SERVER` plus `/realms/<realm>` | `http://keycloak:8080/realms/<realm>` | In every access token and Certify's metadata; Certify's issuer URI must equal it |
+| Credential issuer (OpenID4VCI) | `mosip.certify.identifier`, Certify's domain URL | `http://certify-nginx` | Wallets fetch its metadata. It is not the access tokens' audience: Certify accepts a token whose `aud` holds one of `mosip.certify.authn.allowed-audiences` in the installation's properties, which are the wallet client (`AUTH_SERVER_WALLET_CLIENT_ID`, `wallet-demo` in both stand-in realms, whose client has its own audience mapper) and the credential endpoint `…/v1/certify/issuance/credential`, in the network or on `CERTIFY_PUBLIC_BASE_URL` (the `smoke` client's mapper and, in `hackathon`, both scopes' mappers add `http://certify-nginx/v1/certify/issuance/credential`) |
+| The Authorization Server's issuer | `AUTH_SERVER_ISSUER` ([Authorization Server](#authorization-server)) | `http://keycloak:8080/realms/<realm>` | In every access token and Certify's metadata; Certify's issuer URI must equal it |
 
 In a deployment every context URL is `<CERTIFY_PUBLIC_BASE_URL>/contexts/<type>/v1.json`, so Certify's public base URL is the public gateway's hostname: `public-gateway` is the only service that routes `/contexts/` (to `vdr`; `certify-nginx` has no such route), and it also forwards Certify's OpenID4VCI paths, so one host serves the credential issuer, the status lists and the contexts. What that host must block is in [Ingress allowlist](#ingress-allowlist). `bootstrap.sh` enforces the rule: its validation fails unless every `credential_config` row's `context` is `<base>/contexts/<type>/v<n>.json,https://www.w3.org/ns/credentials/v2` and the issuer metadata lists the same `@context`, the base being taken from `STUDENT_CONTEXT_URL` in `.env` when set, else from `CERTIFY_PUBLIC_BASE_URL` when it is `https`, else the local `http://host.docker.internal:9098`.
 
@@ -355,16 +381,16 @@ One pod per Certify instance, because two things live in the pod. The cache: wit
 ## Start order and readiness
 
 1. Postgres first. Its init scripts and the installation's seed run on an empty data directory only, so a changed seed needs a fresh database. Certify and the Gateway need it; the Gateway restarts until it connects.
-2. Keycloak (`keycloak-server`, then its nginx) before Certify validates tokens: Certify fetches the realm's keys from `KEYCLOAK_INTERNAL_BASE_URL`.
+2. Keycloak (`keycloak-server`, then its nginx) before Certify validates tokens: Certify fetches the server's keys from `AUTH_SERVER_JWKS_URL`.
 3. Certify, then `certify-nginx`; the adapter and the Gateway in any order (neither the Gateway nor the plugin calls anything at startup); `vdr` before `public-gateway`.
 4. `certify-nginx`, `keycloak` and `public-gateway` name their upstreams through variables with `resolver 127.0.0.11 valid=10s`, so they re-resolve per request (cached ten seconds) and follow a recreated upstream without a restart. `127.0.0.11` is Docker's embedded DNS and exists only under Docker; elsewhere that line names the platform's resolver. What does not re-resolve is restarted by `bootstrap.sh`: `verify-ui`'s stock proxy to `verify-service`, and the harness's Mimoto (it loads Certify's metadata at start) and Inji Web (`vc-stack/nginx.conf` names `mimoto-service` directly). In Mode B, its default and the Keycloak mode this chain runs, it restarts `keycloak`, `certify-nginx`, `mimoto-service`, `inji-web`, `public-gateway` and `verify-ui` after every bring-up; Mode A (`--mode=a`, the eSignet mock) restarts only `mimoto-service`, `inji-web` and `verify-ui`. A deployment without `bootstrap.sh` restarts `verify-ui` after recreating `verify-service`.
 5. After a fresh keystore (first start, or a wipe), `bootstrap.sh` reads the live `did:key` from `/.well-known/did.json`, writes it into every `credential_config` row and the properties' `did-url`, and restarts Certify. With a key held by infra (ask 2), `did-url` is set once.
-6. Certify caches its credential configurations: a changed row needs Certify restarted (and Mimoto, in the harness). A changed jar needs Certify recreated; a changed realm, `keycloak-server` recreated; a changed `gateway.env`, the Gateway recreated; a changed adapter CSV, nothing.
+6. Certify caches its credential configurations: a changed row needs Certify restarted (and Mimoto, in the harness). A changed jar needs Certify recreated; a changed realm, `keycloak-server` recreated; a changed `gateway.env`, the Gateway recreated; a changed Authorization Server setting, Certify and `demo-app` recreated and the issuer list rendered again (`run-demo.sh`); a changed adapter CSV, nothing.
 
 ## Test-only items and what a deployment replaces
 
 - The `smoke` client in each realm is a test-only client: public, direct-access grant, used only by `vc-stack/issue_and_verify.py` through `smoke.sh`. Infra disables or removes it where it decides.
-- The realm users are fixtures: one per adapter row, sequential usernames, every password `inji`. A deployment imports a realm built from its real roster or students, with per-user passwords or federated sign-in, or points Certify at another Authorization Server (eSignet is the swap of three lines in the Certify properties).
+- The realm users are fixtures: one per adapter row, sequential usernames, every password `inji`. A deployment imports a realm built from its real roster or students, with per-user passwords or federated sign-in, or points the installation at another Authorization Server through its settings ([Authorization Server](#authorization-server)); eSignet is such a change.
 - The `wallet-demo` client allows the redirect URI and web origin `*`; a deployment lists its wallets' own.
 - Every committed secret ([Secrets](#secrets)), including the two Gateway tokens; the Gateway's superuser database access.
 - Development modes: Keycloak's `start-dev`, the Portal's `--reload` and source mounts, `certify-nginx`'s `Authorization` logging and its index of the configuration directory.
@@ -376,7 +402,7 @@ One pod per Certify instance, because two things live in the pod. The cache: wit
 
 - [Service set and images](#service-set-and-images): the service names equal Compose's, and each Image cell equals the service's `image`, or `built from <Dockerfile path>`.
 - [Per service](#per-service-environment-files-and-ports): the rows (service, Kind, Name, Scope, and Source for a mount) equal Compose's: the name of every `environment` entry; every `env_file` path, and the variable names in it, read from every installation's `gateway.env` (which must all name the same variables); every volume's container target and its source as a repository path, `<name>` for the installation; and every `ports` entry as written. Scope is derived from the Compose value or source: `installation` when it contains `${INSTALLATION}`, `environment` for any other `${…}`, else `shared`.
-- [Compose variables](#compose-variables): the Variable column equals the `${…}` names Compose interpolates.
+- [Compose variables](#compose-variables): the Variable column equals the `${…}` names Compose interpolates, in the Compose file and in every installation's env files.
 - [Ingress allowlist](#ingress-allowlist): the host ports equal Compose's published host ports, each with its service, and each Exposure is `public` or `internal`.
 
-It does not check values (environment values, Compose defaults, "A deployment sets", the Notes column), command flags such as Keycloak's, mount options, the allowlist's paths or whether a port's exposure is right, any URL (the URL table, the context URLs, the nginx routes), the [Secrets](#secrets), the [Per-installation settings](#per-installation-settings), or the start order and scaling text. Last run 2026-10-21: pass. The secrets, URLs and per-installation settings were checked by hand against `installations/ait/`, `installations/hackathon/` and `vc-stack/config/` on 2026-10-21.
+It does not check values (environment values, Compose defaults, "A deployment sets", the Notes column), command flags such as Keycloak's, mount options, the allowlist's paths or whether a port's exposure is right, any URL (the URL table, the context URLs, the nginx routes), the [Secrets](#secrets), the [Per-installation settings](#per-installation-settings), or the start order and scaling text. Last run 2026-10-28: pass. The secrets, URLs and per-installation settings were checked by hand against `installations/ait/`, `installations/hackathon/` and `vc-stack/config/` on 2026-10-21.

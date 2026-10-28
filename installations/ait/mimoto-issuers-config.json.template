@@ -16,11 +16,11 @@
           "language": "en"
         }
       ],
-      "client_id": "wallet-demo",
+      "client_id": "${AUTH_SERVER_WALLET_CLIENT_ID}",
       "redirect_uri": "${INJI_WEB_URL}/redirect",
       "token_endpoint": "${INJI_WEB_URL}/v1/mimoto/get-token/AITUniversity",
-      "authorization_audience": "http://keycloak:8080/realms/inji/protocol/openid-connect/token",
-      "proxy_token_endpoint": "http://keycloak:8080/realms/inji/protocol/openid-connect/token",
+      "authorization_audience": "${AUTH_SERVER_TOKEN_ENDPOINT}",
+      "proxy_token_endpoint": "${AUTH_SERVER_TOKEN_ENDPOINT}",
       "client_alias": "wallet-demo-client",
       "qr_code_type": "EmbeddedVC",
       "credential_issuer_host": "http://host.docker.internal:9091",

@@ -6,7 +6,8 @@ How the infra team deploys this directory (the service set, every variable and m
 
 | File | Read by | Notes |
 |---|---|---|
-| `certify-csvdp-student.properties` | Certify (`csvdp-student` profile) | Certify's settings, including the authorization server (realm `inji`) and the Gateway data-provider plugin's six keys (below); `bootstrap.sh` rewrites `did-url` after a wipe |
+| `certify-csvdp-student.properties` | Certify (`csvdp-student` profile) | Certify's settings, including the Authorization Server keys (read from `authorization-server.env`) and the Gateway data-provider plugin's six keys (below); `bootstrap.sh` rewrites `did-url` after a wipe |
+| `authorization-server.env` | Certify and the Portal (`demo-app`), through Compose's `env_file`; `bootstrap.sh`, `smoke.sh` | The Authorization Server this installation trusts: issuer, JWKS URL, token endpoint, browser URL and wallet client id, each `${KEY:-<stand-in realm `inji`'s value>}`. An environment points the installation at another server by setting the same variable in `vc-stack/.env` (the VM's `app.env`), with no file changed. Certify's properties, Mimoto's issuer template and the Portal's sign-out link read these settings; the configuration contract's Authorization Server section lists them |
 | `certify_seed.sql` | Postgres, first start only | The `credential_config` row for `ait-transcript`, mounted after `vc-stack/certify_init.sql` |
 | `keycloak-realm.json` | Keycloak (`--import-realm`) | Realm `inji`: one user per CSV `id`, the `wallet-demo` client, the test-only `smoke` client, the `ait_transcript_vc_ldp` scope. `bootstrap.sh` syncs the `wallet-demo` certificate into it |
 | `gateway.env` | The Gateway (`gateway/`), through Compose's `env_file` | Its settings, listed below |
@@ -18,6 +19,7 @@ How the infra team deploys this directory (the service set, every variable and m
 
 The installation's own values:
 
+- Authorization Server: the stand-in Keycloak realm `inji` (`http://keycloak:8080/realms/inji`) unless the environment sets `AUTH_SERVER_*` in `vc-stack/.env`; see `authorization-server.env`
 - Keycloak realm: `inji`, with wallet client `wallet-demo`; every user's password is `inji` (test-only)
 - Test-only client `smoke`: public, direct-access grant, the `ait_transcript_vc_ldp` scope and a hardcoded `client_id` claim; only `vc-stack/issue_and_verify.py` (run by `smoke.sh`) uses it
 - Scope: `ait_transcript_vc_ldp`

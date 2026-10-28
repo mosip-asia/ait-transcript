@@ -2,7 +2,8 @@
 # INSTALLATION names the directory under installations/ that docker-compose.yaml
 # mounts; the environment wins over vc-stack/.env, which wins over the marker file
 # vc-stack/.installation. Exits when it names no directory,
-# otherwise exports INSTALLATION (for Compose) and sets INSTALLATION_DIR, REALM and ISSUER_ID.
+# otherwise exports INSTALLATION (for Compose) and sets INSTALLATION_DIR, REALM and ISSUER_ID, and defines
+# load_auth_server_settings.
 
 STACK_ENV="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/.env"
 
@@ -26,6 +27,20 @@ if [[ -z "$INSTALLATION" || ! -d "$(dirname "$STACK_ENV")/../installations/$INST
 fi
 INSTALLATION_DIR="$(cd "$(dirname "$STACK_ENV")/../installations/$INSTALLATION" && pwd)"
 export INSTALLATION
-# The installation's Keycloak realm and Mimoto issuer id.
+# The installation's stand-in Keycloak realm and Mimoto issuer id.
 REALM="$(jq -r .realm "$INSTALLATION_DIR/keycloak-realm.json")"
 ISSUER_ID="$(jq -r '.issuers[0].issuer_id' "$INSTALLATION_DIR/mimoto-issuers-config.json.template")"
+
+# Sets every key of the installation's authorization-server.env (AUTH_SERVER_ISSUER, AUTH_SERVER_TOKEN_ENDPOINT, ...)
+# to the value Certify runs with: read back through `docker compose config`, so .env's per-environment values win
+# exactly as they do in the containers. Call it from vc-stack/ once .env exists.
+load_auth_server_settings() {
+  local resolved key value
+  resolved=$(docker compose config --format json | jq -c '.services.certify.environment') \
+    || { echo "docker compose config failed: cannot read the Authorization Server settings" >&2; exit 1; }
+  for key in $(tr -d '\r' <"$INSTALLATION_DIR/authorization-server.env" | awk -F= '/^AUTH_SERVER_/ { print $1 }'); do
+    value=$(jq -r --arg key "$key" '.[$key] // empty' <<<"$resolved")
+    [[ -n "$value" ]] || { echo "$key is empty: set it in vc-stack/.env or $INSTALLATION_DIR/authorization-server.env" >&2; exit 1; }
+    printf -v "$key" '%s' "$value"
+  done
+}
