@@ -11,7 +11,7 @@ Milestones that bound it:
 | Plugin go/no-go | 2026-11-13 | One transcript issued end to end through the Gateway by the REST plugin, or v0.1 falls back to the Postgres data-provider plugin fed by the Gateway |
 | Handover to infra | 2026-11-20 | Configuration contract delivered; stable public hostnames and signing-key custody asked |
 | Hackathon chain deadline | 2026-12-18 | Both installations deployed by infra; the only hard date in v0.1 |
-| Hackathon dry run | 2026-12-31 | Run by the hackathon organiser, not by us; needs the chain deployed |
+| Hackathon dry run | 2026-12-31 | Run by the hackathon organiser, not by Thas; needs the chain deployed |
 
 ## Problem Statement
 
@@ -34,7 +34,7 @@ One Issuer, two installations that differ only in configuration. A wallet signs 
 7. As a hackathon organiser, I want a participant's eligibility to be decided the moment they ask, so that there is no approval queue to staff during the event.
 8. As a hackathon organiser, I want the credentials my participants hold to carry a revocation entry, so that a wrongly issued credential can be revoked later.
 9. As a hackathon organiser, I want one issuer identity and one issuer display for both credential types, so that participants see one organiser, not two.
-10. As a hackathon organiser, I want participants to sign in through a Keycloak realm we run, so that the dry run does not depend on another track's sign-in server being ready.
+10. As a hackathon organiser, I want participants to sign in through a Keycloak realm Thas runs, so that the dry run does not depend on another track's sign-in server being ready.
 11. As a wallet developer, I want the hackathon Certify's issuer metadata to list exactly the two credential types with their scopes and display metadata, so that my wallet can render the offer without special cases.
 12. As a wallet developer, I want a refused request to come back as a standard OpenID4VCI error body, so that my wallet shows a failure instead of hanging or crashing.
 13. As a verifier operator, I want to verify a Developer Passport, an Achievement or a transcript with a stock JSON-LD 1.1 verifier by fetching the context, the status list and the issuer's DID document from public URLs, so that I never have to ask the Issuer.
@@ -90,7 +90,7 @@ Each `installations/<name>/` directory carries a short `README.md` naming its fi
 ### Compose changes
 
 - One `docker-compose.yaml`, no profiles, no second file. An `INSTALLATION` variable in `vc-stack/.env` names the directory under `installations/` that every per-installation mount and `env_file` reads from. Locally one installation runs at a time; `./run-demo.sh` and `bootstrap.sh` take the variable and refuse to start when it names no directory.
-- New services: `gateway` (our image, built from `gateway/`), `adapter` (our image, built from `adapter/`, bind-mounting the installation's CSV), `vdr` (stock nginx, serving `vc-lab/contexts/` read-only under `/contexts/`). All three join `vc_stack_network`; `gateway` also reaches Certify's Postgres.
+- New services: `gateway` (Thas's image, built from `gateway/`), `adapter` (Thas's image, built from `adapter/`, bind-mounting the installation's CSV), `vdr` (stock nginx, serving `vc-lab/contexts/` read-only under `/contexts/`). All three join `vc_stack_network`; `gateway` also reaches Certify's Postgres.
 - Certify: the plugin jar is mounted as a single file into `/home/mosip/additional_jars/`, never as a directory, so the four jars bundled in `inji-certify-with-plugins:0.14.0` stay visible. The per-installation properties file replaces today's `certify-csvdp-student.properties` and selects `GatewayDataProviderPlugin` with the four `mosip.certify.gateway.*` keys of `contracts.md` section 2a. Certify's seed SQL (the `credential_config` rows) comes from the installation directory.
 - Keycloak: the realm file comes from the installation directory (`inji` for AIT, `hackathon` for the hackathon). The hardcoded `client_id` protocol mapper the demo realm already carries for the wallet client is kept in both realms, as `contracts.md` section 1 requires of every client that obtains tokens for Certify.
 - Public gateway (nginx): routes `/contexts/` to the `vdr` container. The `/academic-transcript-context.json` and `/student-context.json` locations go, with the `certify-nginx` static context route and `vc-stack/config/academic-transcript-context.json`.
@@ -205,7 +205,7 @@ Accepted when:
 It must list:
 
 - The service set of an installation, identical for both: Certify (listed once per instance; one instance per installation in this chain) with its nginx, Postgres, Gateway, adapter, `vdr`, Keycloak with its nginx, Verifier service and UI, Portal, public gateway. Mimoto and Inji Web are marked local test harness, not deployed.
-- Every image and tag: the stock ones pinned as today, and the two we build (Gateway, Portal), with where CI publishes them.
+- Every image and tag: the stock ones pinned as today, and the two Thas builds (Gateway, Portal), with where CI publishes them.
 - The plugin jar: that it is one generic artifact, how infra receives it (the proposed default is a CI artifact of the tagged commit), and that it is mounted as a single file at Certify's `additional_jars/` path, never as a directory.
 - Per service, the environment variables and the mounted files, with which come from `installations/<name>/` and which are the same everywhere; for Certify, the per-instance properties file, the seed SQL, the keystore mount and the audience and issuer settings that name the Authorization Server.
 - Per-installation settings as a table with the two columns `ait` and `hackathon`: realm, scopes, credential types, adapter CSV, enabled Gateway types, Mimoto issuer template (local only).

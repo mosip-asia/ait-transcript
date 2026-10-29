@@ -6,17 +6,17 @@ Paths and field names follow `proposal-issuer.md` (PR 4) where it gives them. An
 
 | # | Contract | Provider | Consumer | v0.1 stand-in |
 |---|---|---|---|---|
-| 1 | Sign-in (OpenID Connect) | Authorization Server (campus IT; Track 2 for the hackathon) | Certify, Portal, wallets | Keycloak, our realm configuration |
-| 2a | Record lookup | Gateway (ours) | Certify's data-provider plugin | — |
-| 2b | Data adapter | Jo and Boss | Gateway | CSV-backed mock (ours) |
-| 3 | Issuer admin API | Gateway (ours) | Portal; Track 4 successor | — |
-| 4 | Publishing | VDR (Jo) | Issuer (Gateway, VC Lab) | Mock VDR publisher (ours), which is also the specification |
-| 5 | Credential offer | Certify (ours to configure) | Any OpenID4VCI wallet | Inji Web and Mimoto, in local Compose only |
-| 6 | Deployment configuration | Issuer (ours) | Infra team | — |
+| 1 | Sign-in (OpenID Connect) | Authorization Server (campus IT; Track 2 for the hackathon) | Certify, Portal, wallets | Keycloak, Thas's realm configuration |
+| 2a | Record lookup | Gateway (Thas's) | Certify's data-provider plugin | — |
+| 2b | Data adapter | Jo and Boss | Gateway | CSV-backed mock (Thas's) |
+| 3 | Issuer admin API | Gateway (Thas's) | Portal; Track 4 successor | — |
+| 4 | Publishing | VDR (Jo) | Issuer (Gateway, VC Lab) | Mock VDR publisher (Thas's), which is also the specification |
+| 5 | Credential offer | Certify (Thas's to configure) | Any OpenID4VCI wallet | Inji Web and Mimoto, in local Compose only |
+| 6 | Deployment configuration | Issuer (Thas's) | Infra team | — |
 
 ## 1. Sign-in (OpenID Connect)
 
-Served in v0.1 by Keycloak (stock image, our configuration): realm `inji` for the AIT installation, with directory federation on the campus side; realm `hackathon` for the hackathon installation by default, with eSignet from Track 2 as the swap below if it is delivered in time (decided 2026-10-20). Authentik is the prime candidate after v0.1.
+Served in v0.1 by Keycloak (stock image, Thas's configuration): realm `inji` for the AIT installation, with directory federation on the campus side; realm `hackathon` for the hackathon installation by default, with eSignet from Track 2 as the swap below if it is delivered in time (decided 2026-10-20). Authentik is the prime candidate after v0.1.
 
 - Flow: authorization code. Clients: wallets (through Certify's OpenID4VCI endpoints) and the Portal, which obtains tokens for Certify too: its student login requests the credential scopes with Certify's audience, because the Portal redeems the hard copy's credential in the student's own session (section 3).
 - Every client that obtains tokens for Certify carries a `client_id` claim equal to its client id, because Certify's token filter requires it and the Gateway records the issuing client. Keycloak: a hardcoded-claim protocol mapper per client, as the demo realm already does for the wallet client; eSignet or Authentik must do the same (2026-10-20).
@@ -29,7 +29,7 @@ Served in v0.1 by Keycloak (stock image, our configuration): realm `inji` for th
 
 Two hops. Certify's REST data-provider plugin calls the **Gateway**; the Gateway evaluates the **Checklist** and fetches from the **data adapter**. Decisions are instant: there is no approval queue (Q23 stands: the gate is in the Gateway, the plugin stays generic).
 
-### 2a. Plugin → Gateway (ours)
+### 2a. Plugin → Gateway (Thas's)
 
 Decided 2026-10-20. The plugin is a generic REST client: it knows one URL, one secret, two timeouts and no claim or field names. The Gateway owns the credential-type selection, the checklist and the error vocabulary.
 
@@ -69,6 +69,8 @@ The jar is one generic artifact built from `gateway/plugin/` against `certify-in
 
 ### 2b. Gateway → data adapter (Jo and Boss)
 
+The API, as OpenAPI 3.1, is [`adapter/openapi.yaml`](../../../adapter/openapi.yaml): paths, fields, errors, and what the Gateway does with each answer. This section explains it.
+
 The proposal names `GET /students/:id/transcript` (§5.1(3)). A student can hold more than one degree, and the Checklist needs eligibility attributes, so v0.1 extends it (all **proposed**):
 
 - `GET /students/{id}/degrees` → list of `{ degreeId, level, degreeAwarded, dateGraduation }`.
@@ -101,7 +103,7 @@ Values the implementation fixed, which the real adapter must keep:
 - `winner` is `true` for a member of a winning team (read case-insensitively); anything else, empty included, is not.
 - `degreeId` equals the row's `id`. v0.1 holds one degree per `sub`, so `degrees` returns one entry and a `degreeId` that differs from the `sub` finds no record.
 
-Read-only, fetched once per request, not stored by the Issuer (§3.2). Which fields may leave the SIS is OSA's decision; this list is the demo's, not an agreed one. Until the real adapter exists, our CSV-backed mock implements this contract and its eligibility attributes are editable so the Checklist can be exercised.
+Read-only, fetched once per request, not stored by the Issuer (§3.2). Which fields may leave the SIS is OSA's decision; this list is the demo's, not an agreed one. Until the real adapter exists, Thas's CSV-backed mock implements this contract and its eligibility attributes are editable so the Checklist can be exercised.
 
 #### The student key under campus sign-in
 
@@ -116,7 +118,7 @@ Either way:
 - The Gateway takes the first entry of `degrees` and passes its `degreeId` back unchanged, so the adapter chooses the `degreeId` format.
 - A campus account belongs to one person, not one degree. How the Gateway chooses between two degrees is still open, under "Multi-degree students" in `spec-part-2.md`. Until that is decided, return one degree per `{id}`.
 
-## 3. Issuer admin API (ours)
+## 3. Issuer admin API (Thas's)
 
 The line the Portal and the Track 4 successor integrate against (Q24). **Proposed** in full; the proposal describes the functions (§3.3) but not an API.
 
@@ -132,7 +134,7 @@ Two Portal flows go to Certify directly over the internal network rather than th
 
 ## 4. Publishing to the VDR (Jo)
 
-What the Issuer pushes, where, and how often. Our mock publisher implements this and is the specification Jo builds the final publisher against (**proposed** in full).
+What the Issuer pushes, where, and how often. Thas's mock publisher implements this and is the specification Jo builds the final publisher against (**proposed** in full).
 
 | Artifact | Published | Path on the VDR |
 |---|---|---|
@@ -149,7 +151,7 @@ The Issuer promises a valid OpenID4VCI credential offer and nothing more about t
 
 ## 6. Deployment configuration (infra team)
 
-The handover: the images we build (Gateway, mock adapter, Portal), the plugin jar, the configuration of every stock image (environment variables, mounted files, per-installation settings), and the ingress allowlist. The full contract, with both installations' values, is [`configuration-contract.md`](configuration-contract.md). An installation is a self-contained stack described by one directory, `installations/<name>/`; Certify is listed once per instance, since a 0.14 instance serves one token issuer and one data-provider plugin and an installation may need more than one (2026-10-20). Any change goes to the infra team before it is applied.
+The handover: the images Thas builds (Gateway, mock adapter, Portal), the plugin jar, the configuration of every stock image (environment variables, mounted files, per-installation settings), and the ingress allowlist. The full contract, with both installations' values, is [`configuration-contract.md`](configuration-contract.md). An installation is a self-contained stack described by one directory, `installations/<name>/`; Certify is listed once per instance, since a 0.14 instance serves one token issuer and one data-provider plugin and an installation may need more than one (2026-10-20). Any change goes to the infra team before it is applied.
 
 | Exposure | Endpoints |
 |---|---|

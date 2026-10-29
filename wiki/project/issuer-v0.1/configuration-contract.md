@@ -10,8 +10,8 @@ The `Deploy` workflow (`.github/workflows/deploy.yml`) ships the demo to the tea
 
 Both travel with this page. Each is a request to the infra team, made with the handover by 2026-11-20 and needed in place for both installations by 2026-12-18, the hackathon chain deadline.
 
-1. **Stable public hostnames.** We ask for stable public hostnames for every URL in [URLs in credentials or fetched by verifiers](#urls-in-credentials-or-fetched-by-verifiers), per installation, from the first real issuance: Certify's public base URL, which is the public gateway's hostname (it becomes the credential issuer and the host of every status-list URL and of the JSON-LD contexts, which the gateway serves from the `vdr` container), and the Authorization Server's issuer. A credential carries these URLs for life, so Dev and UAT credentials are throwaway because their URLs encode the environment.
-2. **Signing-key custody.** We ask the infra team to hold the signing key of each Certify instance. Certify supports a PKCS12 keystore (today's local form: Certify creates `local.p12` in its keystore mount on first start) or PKCS#11 (an HSM); the keystore type, path and password are `mosip.kernel.keymanager.hsm.*` in `vc-stack/config/certify-default.properties`.
+1. **Stable public hostnames.** Thas asks for stable public hostnames for every URL in [URLs in credentials or fetched by verifiers](#urls-in-credentials-or-fetched-by-verifiers), per installation, from the first real issuance: Certify's public base URL, which is the public gateway's hostname (it becomes the credential issuer and the host of every status-list URL and of the JSON-LD contexts, which the gateway serves from the `vdr` container), and the Authorization Server's issuer. A credential carries these URLs for life, so Dev and UAT credentials are throwaway because their URLs encode the environment.
+2. **Signing-key custody.** Thas asks the infra team to hold the signing key of each Certify instance. Certify supports a PKCS12 keystore (today's local form: Certify creates `local.p12` in its keystore mount on first start) or PKCS#11 (an HSM); the keystore type, path and password are `mosip.kernel.keymanager.hsm.*` in `vc-stack/config/certify-default.properties`.
 
 ## Service set and images
 
@@ -36,7 +36,7 @@ The service set is identical for both installations: one Compose file, `vc-stack
 
 Stock images are pinned by tag as committed; `nginx:stable` and `postgres:15` are moving tags, which infra may pin by digest.
 
-Where the images come from: CI publishes no image. The `Plugin` workflow publishes only the plugin jar, as a workflow artifact (below); the `Test` workflow never publishes. The three images we build (Gateway, mock adapter, Portal) are built by `run-demo.sh` (`docker compose build demo-app adapter gateway`) from the Dockerfiles of the commit being run, with the repository root as build context. No registry exists yet (owner's decision), so infra builds them from the tagged commit the same way. The spec named two built images (Gateway, Portal) and a CI publication; the adapter is a third, and nothing is published.
+Where the images come from: CI publishes no image. The `Plugin` workflow publishes only the plugin jar, as a workflow artifact (below); the `Test` workflow never publishes. The three images Thas builds (Gateway, mock adapter, Portal) are built by `run-demo.sh` (`docker compose build demo-app adapter gateway`) from the Dockerfiles of the commit being run, with the repository root as build context. No registry exists yet (owner's decision), so infra builds them from the tagged commit the same way. The spec named two built images (Gateway, Portal) and a CI publication; the adapter is a third, and nothing is published.
 
 ## Plugin jar
 

@@ -17,7 +17,7 @@ The cause is in two JSON-LD context files, not in Certify, the key or the proof 
   - `local-stack/config/vpid-context.json`, `passport-context.json` and `achievement-context.json`, the three that are not affected.
   - `local-stack/config/contexts/w3-2018-credentials-v1.jsonld` and `w3-ns-credentials-v2.jsonld`, the vendored base contexts.
   - `deployment/helm/charts/inji-certify/config/student-context.json`, the deployment copy.
-- `mosip-asia/ait-transcript-demo` (since renamed `ait-transcript`), branch `feature/ait-vc-integration`: `vc-stack/config/academic-transcript-context.json`, the file ours was copied from.
+- `mosip-asia/ait-transcript-demo` (since renamed `ait-transcript`), branch `feature/ait-vc-integration`: `vc-stack/config/academic-transcript-context.json`, the file this repository's context was copied from.
 - Hackathon ticket 03, "Developer Passport and anchor data path" (local tracker), section "The Passport context, and the signed-claims fix", for what was observed on the running stack.
 - A measurement made earlier on 2026-10-01 with jsonld.js 8 against the v1 example credential `ait-transcript-credential.example.json` (superseded by [the v1.1 example](../schemas/ait-transcript-credential.v1_1.example.json)), signed locally with a throwaway key. It was not repeated for this note.
 - **No live run for these two credentials.** Docker was down when the finding was made, and the reproduction was not carried out afterwards because the issue is already known. See "What is and is not confirmed".
@@ -72,7 +72,7 @@ The reproduction, when wanted: bring the stack up with `./bootstrap-mock.sh` in 
 | `ait-vc/local-stack/config/academic-transcript-context.json` | Affected |
 | `ait-vc/local-stack/config/student-context.json` | Affected. Flagged as out of scope in hackathon tickets 03, 05 and 07 |
 | `ait-vc/deployment/helm/charts/inji-certify/config/student-context.json` | Affected. Same shape, and it also carries a `StudentTranscriptCredential` type with the same defect |
-| `ait-transcript-demo/vc-stack/config/academic-transcript-context.json` | Affected. Ours was copied from it unchanged |
+| `ait-transcript-demo/vc-stack/config/academic-transcript-context.json` | Affected. This repository's copy was taken from it unchanged |
 | `ait-vc/local-stack/config/vpid-context.json`, `passport-context.json`, `achievement-context.json` | Not affected. Terms are at the top level |
 
 ## Options under discussion
