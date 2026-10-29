@@ -103,6 +103,19 @@ Values the implementation fixed, which the real adapter must keep:
 
 Read-only, fetched once per request, not stored by the Issuer (§3.2). Which fields may leave the SIS is OSA's decision; this list is the demo's, not an agreed one. Until the real adapter exists, our CSV-backed mock implements this contract and its eligibility attributes are editable so the Checklist can be exercised.
 
+#### The student key under campus sign-in
+
+Proposed on 2026-10-29. The AIT installation signs students in through the campus realm `ait-dev`, as "Campus sign-in" in [`spec-part-2.md`](spec-part-2.md) describes. The Gateway sends the token's `sub` to the adapter as `{id}`. It URL-encodes `sub`, changes nothing else, and reads no other claim. Campus IT decides what `sub` holds, and the adapter must handle either choice.
+
+- **(a) The username in `sub`.** Campus writes the AIT username into `sub` for the Issuer's clients. The username is the student's registration number, so the adapter looks the student up by registration number. Keycloak lowercases usernames, so `{id}` arrives as `st123456`. Match it without regard to case.
+- **(b) Campus's own `sub`.** Campus keeps `sub` as its Keycloak user id. The adapter reads that user from the campus realm, takes the username, which is the registration number, and looks the student up. Campus IT will say how the adapter may read users, for example through a service account. Campus asks consumers not to store its `sub` during the PoC, so the adapter keeps `{id}` out of its storage and its access logs.
+
+Either way:
+
+- For an `{id}` it cannot resolve, the adapter answers `404` or returns an empty `degrees` list. The Gateway turns both into `no_record`, and the wallet shows a failure.
+- The Gateway takes the first entry of `degrees` and passes its `degreeId` back unchanged, so the adapter chooses the `degreeId` format.
+- A campus account belongs to one person, not one degree. How the Gateway chooses between two degrees is still open, under "Multi-degree students" in `spec-part-2.md`. Until that is decided, return one degree per `{id}`.
+
 ## 3. Issuer admin API (ours)
 
 The line the Portal and the Track 4 successor integrate against (Q24). **Proposed** in full; the proposal describes the functions (§3.3) but not an API.
