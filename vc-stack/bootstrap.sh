@@ -11,6 +11,7 @@
 #   ./bootstrap.sh --validate       # only run end-to-end health checks
 #   ./bootstrap.sh --did-refresh    # only run the post-wipe did:key dance (§11.3)
 #   ./bootstrap.sh --prepare        # only write .env and create the Docker network
+#   ./bootstrap.sh --context-refresh  # only move the AIT context URL (issuer-dev, after its compose up)
 #   ./bootstrap.sh --help
 #
 # INSTALLATION (environment, else .env, else the git-ignored .installation marker) names the installations/ directory to run.
@@ -27,6 +28,7 @@ DO_WIPE=0
 ONLY_VALIDATE=0
 ONLY_DID=0
 ONLY_PREPARE=0
+ONLY_CONTEXT=0
 P12_PASS_DEFAULT="xy4gh6swa2i"
 NETWORK_NAME="vc_stack_network"
 OVERRIDE_FILE="docker-compose.override.yaml"
@@ -53,7 +55,8 @@ skip() { printf "  %s·%s %s\n" "$DIM" "$RST" "$*"; }
 # JSON-LD context URL baked into every transcript VC (the AIT installation's; context_refresh.sql moves only that row). Local runs keep the Docker-only name (nothing but
 # containers reads it). Both go through the public gateway's /contexts/ route to the vdr container. A public
 # deployment (CERTIFY_PUBLIC_BASE_URL is https) uses the api. gateway's public name, so a phone can load the
-# context when it verifies the VC after download.
+# context when it verifies the VC after download; on issuer-dev it is the ingress's, which sends /contexts/ to
+# certify-nginx.
 # STUDENT_CONTEXT_URL in .env overrides it (rehearsing the switch locally, or rolling a deployment back).
 student_context_url() {
   local certify_public override
@@ -77,8 +80,9 @@ for a in "$@"; do
     --validate)        ONLY_VALIDATE=1 ;;
     --did-refresh)     ONLY_DID=1 ;;
     --prepare)         ONLY_PREPARE=1 ;;
+    --context-refresh) ONLY_CONTEXT=1 ;;
     -h|--help)
-      sed -n '2,18p' "$0" | sed 's/^# \?//'
+      sed -n '2,19p' "$0" | sed 's/^# \?//'
       exit 0
       ;;
     *) die "unknown arg: $a (use --help)" 3 ;;
@@ -547,14 +551,17 @@ context_refresh() {
   ok "ait-transcript context → $url"
   # Mimoto caches Certify's issuer metadata and builds the credential request's @context from it; a stale
   # cache fails Certify's context match ("No matching ldp_vc credential configuration"), so restart both.
-  docker compose restart certify mimoto-service >/dev/null
+  # issuer-dev runs no Mimoto, so there only Certify restarts.
+  local mimoto=""
+  [[ -n "$(docker compose ps -q mimoto-service 2>/dev/null)" ]] && mimoto="mimoto-service"
+  docker compose restart certify $mimoto >/dev/null
   local deadline=$(( $(date +%s) + 120 ))
   until curl -sf http://localhost:9091/.well-known/openid-credential-issuer >/dev/null \
-     && curl -sf http://localhost:9099/v1/mimoto/issuers >/dev/null; do
-    (( $(date +%s) <= deadline )) || die "certify/mimoto not available after restart" 2
+     && { [[ -z "$mimoto" ]] || curl -sf http://localhost:9099/v1/mimoto/issuers >/dev/null; }; do
+    (( $(date +%s) <= deadline )) || die "certify${mimoto:+/mimoto} not available after restart" 2
     sleep 2
   done
-  ok "restarted certify and mimoto-service"
+  ok "restarted certify${mimoto:+ and mimoto-service}"
 }
 
 # -------- validate --------
@@ -643,6 +650,7 @@ validate() {
 main() {
   if (( ONLY_VALIDATE )); then load_auth_server_settings; validate; exit 0; fi
   if (( ONLY_DID ));      then load_auth_server_settings; did_refresh; context_refresh; validate; exit 0; fi
+  if (( ONLY_CONTEXT ));  then context_refresh; exit 0; fi
 
   preflight
   (( DO_WIPE )) && do_wipe

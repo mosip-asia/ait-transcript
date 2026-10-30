@@ -31,9 +31,9 @@ Two servers run the stack, each a Compose file that includes some of the four fo
 | transcript-demo | `vc-stack/compose.yaml` | Issuer, Verify, Mock Adapter, Demo | The demo server: the whole stack, with the stand-in Keycloak, for showing the journey end to end. Host `*.transcript-demo.ait-vc.dpi.ait.ac.th` (the infra team's), which was the Dev environment before the split |
 | issuer-dev | `vc-stack/issuer-dev.yaml` | Issuer, Mock Adapter | The dev server, for integrating real components with the Issuer. It runs against infra's Keycloak (`AUTH_SERVER_*` set to it, [Authorization Server](#authorization-server)), and drops the Mock Adapter once infra's Adapter serves credential data: the include of `mock-adapter/` leaves `issuer-dev.yaml` and `GATEWAY_ADAPTER_URL` in `vc-stack/.env` names infra's Adapter |
 
-issuer-dev runs `docker compose --env-file vc-stack/.env -f vc-stack/issuer-dev.yaml up -d --build`; `./vc-stack/issuer-smoke.sh` checks it (Certify with the Gateway plugin, the issuer metadata, the contexts, every persona through the Gateway, and `gateway_error` with the Adapter down). It has no Authorization Server of its own, so it issues no credential; the full-stack `smoke.sh` does.
+issuer-dev runs `docker compose --env-file vc-stack/.env -f vc-stack/issuer-dev.yaml up -d --build`, then `./vc-stack/bootstrap.sh --context-refresh`, which moves the AIT row's context URL to `<CERTIFY_PUBLIC_BASE_URL>/contexts/transcript/v1.json` (an `https` base, the ingress's hostname) and restarts Certify; the plain `compose up` leaves the seed's `http://host.docker.internal:9098`, which is Demo's `public-gateway` and does not exist on issuer-dev. The refresh covers only the AIT row: the hackathon rows keep the seed's URLs ([URLs](#urls-in-credentials-or-fetched-by-verifiers) has the workaround). `./vc-stack/issuer-smoke.sh` checks it (Certify with the Gateway plugin, the issuer metadata, the contexts, every persona through the Gateway, and `gateway_error` with the Adapter down). It has no Authorization Server of its own, so it issues no credential; the full-stack `smoke.sh` does.
 
-issuer-dev's ingress is infra's. It routes the OpenID4VCI paths and `/.well-known/` to `certify-nginx` and `/contexts/` to `vdr`, and its hostname is the public base URL, `CERTIFY_PUBLIC_BASE_URL` in `vc-stack/.env`. [Issuer → Ingress the Issuer needs](#ingress-the-issuer-needs) lists the paths. On transcript-demo the same routes are `public-gateway`'s, in Demo.
+issuer-dev's ingress is infra's. It routes the OpenID4VCI paths, `/.well-known/` and `/contexts/` to `certify-nginx`, the Issuer's single entry point, which proxies `/contexts/` to `vdr`, and its hostname is the public base URL, `CERTIFY_PUBLIC_BASE_URL` in `vc-stack/.env`. [Issuer → Ingress the Issuer needs](#ingress-the-issuer-needs) lists the paths. On transcript-demo the same routes are `public-gateway`'s, in Demo.
 
 issuer-dev's hostname is not recorded here yet.
 
@@ -48,7 +48,7 @@ The Issuer is the deployment of Certify and what it needs to sign: Postgres, Cer
 - **The Authorization Server**: the five `AUTH_SERVER_*` settings ([Authorization Server](#authorization-server)). The stand-in is Keycloak in Demo; issuer-dev uses infra's Keycloak.
 - **The Adapter**: `GATEWAY_ADAPTER_URL`, set per environment in `vc-stack/.env`: infra's Adapter URL once it serves credential data. The installation's `gateway.env` defaults it to `http://adapter:8000`, the Mock Adapter. With no Adapter answer, the Issuer fails closed with `gateway_error`.
 - **The Gateway token** is the Issuer's own: `GATEWAY_AUTH_TOKEN` and the plugin's `mosip.certify.gateway.auth-token` are both in the Issuer, and no other deployment holds it.
-- **URLs**: `CERTIFY_PUBLIC_BASE_URL`, the hostname of the ingress in front of the Issuer, which also serves `/contexts/` from `vdr`. Nothing from Verify.
+- **URLs**: `CERTIFY_PUBLIC_BASE_URL`, the hostname of the ingress in front of the Issuer, which also serves `/contexts/` (through `certify-nginx` to `vdr`). Nothing from Verify.
 
 ### Services
 
@@ -113,9 +113,9 @@ The Issuer has no public service of its own. An ingress in front of it, `public-
 | `/.well-known/openid-credential-issuer`, `/.well-known/did.json` | `certify-nginx` (port 80) | Wallets fetch the issuer metadata; the issuer's `did:web` resolves here |
 | `/v1/certify/.well-known/`, `/v1/certify/issuance/` | `certify-nginx` | The OpenID4VCI endpoints wallets call |
 | `GET /v1/certify/credentials/status-list/` | `certify-nginx` | Verifiers fetch the status list |
-| `/contexts/` | `vdr` (port 80) | Verifiers fetch the JSON-LD contexts |
+| `/contexts/` | `certify-nginx`, which proxies to `vdr` | Verifiers fetch the JSON-LD contexts |
 
-`vdr` publishes no host port, so an ingress reaches it as `vdr:80` in the Docker network.
+`vdr` publishes no host port; `certify-nginx` reaches it as `vdr:80` in the Docker network, so an ingress needs only `certify-nginx`. transcript-demo's `public-gateway` routes `/contexts/` to `vdr` itself.
 
 ### `database`
 
@@ -161,7 +161,7 @@ It serves Certify's public paths and its own `vp_request_config.json`. It is no 
 
 | Kind | Name | Source | Scope | Notes |
 |---|---|---|---|---|
-| mount | `/etc/nginx/conf.d/default.conf` | `vc-stack/certify-nginx.conf` | shared | Routes `/v1/certify/`, `/.well-known/did.json` and `/.well-known/openid-credential-issuer` to Certify, and `/vp_request_config.json` to the file below. Its access log records `Authorization` headers (format `authdebug`), which a deployment drops |
+| mount | `/etc/nginx/conf.d/default.conf` | `vc-stack/certify-nginx.conf` | shared | Routes `/v1/certify/`, `/.well-known/did.json` and `/.well-known/openid-credential-issuer` to Certify, `/contexts/` to `vdr`, and `/vp_request_config.json` to the file below. Its access log records `Authorization` headers (format `authdebug`), which a deployment drops |
 | mount | `/config/server/vp_request_config.json` | `vc-stack/config/vp_request_config.json` | shared | Read-only; Certify's `mosip.certify.vp-request.config-file-url` |
 | port | `9091:80` | | shared | Internal: the ingress carries the public paths ([Ingress the Issuer needs](#ingress-the-issuer-needs)). The Portal calls it in the network, `bootstrap.sh` and `issuer-smoke.sh` on the host. Never public beyond those paths: `/v1/certify/` forwards every Certify API |
 
@@ -179,7 +179,7 @@ No host port; reached as `http://gateway:8000`. Restarts until Postgres accepts 
 
 ### `vdr`
 
-No host port; reached through the ingress's `/contexts/`.
+No host port; reached through `certify-nginx`'s `/contexts/` (and, on transcript-demo, `public-gateway`'s).
 
 | Kind | Name | Source | Scope | Notes |
 |---|---|---|---|---|
@@ -534,7 +534,7 @@ Each needs a stable public hostname from the first real issuance (ask 1). Dev an
 | Credential issuer (OpenID4VCI) | `mosip.certify.identifier`, Certify's domain URL | `http://certify-nginx` | Wallets fetch its metadata. It is not the access tokens' audience: Certify accepts a token whose `aud` holds one of `mosip.certify.authn.allowed-audiences` in the installation's properties, which are the wallet client (`AUTH_SERVER_WALLET_CLIENT_ID`, `wallet-demo` in both stand-in realms, whose client has its own audience mapper) and the credential endpoint `…/v1/certify/issuance/credential`, in the network or on `CERTIFY_PUBLIC_BASE_URL` (the `smoke` client's mapper and, in `hackathon`, both scopes' mappers add `http://certify-nginx/v1/certify/issuance/credential`) |
 | The Authorization Server's issuer | `AUTH_SERVER_ISSUER` ([Authorization Server](#authorization-server)) | `http://keycloak:8080/realms/<realm>` | In every access token and Certify's metadata; Certify's issuer URI must equal it |
 
-In a deployment every context URL is `<CERTIFY_PUBLIC_BASE_URL>/contexts/<type>/v1.json`, so Certify's public base URL is the ingress's hostname: the ingress is the only thing that routes `/contexts/` (to `vdr`; `certify-nginx` has no such route), and it also forwards Certify's OpenID4VCI paths, so one host serves the credential issuer, the status lists and the contexts. On transcript-demo that is `public-gateway`; on issuer-dev, infra's ingress ([Servers](#servers)). What that host must block is in [Ingress the Issuer needs](#ingress-the-issuer-needs) and the [Ingress allowlist](#ingress-allowlist). `bootstrap.sh` enforces the rule: its validation fails unless every `credential_config` row's `context` is `<base>/contexts/<type>/v<n>.json,https://www.w3.org/ns/credentials/v2` and the issuer metadata lists the same `@context`, the base being taken from `STUDENT_CONTEXT_URL` in `.env` when set, else from `CERTIFY_PUBLIC_BASE_URL` when it is `https`, else the local `http://host.docker.internal:9098`.
+In a deployment every context URL is `<CERTIFY_PUBLIC_BASE_URL>/contexts/<type>/v1.json`, so Certify's public base URL is the ingress's hostname: the ingress routes `/contexts/` (to `certify-nginx`, which proxies to `vdr`; on transcript-demo, `public-gateway` to `vdr`), and it also forwards Certify's OpenID4VCI paths, so one host serves the credential issuer, the status lists and the contexts. On transcript-demo that is `public-gateway`; on issuer-dev, infra's ingress ([Servers](#servers)). What that host must block is in [Ingress the Issuer needs](#ingress-the-issuer-needs) and the [Ingress allowlist](#ingress-allowlist). `bootstrap.sh` enforces the rule: its validation fails unless every `credential_config` row's `context` is `<base>/contexts/<type>/v<n>.json,https://www.w3.org/ns/credentials/v2` and the issuer metadata lists the same `@context`, the base being taken from `STUDENT_CONTEXT_URL` in `.env` when set, else from `CERTIFY_PUBLIC_BASE_URL` when it is `https`, else the local `http://host.docker.internal:9098`.
 
 Each row carries its context URL twice, and both must name it identically: the `context` column (plain text) and the `@context` array inside the `vc_template` column, which is base64-encoded JSON. At bring-up `bootstrap.sh` moves the `ait-transcript` row to `<base>/contexts/transcript/v1.json` with `vc-stack/context_refresh.sql`, which rewrites both columns, then restarts Certify (and the harness's Mimoto). That script matches only the `ait-transcript` row and the `transcript` path, so the hackathon rows (`developer-passport`, `achievement-certificate`) keep `http://host.docker.internal:9098/contexts/<type>/v1.json`, and a hackathon bring-up with an `https` base fails the validation above. Until a script covers them, a hackathon deployment edits `installations/hackathon/certify_seed.sql` before the database's first start, in each of the two rows: the first URL of the `context` column, and the `vc_template` value, decoded from base64, its `@context` entry for the same URL replaced, and re-encoded as base64 on a single line (Certify's decoder rejects line breaks). On a database already seeded, the same two columns are updated in place, as `context_refresh.sql` does for the AIT row, and Certify is restarted. **Gap, for the owner to close before the hackathon deploy:** no committed step rewrites the hackathon rows; either `context_refresh.sql` is widened to every row and context, or the deployed seed is written with the public URLs.
 
@@ -542,7 +542,7 @@ Every credential's `id` also starts with `mosip.certify.data-provider-plugin.id-
 
 ## Ingress allowlist
 
-Every host port of the Compose files, with the deployment that publishes it. Public ports are public for the paths listed only; every other path on them is internal. Services without a host port (`keycloak-server`, `gateway`, `adapter`, `vdr`, `verify-database`, `demo-database`) are internal; `vdr` is reached through the ingress. Certify's management, ledger-search, status and credential-configuration APIs are unauthenticated in stock Certify, so this list is part of what infra deploys. On issuer-dev, infra's ingress takes the place of `public-gateway` (`9098`) and carries the paths of [Ingress the Issuer needs](#ingress-the-issuer-needs).
+Every host port of the Compose files, with the deployment that publishes it. Public ports are public for the paths listed only; every other path on them is internal. Services without a host port (`keycloak-server`, `gateway`, `adapter`, `vdr`, `verify-database`, `demo-database`) are internal; `vdr` is reached through the ingress and `certify-nginx`. Certify's management, ledger-search, status and credential-configuration APIs are unauthenticated in stock Certify, so this list is part of what infra deploys. On issuer-dev, infra's ingress takes the place of `public-gateway` (`9098`) and carries the paths of [Ingress the Issuer needs](#ingress-the-issuer-needs).
 
 | Host port | Deployment | Service | Exposure | Public paths |
 |---|---|---|---|---|
@@ -550,7 +550,7 @@ Every host port of the Compose files, with the deployment that publishes it. Pub
 | `4100` | Demo | `demo-app` | public | The Portal |
 | `4007` | Verify | `verify-ui` | public | The Verify UI |
 | `9098` | Demo | `public-gateway` | public | Certify's public base URL on transcript-demo (ask 1). Public: `/contexts/` (the `vdr` container; verifiers fetch it) and Certify's OpenID4VCI endpoints: `/.well-known/openid-credential-issuer`, `/.well-known/did.json`, `/v1/certify/.well-known/`, `/v1/certify/issuance/`, and `GET /v1/certify/credentials/status-list/` (verifiers fetch it). Every other path is blocked. Its `/v1/certify/` route forwards every Certify API to `certify` directly, so the ingress blocks `/v1/certify/ledger-search`, the status API `POST /v1/certify/credentials/status` (revoke), the credential-configuration API and the actuator; `/.well-known/` forwards to `certify-nginx`, so only the two documents above pass; `/v1/verify/` is `verify-service` (internal); `/v1/mimoto/` and, in `ait`, the phone-only locations are the test harness; `/realms/` duplicates `9080` and, if kept, is restricted as there. Its port 8080, Mimoto's config server, has no host port |
-| `9091` | Issuer | `certify-nginx` | internal | None directly: wallets and verifiers reach Certify's public paths through the ingress. The Portal and the harness's Mimoto call it in the network, `bootstrap.sh` and `issuer-smoke.sh` on the host. It forwards every `/v1/certify/` path, so the ingress, not this port, does the blocking |
+| `9091` | Issuer | `certify-nginx` | internal | None directly: wallets and verifiers reach Certify's public paths and the contexts through the ingress, which on issuer-dev sends them all here. The Portal and the harness's Mimoto call it in the network, `bootstrap.sh` and `issuer-smoke.sh` on the host. It forwards every `/v1/certify/` path, so the ingress, not this port, does the blocking |
 | `9090` | Issuer | `certify` | internal | None: Certify directly |
 | `9095` | Verify | `verify-service` | internal | None: the Verify UI reaches it in the network (VP submission from phones is off) |
 | `6440` | Issuer | `database` | internal | None: Postgres |

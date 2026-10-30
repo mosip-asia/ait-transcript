@@ -3,10 +3,11 @@
 #   docker compose --env-file vc-stack/.env -f vc-stack/issuer-dev.yaml up -d --build
 #   ./vc-stack/issuer-smoke.sh
 # It waits for Certify and the Gateway, then checks that Certify loads the Gateway plugin, serves the issuer metadata
-# for the installation's credential types, that the VDR serves their contexts, and that the Gateway answers every
-# persona of installations/$INSTALLATION/smoke.json (200 eligible, 403 checklist_failed refused, 404 no_record unknown)
-# and 502 gateway_error with the Adapter down. There is no Authorization Server, so no credential is issued: the
-# full-stack smoke.sh does that.
+# for the installation's credential types, that certify-nginx serves their contexts from the VDR, and that the Gateway
+# answers every persona of installations/$INSTALLATION/smoke.json (200 eligible, 403 checklist_failed refused, 404
+# no_record unknown) and 502 gateway_error with the Adapter down. There is no Authorization Server, so no credential
+# is issued: the full-stack smoke.sh does that. The contexts are checked by path, whatever host the seed names; before
+# Certify can sign on issuer-dev, bootstrap.sh --context-refresh moves the AIT row to CERTIFY_PUBLIC_BASE_URL.
 set -euo pipefail
 
 STACK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -56,16 +57,17 @@ t = ct.REGISTRY[sys.argv[1]]; print('\n'.join([*t.record.model_fields, *t.derive
   [[ "$got_claims" == "$want_claims" ]] || fail "issuer metadata claim names for $config differ from the Gateway's for $scope"
   ok "Certify lists $config with the Gateway's claims for $scope"
 
-  # 3. The VDR serves the context the configuration names, as committed under vc-lab/contexts/.
+  # 3. certify-nginx, the Issuer's entry point, serves the context the configuration names from the VDR, as committed
+  # under vc-lab/contexts/.
   ctx_url=$(jq -r --arg c "$config" \
     '[.credential_configurations_supported[$c].credential_definition["@context"][] | select(contains("/contexts/"))][0] // empty' \
     <<<"$issuer_json")
   [[ -n "$ctx_url" ]] || fail "$config @context names no context under /contexts/"
   ctx_path="${ctx_url#*/contexts/}"
-  served_ctx=$(in_network "http://vdr/contexts/$ctx_path") || fail "the VDR does not serve /contexts/$ctx_path"
+  served_ctx=$(curl -sf "http://localhost:9091/contexts/$ctx_path") || fail "certify-nginx does not serve /contexts/$ctx_path"
   [[ "$(jq -S . <<<"$served_ctx")" == "$(jq -S . "$REPO_ROOT/vc-lab/contexts/$ctx_path")" ]] \
-    || fail "the VDR's /contexts/$ctx_path differs from vc-lab/contexts/$ctx_path"
-  ok "the VDR serves /contexts/$ctx_path"
+    || fail "certify-nginx's /contexts/$ctx_path differs from vc-lab/contexts/$ctx_path"
+  ok "certify-nginx serves /contexts/$ctx_path from the VDR"
 done
 
 # 4. The Gateway answers every persona of smoke.json with the mock Adapter beside it (the live mode of
