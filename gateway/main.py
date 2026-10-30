@@ -17,6 +17,7 @@ import hmac
 import os
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
+from typing import TypeVar
 from urllib.parse import quote
 
 import httpx
@@ -27,6 +28,8 @@ from pydantic import TypeAdapter, ValidationError
 
 import credential_types as ct
 from store import Store
+
+Answer = TypeVar("Answer")  # what fetch parses an adapter answer into: a model, or a list of one
 
 
 @dataclass(frozen=True)
@@ -78,7 +81,7 @@ def create_app(settings: Settings, adapter: httpx.Client | None = None, store: S
         if not hmac.compare_digest(authorization.encode(), expected_auth):
             raise HTTPException(401, "missing or wrong bearer token", headers={"WWW-Authenticate": "Bearer"})
 
-    def fetch(path: str, shape, **params):
+    def fetch(path: str, shape: type[Answer], **params: str) -> Answer:
         """The adapter's 200 parsed into `shape`; no answer, another status or malformed data is gateway_error."""
         try:
             r = adapter.get(path, params=params)
