@@ -1,6 +1,6 @@
 # AIT Issuer platform
 
-The institutional issuer platform that both AIT's transcript service and the sandbox hackathon deploy. Terms agreed on 2026-10-19; Hard copy, Pilot and Adapter added 2026-10-20; Issuer and Issuer platform told apart on 2026-10-30.
+The Issuer platform, the product that AIT's transcript service and the sandbox hackathon each deploy as an Installation. Terms agreed on 2026-10-19; Hard copy, Pilot and Adapter added 2026-10-20; Issuer and Issuer platform told apart on 2026-10-30.
 
 ## Language
 

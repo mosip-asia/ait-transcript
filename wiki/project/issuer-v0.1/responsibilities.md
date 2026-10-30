@@ -4,7 +4,7 @@ Status: agreed on 2026-10-19; sections 2 to 10 updated on 2026-10-20 for the bui
 
 ## 1. Role
 
-The user owns the **Issuer platform**: one product, one codebase in `mosip-asia/ait-transcript`, deployed as two **installations** that differ only in configuration: AIT's academic transcript service and the sandbox hackathon. The Issuer platform is a module meant to be plugged into other people's components in different versions under published standards: any OpenID4VCI wallet can claim from it, any data source can feed it through the adapter contract, and any standards-conformant verifier can check what it issues. Inside the Issuer platform, the Checklist and the VC Lab may be separate containers but carry no interoperability promise toward other vendors.
+Thas owns the **Issuer platform**: one product, one codebase in `mosip-asia/ait-transcript`, deployed as two **installations** that differ only in configuration: AIT's academic transcript service and the sandbox hackathon. The Issuer platform is a module meant to be plugged into other people's components in different versions under published standards: any OpenID4VCI wallet can claim from it, any organisation's records can feed it through an Adapter under the adapter contract, and any standards-conformant verifier can check what it issues. Inside the Issuer platform, the Checklist and the VC Lab may be separate containers but carry no interoperability promise toward other vendors.
 
 The user's track assignment does not change, but the substance of the work moves toward Track 3's ground (issuance, status lists, the publishing interface to the VDR). The wallet, formerly part of the user's Track 4 scope, is owned by Patong and WAA.
 
