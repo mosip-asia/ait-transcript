@@ -1,45 +1,48 @@
-"""The credential types the Gateway serves: a registry in code, keyed by the OAuth scope.
-
-Each type names its scope, its credential type, its checks (evaluated in order over the adapter's eligibility
-attributes, each reading the attributes it names) and the template's variable names, each taken from the
-adapter's record field of that name unless the type derives it. The installation's settings say which scopes are
-enabled; nothing else differs between installations. The transcript (AIT) and the hackathon's Developer
-Passport and Achievement are registered.
+"""The credential types the Gateway serves, keyed by the OAuth scope, and the models it parses the adapter's answers
+into (adapter/openapi.yaml), so nothing after the fetch reads a raw dict. Each type names its credential type, its
+`eligibility` model, which its checks read in order, its `record` model, whose fields are the template's claims, and
+the claims it derives from the record. The installation's settings say which scopes are enabled.
 """
 
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from decimal import Decimal
-from typing import Callable
+from typing import Annotated, Callable, Literal
+
+from pydantic import BaseModel, BeforeValidator, Field, WrapValidator, create_model
+
+
+def model(name: str, *strings: str, **typed) -> type[BaseModel]:
+    """A model of an adapter answer: the `strings` fields, each a str, and the `typed` ones, every one required. It
+    declares only what its type reads and ignores the rest, so a null in another field is no refusal."""
+    return create_model(name, **dict.fromkeys(strings, str), **typed)
+
+
+Degree = model("Degree", degreeId=Annotated[str, Field(min_length=1)])
 
 
 @dataclass(frozen=True)
 class Check:
     name: str
-    passed: Callable[[dict], bool]
-    reason: Callable[[dict], str]
+    reason: Callable[[BaseModel], str | None]  # why the eligibility fails the check, None when it passes
 
 
 @dataclass(frozen=True)
 class CredentialType:
     scope: str
     credential_type: str
+    eligibility: type[BaseModel]
+    record: type[BaseModel]  # every field a str claim, except `courses`
     checks: tuple[Check, ...]
-    claim_names: tuple[str, ...]
-    derived: Callable[[dict], dict] = lambda record: {}  # claims computed from the record, overriding by name
+    derived: dict[str, Callable[[BaseModel], str]] = field(default_factory=dict)  # claim name: computed from the record
 
 
-def evaluate(ctype: CredentialType, eligibility: dict) -> list[dict]:
+def evaluate(ctype: CredentialType, eligibility: BaseModel) -> list[dict]:
     """Every check, always all of them, in order; `reason` only on a failed one (contracts.md 2a, 403 body)."""
-    result = []
-    for check in ctype.checks:
-        entry = {"check": check.name, "passed": check.passed(eligibility)}
-        if not entry["passed"]:
-            entry["reason"] = check.reason(eligibility)
-        result.append(entry)
-    return result
+    return [{"check": c.name, "passed": True} if (reason := c.reason(eligibility)) is None
+            else {"check": c.name, "passed": False, "reason": reason} for c in ctype.checks]
 
 
 def escape_vc_quoted_claim(value: str) -> str:
@@ -51,81 +54,76 @@ def escape_vc_quoted_claim(value: str) -> str:
 UNQUOTED_JSON_CLAIM = "courses"  # the only claim with an unquoted slot in Certify's templates
 
 
-def claims(ctype: CredentialType, record: dict) -> dict:
-    """The 200 body: the type's claims, every string escaped for the quoted template; other scalars, lists and dicts become strings, except `courses`
-    (the one slot the template embeds unquoted), which stays a list. A field the record lacks, or serves as null, raises
-    (KeyError, ValueError): the Gateway answers gateway_error rather than issue an empty or "None" claim."""
-    derived = ctype.derived(record)
-    named = {k: derived[k] if k in derived else record[k] for k in ctype.claim_names}
-    missing = [k for k, v in named.items() if v is None]
-    if missing:
-        raise ValueError(f"the record has no value for {missing}")
-    return {k: v if k == UNQUOTED_JSON_CLAIM and isinstance(v, list) else escape_vc_quoted_claim(str(v))
-            for k, v in named.items()}
+def claims(ctype: CredentialType, record: BaseModel) -> dict:
+    """The 200 body: the record's fields and the derived claims, every one a string escaped for the quoted template,
+    except `courses` (the one slot the template embeds unquoted), which stays the list the adapter served."""
+    named = {**dict(record), **{name: derive(record) for name, derive in ctype.derived.items()}}
+    return {k: v if k == UNQUOTED_JSON_CLAIM else escape_vc_quoted_claim(v) for k, v in named.items()}
 
 
 # --- AIT transcript ---------------------------------------------------------------------------------------
 
-# The claims Certify's ait-transcript template substitutes, in data/generate_csv.py's CLAIM_COLUMNS order.
-TRANSCRIPT_CLAIMS = (
-    "fullName", "dateOfBirth", "country", "registrationNo", "previousDegree", "yearAwarded", "dateAdmitted",
-    "option", "degreeAwarded", "dateGraduation", "faculty", "academicProgram", "areaOfSpecialization", "notes",
-    "issueDate", "courses", "courseList", "thesisTitle", "thesisGrade", "programCommittee", "courseworkCredits",
-    "thesisCredits", "totalCredits", "thesisExamination",
-)
+Course = model("Course", "no", "title", "credits", "grade")
+Term = model("Term", "term", courses=list[Course])
+TranscriptEligibility = model("TranscriptEligibility", holds=list[str], conferralStatus=Literal["Conferred", "Pending"],
+                              balance=Annotated[str, Field(pattern=r"^-?[0-9]+(\.[0-9]+)?$")])  # never a number
+# The claims Certify's ait-transcript template substitutes but `courseList`, which the type derives. `courses` is
+# validated as Terms and Courses but kept as the adapter served it, key order and extra keys included.
+TranscriptRecord = model(
+    "TranscriptRecord", "fullName", "dateOfBirth", "country", "registrationNo", "previousDegree", "yearAwarded",
+    "dateAdmitted", "option", "degreeAwarded", "dateGraduation", "faculty", "academicProgram", "areaOfSpecialization",
+    "notes", "issueDate", "thesisTitle", "thesisGrade", "programCommittee", "courseworkCredits", "thesisCredits",
+    "totalCredits", "thesisExamination",
+    courses=Annotated[list[Term], WrapValidator(lambda served, validate: (validate(served), served)[1])])
 
 
-def derive_course_list(semesters: list[dict]) -> str:
+def derive_course_list(record: BaseModel) -> str:
     """The one-line-per-course summary a wallet card shows; data/ait_courses.py's derive_course_list_from_courses."""
-    lines: list[str] = []
-    for block in semesters:
-        for c in block.get("courses") or []:
-            title = str(c.get("title", "")).strip()
-            grade = str(c.get("grade", "")).strip()
-            if title and grade:
-                lines.append(f"{title} — {grade}")
-            elif title:
-                lines.append(title)
-    return "\n".join(lines)
+    return "\n".join(f"{c['title'].strip()} — {c['grade'].strip()}" if c["grade"].strip() else c["title"].strip()
+                     for term in record.courses for c in term["courses"] if c["title"].strip())
 
 
 TRANSCRIPT = CredentialType(
     scope="ait_transcript_vc_ldp",
     credential_type="AitTranscriptCredential",
+    eligibility=TranscriptEligibility,
+    record=TranscriptRecord,
     checks=(
-        Check("no_holds", lambda e: not e["holds"], lambda e: "Holds on record: " + ", ".join(e["holds"])),
-        Check("conferred", lambda e: e["conferralStatus"] == "Conferred", lambda e: "Degree not yet conferred"),
-        Check("zero_balance", lambda e: Decimal(e["balance"]) == 0, lambda e: f"Outstanding balance: {e['balance']}"),
+        Check("no_holds", lambda e: "Holds on record: " + ", ".join(e.holds) if e.holds else None),
+        Check("conferred", lambda e: None if e.conferralStatus == "Conferred" else "Degree not yet conferred"),
+        Check("zero_balance", lambda e: None if Decimal(e.balance) == 0 else f"Outstanding balance: {e.balance}"),
     ),
-    claim_names=TRANSCRIPT_CLAIMS,
-    derived=lambda record: {"courseList": derive_course_list(record["courses"])},
+    derived={"courseList": derive_course_list},
 )
 
 
-# --- Hackathon Developer Passport -------------------------------------------------------------------------
+# --- Hackathon Developer Passport and Achievement -----------------------------------------------------------
 
-# The claims Certify's developer-passport template substitutes: roster columns, as the organiser fills them.
-PASSPORT_CLAIMS = ("teamId", "teamName", "oidcClientId", "authEndpoint", "issuerEndpoint", "verifierEndpoint")
+OnRoster = model("OnRoster", "teamId")  # an empty teamId: a registered participant without a team
+# `winner` is "true" for a member of a winning team, in any case; any other string is not.
+Winner = model("Winner", "teamId", winner=Annotated[bool, BeforeValidator(
+    lambda v: v.strip().lower() == "true" if isinstance(v, str) else None, json_schema_input_type=str)])
+# The claims Certify's developer-passport and achievement templates substitute: roster columns.
+PassportRecord = model("PassportRecord", "teamId", "teamName", "oidcClientId", "authEndpoint", "issuerEndpoint",
+                       "verifierEndpoint")
+AchievementRecord = model("AchievementRecord", "teamId", "award")
+
+ON_ROSTER = Check("on_roster", lambda e: None if e.teamId.strip() else "Not on a team on the hackathon roster")
 
 DEVELOPER_PASSPORT = CredentialType(
     scope="developer_passport_vc_ldp",
     credential_type="DeveloperPassportCredential",
-    checks=(
-        # A registered participant without a team has an empty teamId on the roster.
-        Check("on_roster", lambda e: bool(e["teamId"].strip()), lambda e: "Not on a team on the hackathon roster"),
-    ),
-    claim_names=PASSPORT_CLAIMS,
+    eligibility=OnRoster,
+    record=PassportRecord,
+    checks=(ON_ROSTER,),
 )
 
-# Roster columns again: the team and the award it won. The roster's `winner` column holds "true" for a winning team.
 ACHIEVEMENT = CredentialType(
     scope="achievement_certificate_vc_ldp",
     credential_type="AchievementCertificateCredential",
-    checks=(
-        *DEVELOPER_PASSPORT.checks,
-        Check("winner", lambda e: e["winner"].strip().lower() == "true", lambda e: "The team did not win an award"),
-    ),
-    claim_names=("teamId", "award"),
+    eligibility=Winner,
+    record=AchievementRecord,
+    checks=(ON_ROSTER, Check("winner", lambda e: None if e.winner else "The team did not win an award")),
 )
 
 REGISTRY: dict[str, CredentialType] = {t.scope: t for t in (TRANSCRIPT, DEVELOPER_PASSPORT, ACHIEVEMENT)}

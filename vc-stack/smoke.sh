@@ -26,9 +26,10 @@ load_type() {
   mapfile -t REFUSED < <(fixture "$entry.refused | keys_unsorted[]")
   mapfile -t TAMPER < <(fixture "$entry.tamper[]")
   MIMOTO_TEMPLATE=$(fixture "$entry.mimotoTemplate // empty")
-  # The claims the Gateway answers for the scope (gateway/credential_types.py), which Certify's metadata must list.
-  CLAIMS=$(python3 -c "import sys; sys.path.insert(0, sys.argv[1]); import credential_types as ct
-print('\n'.join(ct.REGISTRY[sys.argv[2]].claim_names))" "$REPO_ROOT/gateway" "$SCOPE")
+  # The claims the Gateway answers for the scope, which Certify's metadata must list: the record model's fields and the
+  # derived claims (gateway/credential_types.py), read in the gateway image, which carries pydantic.
+  CLAIMS=$(docker compose run --rm --no-deps -T gateway python -c "import sys, credential_types as ct
+t = ct.REGISTRY[sys.argv[1]]; print('\n'.join([*t.record.model_fields, *t.derived]))" "$SCOPE")
   # The context on the VDR's /contexts/ that the configuration names (the research note's Compose check, step 2).
   ctx_url=$(jq -r --arg c "$CONFIG" '[.credential_configurations_supported[$c].credential_definition["@context"][] | select(contains("/contexts/"))][0] // empty' <<<"$issuer_json")
 }
