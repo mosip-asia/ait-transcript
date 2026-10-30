@@ -1,6 +1,6 @@
-# Issuer v0.1 — interface contracts
+# Issuer platform v0.1 — interface contracts
 
-Status: accepted by the team on 2026-10-20; first written 2026-10-11, rewritten 2026-10-19 to match the ownership in [`responsibilities.md`](responsibilities.md). Terms follow [`CONTEXT.md`](../../../CONTEXT.md). "Q" numbers refer to the owner's 2026-10-11 scoping plan, kept outside this repository. Every interface the Issuer depends on is served by a mock or stand-in in v0.1; its real owner implements the same contract later.
+Status: accepted by the team on 2026-10-20; first written 2026-10-11, rewritten 2026-10-19 to match the ownership in [`responsibilities.md`](responsibilities.md). Terms follow [`CONTEXT.md`](../../../CONTEXT.md). "Q" numbers refer to the owner's 2026-10-11 scoping plan, kept outside this repository. Every interface the Issuer platform depends on is served by a mock or stand-in in v0.1; its real owner implements the same contract later.
 
 Paths and field names follow `proposal-issuer.md` (PR 4) where it gives them. Anything the proposal does not give is marked **proposed**.
 
@@ -10,9 +10,9 @@ Paths and field names follow `proposal-issuer.md` (PR 4) where it gives them. An
 | 2a | Record lookup | Gateway (Thas's) | Certify's data-provider plugin | — |
 | 2b | Data adapter | Jo and Boss | Gateway | CSV-backed mock (Thas's) |
 | 3 | Issuer admin API | Gateway (Thas's) | Portal; Track 4 successor | — |
-| 4 | Publishing | VDR (Jo) | Issuer (Gateway, VC Lab) | Mock VDR publisher (Thas's), which is also the specification |
+| 4 | Publishing | VDR (Jo) | Issuer platform (Gateway, VC Lab) | Mock VDR publisher (Thas's), which is also the specification |
 | 5 | Credential offer | Certify (Thas's to configure) | Any OpenID4VCI wallet | Inji Web and Mimoto, in local Compose only |
-| 6 | Deployment configuration | Issuer (Thas's) | Infra team | — |
+| 6 | Deployment configuration | Issuer platform (Thas's) | Infra team | — |
 
 ## 1. Sign-in (OpenID Connect)
 
@@ -109,7 +109,7 @@ Read-only, fetched once per request, not stored by the Issuer (§3.2). Which fie
 
 Proposed on 2026-10-29. The AIT installation signs students in through the campus realm `ait-dev`, as "Campus sign-in" in [`spec-part-2.md`](spec-part-2.md) describes. The Gateway sends the token's `sub` to the adapter as `{id}`. It URL-encodes `sub`, changes nothing else, and reads no other claim. Campus IT decides what `sub` holds, and the adapter must handle either choice.
 
-- **(a) The username in `sub`.** Campus writes the AIT username into `sub` for the Issuer's clients. The username is the student's registration number, so the adapter looks the student up by registration number. Keycloak lowercases usernames, so `{id}` arrives as `st123456`. Match it without regard to case.
+- **(a) The username in `sub`.** Campus writes the AIT username into `sub` for the Issuer platform's clients. The username is the student's registration number, so the adapter looks the student up by registration number. Keycloak lowercases usernames, so `{id}` arrives as `st123456`. Match it without regard to case.
 - **(b) Campus's own `sub`.** Campus keeps `sub` as its Keycloak user id. The adapter reads that user from the campus realm, takes the username, which is the registration number, and looks the student up. Campus IT will say how the adapter may read users, for example through a service account. Campus asks consumers not to store its `sub` during the PoC, so the adapter keeps `{id}` out of its storage and its access logs.
 
 Either way:
@@ -134,7 +134,7 @@ Two Portal flows go to Certify directly over the internal network rather than th
 
 ## 4. Publishing to the VDR (Jo)
 
-What the Issuer pushes, where, and how often. Thas's mock publisher implements this and is the specification Jo builds the final publisher against (**proposed** in full).
+What the Issuer platform pushes, where, and how often. Thas's mock publisher implements this and is the specification Jo builds the final publisher against (**proposed** in full).
 
 | Artifact | Published | Path on the VDR |
 |---|---|---|
@@ -147,7 +147,7 @@ Verifiers fetch the DID document, status lists and contexts; only the Portal fet
 
 ## 5. Credential offer (any wallet)
 
-The Issuer promises a valid OpenID4VCI credential offer and nothing more about the wallet. Credentials follow the verifier conformance profile in responsibilities.md section 6 (VCDM 2.0, JSON-LD, Ed25519Signature2020, Bitstring Status List, `did:web`). Issuance is proven in CI with stock Inji Web and Mimoto, which run only in the local Compose.
+The Issuer platform promises a valid OpenID4VCI credential offer and nothing more about the wallet. Credentials follow the verifier conformance profile in responsibilities.md section 6 (VCDM 2.0, JSON-LD, Ed25519Signature2020, Bitstring Status List, `did:web`). Issuance is proven in CI with stock Inji Web and Mimoto, which run only in the local Compose.
 
 ## 6. Deployment configuration (infra team)
 
