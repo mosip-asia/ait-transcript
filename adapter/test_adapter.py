@@ -148,6 +148,58 @@ def test_mock_adapter_on_the_hackathon_roster() -> None:
         assert get("/students/hack-2026-0003/eligibility")[1]["teamId"] == ""
 
 
+def drift(schema: dict, spec: dict, defs: dict, components: dict, where: str) -> list[str]:
+    """What a model's input schema `schema` asks of the wire that openapi.yaml's `spec` does not promise: a field the
+    model requires and the YAML does not, or another type, enum, pattern or minLength, compared down through arrays
+    and objects. `defs` and `components` resolve the `$ref`s of each side."""
+    schema = defs[schema["$ref"].rsplit("/", 1)[1]] if "$ref" in schema else schema
+    spec = components[spec["$ref"].rsplit("/", 1)[1]] if "$ref" in spec else spec
+    found = [f"{where}: {key} {schema.get(key)!r} in the model, {spec.get(key)!r} in openapi.yaml"
+             for key in ("type", "enum", "pattern", "minLength") if key in schema and schema[key] != spec.get(key)]
+    if found or schema.get("type") not in ("array", "object"):
+        return found
+    if schema["type"] == "array":
+        return drift(schema["items"], spec["items"], defs, components, f"{where}[]")
+    for name in schema.get("required", []):
+        if name not in spec.get("required", []):
+            found.append(f"{where}.{name}: required by the model, not by openapi.yaml")
+        else:
+            found += drift(schema["properties"][name], spec["properties"][name], defs, components, f"{where}.{name}")
+    return found
+
+
+def test_every_field_a_gateway_model_requires_is_required_in_openapi_yaml() -> None:
+    """The Gateway's models of the adapter's answers (gateway/credential_types.py) ask nothing of the wire beyond
+    adapter/openapi.yaml: each model's validation-mode schema, the input it accepts, against one of the schemas the
+    YAML gives for that path. Fields the YAML requires and no model reads are fine."""
+    import yaml
+    from pydantic import TypeAdapter
+
+    sys.path.insert(0, str(Path(__file__).parent.parent / "gateway"))
+    import credential_types as ct
+
+    spec = yaml.safe_load((Path(__file__).parent / "openapi.yaml").read_text(encoding="utf-8"))
+    components = spec["components"]["schemas"]
+
+    def answers(path: str) -> list[dict]:
+        schema = spec["paths"][f"/students/{{id}}/{path}"]["get"]["responses"]["200"]["content"]["application/json"]["schema"]
+        return schema.get("oneOf", [schema])
+
+    def drifts(model, path: str) -> list[list[str]]:
+        schema = TypeAdapter(model).json_schema(mode="validation")
+        return [drift(schema, answer, schema.get("$defs", {}), components, f"{path} {model}") for answer in answers(path)]
+
+    checked = [(list[ct.Degree], "degrees")] + [
+        pair for t in ct.REGISTRY.values() for pair in ((t.eligibility, "eligibility"), (t.record, "transcript"))]
+    for model, path in checked:
+        assert [] in drifts(model, path), drifts(model, path)
+    # The comparison can fail: a field the YAML does not require, a wire type it does not give, and a minimum length
+    # it does not state.
+    assert drift({"type": "object", "required": ["x"]}, {"type": "object"}, {}, {}, "m") != []
+    assert drift({"type": "string"}, {"$ref": "#/components/schemas/Term"}, {}, components, "m") != []
+    assert drift({"type": "string", "minLength": 1}, {"type": "string"}, {}, {}, "m") != []
+
+
 def run_live(url: str, csv_path: Path, copy_url: str, copy_csv: Path) -> None:
     import time
 

@@ -1,0 +1,22 @@
+name: vc-stack
+
+services:
+  # Mock data adapter (contracts.md section 2b): read-only, reads the installation's CSV on every request.
+  # Reached as http://adapter:8000 from the other services; no host port.
+  adapter:
+    container_name: adapter
+    build:
+      context: ../..
+      dockerfile: adapter/Dockerfile
+    environment:
+      - ADAPTER_CSV=/data/student_identity_data.csv
+    volumes:
+      # Compose refuses this file when INSTALLATION is unset, as it does issuer/ and demo/.
+      - ../../installations/${INSTALLATION:?set INSTALLATION in vc-stack/.env}/adapter:/data:ro
+    networks:
+      - network
+
+networks:
+  network:
+    name: vc_stack_network
+    external: true

@@ -71,7 +71,7 @@ jobs:
       matrix:
         installation: [ait, hackathon]
     env:
-      COMPOSE: docker compose -f vc-stack/docker-compose.yaml
+      COMPOSE: docker compose -f vc-stack/compose.yaml
       INSTALLATION: ${{ matrix.installation }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -113,6 +113,69 @@ jobs:
         if: failure()
         with:
           name: stack-logs-${{ matrix.installation }}
+          path: stack-logs/
+
+      - name: Tear down
+        if: always()
+        run: $COMPOSE down -v --remove-orphans
+
+  # The Issuer and the mock Adapter alone (vc-stack/issuer-dev.yaml), as issuer-dev runs them: demo/ and verify/ are
+  # down, so there is no Keycloak and no credential is issued (stack-smoke does that). One fresh runner per installation.
+  issuer-smoke:
+    name: Issuer-only smoke (Docker Compose, ${{ matrix.installation }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        installation: [ait, hackathon]
+    env:
+      COMPOSE: docker compose -f vc-stack/issuer-dev.yaml
+      INSTALLATION: ${{ matrix.installation }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/cache@v4
+        with:
+          path: vc-stack/plugins/.m2
+          key: plugin-m2-${{ hashFiles('gateway/plugin/pom.xml') }}
+
+      # .env naming the installation, and the external network.
+      - run: ./vc-stack/bootstrap.sh --prepare
+
+      # The git-ignored files the two folders mount: the ait adapter CSV and the plugin jar (as run-demo.sh builds it).
+      - name: Generate the adapter CSV and build the plugin jar
+        run: |
+          python3 data/generate_csv.py
+          mkdir -p vc-stack/plugins/.m2
+          docker run --rm --user "$(id -u):$(id -g)" \
+            -v "$PWD/gateway/plugin:/src" -w /src \
+            -v "$PWD/vc-stack/plugins/.m2:/var/maven/.m2" -e MAVEN_CONFIG=/var/maven/.m2 \
+            maven:3.9-eclipse-temurin-21 mvn -q -B -Duser.home=/var/maven package
+          cp gateway/plugin/target/gateway-data-provider-plugin.jar vc-stack/plugins/
+
+      - name: Bring up the Issuer and the mock Adapter
+        run: $COMPOSE up -d --build
+
+      # The README's issuer-dev step, so it is tested: a local http base moves nothing, but it still waits for the
+      # database and queries it.
+      - run: ./vc-stack/bootstrap.sh --context-refresh
+
+      - run: ./vc-stack/issuer-smoke.sh
+
+      - name: Collect stack logs
+        if: failure()
+        run: |
+          mkdir -p stack-logs
+          docker ps -a > stack-logs/docker-ps.txt 2>&1 || true
+          $COMPOSE logs --no-color --timestamps > stack-logs/compose.log 2>&1 || true
+
+      - uses: actions/upload-artifact@v5
+        if: failure()
+        with:
+          name: issuer-stack-logs-${{ matrix.installation }}
           path: stack-logs/
 
       - name: Tear down

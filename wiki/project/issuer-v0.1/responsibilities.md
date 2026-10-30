@@ -1,10 +1,10 @@
-# Issuer responsibilities
+# Issuer platform responsibilities
 
-Status: agreed on 2026-10-19; sections 2 to 10 updated on 2026-10-20 for the build decisions (context 1a, no hackathon chain, one stack per installation). Owner: thassung. This document says what the Issuer owner owns, what others own, and the decisions that draw that line; "the user", "you" and "yours" below mean the Issuer owner. It supersedes the scope section of the owner's 2026-10-11 scoping plan, which is kept outside this repository; "Q" numbers below refer to that plan's decision table. Vocabulary is in [`CONTEXT.md`](../../../CONTEXT.md). Interfaces are in [`contracts.md`](contracts.md). Departures from PR 4 are in [`deviations.md`](deviations.md).
+Status: agreed on 2026-10-19; sections 2 to 10 updated on 2026-10-20 for the build decisions (context 1a, no hackathon chain, one stack per installation). Owner: thassung. This document says what the Issuer platform owner owns, what others own, and the decisions that draw that line; "the user", "you" and "yours" below mean the Issuer platform owner. It supersedes the scope section of the owner's 2026-10-11 scoping plan, which is kept outside this repository; "Q" numbers below refer to that plan's decision table. Vocabulary is in [`CONTEXT.md`](../../../CONTEXT.md). Interfaces are in [`contracts.md`](contracts.md). Departures from PR 4 are in [`deviations.md`](deviations.md).
 
 ## 1. Role
 
-The user owns the **Issuer**: one product, one codebase in `mosip-asia/ait-transcript`, deployed as two **installations** that differ only in configuration: AIT's academic transcript service and the sandbox hackathon. The Issuer is a module meant to be plugged into other people's components in different versions under published standards: any OpenID4VCI wallet can claim from it, any data source can feed it through the adapter contract, and any standards-conformant verifier can check what it issues. Inside the Issuer, the Checklist and the VC Lab may be separate containers but carry no interoperability promise toward other vendors.
+Thas owns the **Issuer platform**: one product, one codebase in `mosip-asia/ait-transcript`, deployed as two **installations** that differ only in configuration: AIT's academic transcript service and the sandbox hackathon. The Issuer platform is a module meant to be plugged into other people's components in different versions under published standards: any OpenID4VCI wallet can claim from it, any organisation's records can feed it through an Adapter under the adapter contract, and any standards-conformant verifier can check what it issues. Inside the Issuer platform, the Checklist and the VC Lab may be separate containers but carry no interoperability promise toward other vendors.
 
 The user's track assignment does not change, but the substance of the work moves toward Track 3's ground (issuance, status lists, the publishing interface to the VDR). The wallet, formerly part of the user's Track 4 scope, is owned by Patong and WAA.
 
@@ -12,7 +12,7 @@ The user's track assignment does not change, but the substance of the work moves
 
 ```mermaid
 flowchart LR
-  subgraph Issuer["Issuer product (yours): one codebase, configured per installation"]
+  subgraph Platform["Issuer platform (yours): one codebase, configured per installation"]
     Gateway["Gateway (your image)<br/>data-provider plugin, checklist runner,<br/>admin API, VDR publisher mock"]
     Portal["Portal (your image)<br/>staff side, student side,<br/>hard-copy PDF with QR"]
     Certify["Certify<br/>stock image, your configuration"]
@@ -35,7 +35,7 @@ flowchart LR
   Verifier -->|fetch| VDR
   Wallet -.->|login| AS
   Certify -.->|validate tokens| AS
-  Infra -.->|deploys| Issuer
+  Infra -.->|deploys| Platform
 ```
 
 | Component | What it is | Yours | Not yours | Counterpart |
@@ -45,7 +45,7 @@ flowchart LR
 | Certify | Inji Certify 0.14, the signing engine | Configuration: credential configurations, plugin wiring, allowed audiences, status-list settings | The image, the key custody | Infra for custody |
 | Checklist | The per-credential-type list of checks, evaluated instantly at request time | The mechanism and the runner; the AIT and hackathon checklist files as v0.1 content | The content in production, which the organisation that holds the data maintains | AIT registrar or OSA; hackathon organiser |
 | VC Lab | Template authoring and publishing: the printable PDF template, the issuer display metadata (name, logo link, colours), the JSON-LD credential template | Files, publish step, Certify configuration call | Any card template (none exists) | |
-| Verifier | Stock Inji Verify 0.17, service and UI, co-deployed with the Issuer | Configuration and the proven hard-copy scan path | The image, and any verifier a third party deploys | |
+| Verifier | Stock Inji Verify 0.17, service and UI, co-deployed with the Issuer platform | Configuration and the proven hard-copy scan path | The image, and any verifier a third party deploys | |
 | Authorization Server | Keycloak (stock image) for AIT in v0.1, there only to have authentication in place; eSignet from Track 2 for the hackathon | The Keycloak realm configuration and the OIDC contract (`contracts.md` section 1) | Directory federation on the campus side; eSignet itself | Campus IT; Track 2 |
 | Data adapter | The REST service that serves records and eligibility attributes under `contracts.md` section 2b | The contract; the CSV-backed mock that implements it in dev | The real adapter against the SIS | Jo and Boss |
 | VDR | The public host for the DID document, status lists, templates and JSON-LD contexts | The mock publisher and its specification; the content | The host and the final publishing integration | Jo |
@@ -53,7 +53,7 @@ flowchart LR
 | Wallet | Any OpenID4VCI-conformant holder | Nothing beyond a valid credential offer; Inji Web and Mimoto run only in the local Compose for integration tests | The wallet | Patong and WAA |
 | Deployment | CI/CD, Helm charts, pipelines, environments, hostnames, GCP and Kubernetes | Triggering the provided pipeline; the configuration contract it deploys from | Everything else, end to end | Infra team |
 | Signing key custody | Where Certify's key lives in each environment | Stating the requirement (Certify supports PKCS12 or PKCS#11) | Custody | Infra team |
-| Hackathon issuance page and policy service | Hackathon code in `ait-vc` that chains OpenID4VP and OpenID4VCI | Nothing: the chain is not carried into the Issuer (2026-10-20); Developer Passport and Achievement are issued on roster predicates like the transcript | The `ait-vc` code, left as it is | — |
+| Hackathon issuance page and policy service | Hackathon code in `ait-vc` that chains OpenID4VP and OpenID4VCI | Nothing: the chain is not carried into the Issuer platform (2026-10-20); Developer Passport and Achievement are issued on roster predicates like the transcript | The `ait-vc` code, left as it is | — |
 
 ## 3. What you deliver
 
@@ -64,7 +64,7 @@ flowchart LR
 - The credential design: the versioned JSON-LD context (transcript only; no Student ID in v0.1, decided 2026-10-20), the hardcoded credential schemas, and the conformance profile (section 6).
 - The mock VDR publisher, which is also the specification Jo builds the final publisher against.
 - The CSV-backed mock adapter that implements the adapter contract including the eligibility attributes, editable so the checklist can be exercised.
-- The hackathon configuration set (Developer Passport, Achievement; the VPID and the chain were dropped on 2026-10-20) migrated to VCDM 2.0 and installed in the Issuer before the 31 December dry run.
+- The hackathon configuration set (Developer Passport, Achievement; the VPID and the chain were dropped on 2026-10-20) migrated to VCDM 2.0 and installed in the Issuer platform before the 31 December dry run.
 - Documents: this one; `ISSUER_E2E_FLOWS.md` (section 4, Jo); `contracts.md`; `deviations.md`.
 - Contract tests for the three external contracts, if ownership lands with you (section 9).
 
@@ -84,7 +84,7 @@ Each counterpart gets one written contract and, before the handover to Jo, the e
 
 ## 5. Design decisions that bound the work
 
-- **Instant decisions.** A credential request is decided when it is made, pass or fail. Human judgement lives in the data the organisation maintains (a hold, a winner flag), never in a queue inside the Issuer. The Portal's approve and reject queue is removed in v0.1.
+- **Instant decisions.** A credential request is decided when it is made, pass or fail. Human judgement lives in the data the organisation maintains (a hold, a winner flag), never in a queue inside the Issuer platform. The Portal's approve and reject queue is removed in v0.1.
 - **Two check kinds.** A check is a predicate over the record or a required presentation. v0.1 has one predicate source, the adapter, and exercises predicates only; the presentation kind stays defined and is used by nothing in v0.1 (2026-10-20).
 - **The gate is in the Gateway.** For wallet-initiated issuance the wallet runs the ordinary authorization-code flow; Certify calls the Gateway through the data-provider plugin; the Gateway evaluates the checklist and returns the record or refuses. Plan Q23 stands.
 - **The Portal is the hard copy's wallet.** A hard copy is made from the student side, inside the student's own sign-in: the Portal, a confidential client of the Authorization Server, takes that session's access token (credential scope, Certify audience), signs a proof JWT with a Portal-held key and redeems the credential at Certify's issuance endpoint as any wallet does, so the gate and the search row are the plugin path's, unchanged. It embeds the bearer credential in the PDF's QR and then discards it; the Portal never stores a credential, the ledger keeps identifiers only. No pre-authorized code in v0.1: Certify 0.14 serves pre-authorized offers and wallet-initiated issuance from separate instances (one data-provider plugin, one token issuer per instance), so staff-triggered printing is out of v0.1 and, if OSA asks for it, is added as a second hard-copy-only Certify instance with pre-authorized offers (research `certify-preauth-flow.md`). PR 4's Milestone 2 authorization-server gate and deferred issuance are not needed (2026-10-20).
@@ -136,7 +136,7 @@ Environments are the infra team's: Dev is live with stable URLs under `*.transcr
 - DMN, Windmill, BPMN, a checklist editing UI.
 - PR 4's Milestone 2 authorization-server gate and deferred issuance.
 - SD-JWT and selective disclosure; offline verification; the KMS choice.
-- The hackathon's issuance page and policy service: the chain is not carried into the Issuer (2026-10-20), so nothing is re-pointed.
+- The hackathon's issuance page and policy service: the chain is not carried into the Issuer platform (2026-10-20), so nothing is re-pointed.
 
 ## 9. Open items
 
@@ -149,10 +149,10 @@ Environments are the infra team's: Dev is live with stable URLs under `*.transcr
 
 | Date | Decision | Status on 2026-10-19 |
 |---|---|---|
-| 2026-09-28 | `ait-vc` is the home repository and absorbs the demo | Superseded: `mosip-asia/ait-transcript` is the Issuer product repository |
+| 2026-09-28 | `ait-vc` is the home repository and absorbs the demo | Superseded: `mosip-asia/ait-transcript` is the Issuer platform repository |
 | 2026-10-01 | Signing coverage is a known issue, do not fix without go-ahead | Reversed: fixed in v0.1 with context option 1a, because of the verifier promise |
 | 2026-10-05 | PR 4 adopted by the team; comply unless a critical or high problem is found | Stands; the two critical points (a separate Authorization Server, product-neutral with Keycloak as the v0.1 choice; enforcement at the credential endpoint) go to PR 4 as review comments, not file edits (2026-10-19) |
-| 2026-10-11 Q1/Q14 | Thas owns the issuing engine and the public registry | Superseded: Thas owns the Issuer product; the VDR is Jo's |
+| 2026-10-11 Q1/Q14 | Thas owns the issuing engine and the public registry | Superseded: Thas owns the Issuer platform; the VDR is Jo's |
 | 2026-10-11 Q6 | Wallet and walletless claims through the stock catalog | Superseded: bring your own wallet; the Portal renders the hard copy |
 | 2026-10-11 Q7, Q22 | Registry host caches the status list; static `did.json` on Thas's registry host | Superseded: published to Jo's VDR through Thas's mock publisher |
 | 2026-10-11 Q13 | A colleague owns deployment | Superseded: the infra team owns deployment end to end |

@@ -13,9 +13,9 @@ source "$STACK_DIR/installation.sh"
 load_auth_server_settings
 
 FIXTURES="$INSTALLATION_DIR/smoke.json"
+source "$STACK_DIR/issuer-checks.sh"
 fixture() { jq -r "$1" "$FIXTURES"; }
 TYPE_COUNT=$(fixture length)
-ALL_CONFIGS=$(fixture '[.[].credentialConfig] | sort | join(" ")')
 # Sets the variables the per-type checks read from the i-th entry of smoke.json.
 load_type() {
   local entry=".[$1]"
@@ -26,15 +26,9 @@ load_type() {
   mapfile -t REFUSED < <(fixture "$entry.refused | keys_unsorted[]")
   mapfile -t TAMPER < <(fixture "$entry.tamper[]")
   MIMOTO_TEMPLATE=$(fixture "$entry.mimotoTemplate // empty")
-  # The claims the Gateway answers for the scope (gateway/credential_types.py), which Certify's metadata must list.
-  CLAIMS=$(python3 -c "import sys; sys.path.insert(0, sys.argv[1]); import credential_types as ct
-print('\n'.join(ct.REGISTRY[sys.argv[2]].claim_names))" "$REPO_ROOT/gateway" "$SCOPE")
-  # The context on the VDR's /contexts/ that the configuration names (the research note's Compose check, step 2).
+  # The context under /contexts/ that the configuration names, which every credential issued for it must carry.
   ctx_url=$(jq -r --arg c "$CONFIG" '[.credential_configurations_supported[$c].credential_definition["@context"][] | select(contains("/contexts/"))][0] // empty' <<<"$issuer_json")
 }
-
-fail() { echo "FAIL: $*" >&2; exit 1; }
-ok() { echo "OK: $*"; }
 
 sorted_lines() {
   sort | awk 'NF'
@@ -42,19 +36,10 @@ sorted_lines() {
 
 python3 "$REPO_ROOT/data/generate_csv.py" >/dev/null
 
-issuer_json=$(curl -sf http://localhost:9091/.well-known/openid-credential-issuer) \
-  || fail "certify issuer metadata not reachable on :9091"
-
-configs=$(echo "$issuer_json" | jq -r '.credential_configurations_supported | keys | sort | join(" ")')
-[[ "$configs" == "$ALL_CONFIGS" ]] || fail "expected exactly the credential configs $ALL_CONFIGS, got: $configs"
-
-for ((i = 0; i < TYPE_COUNT; i++)); do
-  load_type "$i"
-  got_claims=$(echo "$issuer_json" | jq -r --arg c "$CONFIG" '.credential_configurations_supported[$c].credential_definition.credentialSubject | keys[]' | sorted_lines)
-  want_claims=$(sorted_lines <<<"$CLAIMS")
-  [[ "$got_claims" == "$want_claims" ]] || fail "issuer metadata claim names for $CONFIG differ from the Gateway's for $SCOPE"
-  ok "issuer lists $CONFIG with the Gateway's claims for $SCOPE"
-done
+# The Issuer's own checks first, as issuer-smoke.sh runs them (issuer-checks.sh): the Gateway plugin in Certify's log,
+# the issuer metadata against the Gateway's claims, the contexts through certify-nginx, every persona through the
+# Gateway, and 502 with the adapter down. They leave Certify's metadata in issuer_json.
+issuer_checks
 
 auth_srv=$(echo "$issuer_json" | jq -r '.authorization_servers[0] // empty')
 [[ "$auth_srv" == "$AUTH_SERVER_ISSUER" ]] \
@@ -63,16 +48,7 @@ ok "Certify OID4VCI authorization_servers name the configured issuer $AUTH_SERVE
 
 # The Compose check of wiki/research/certify-json-literal.md section 4 runs below: step 2 here, steps 3 to 5
 # after issuance, step 1 (library versions) printed for the record.
-for ((i = 0; i < TYPE_COUNT; i++)); do
-  load_type "$i"
-  [[ -n "$ctx_url" ]] || fail "$CONFIG @context names no context on the VDR's /contexts/"
-  ctx_path="${ctx_url#*/contexts/}"
-  served_ctx=$(curl -sf "http://localhost:9098/contexts/$ctx_path") \
-    || fail "public gateway does not serve /contexts/$ctx_path (vdr container)"
-  [[ "$(jq -S . <<<"$served_ctx")" == "$(jq -S . "$REPO_ROOT/vc-lab/contexts/$ctx_path")" ]] \
-    || fail "served context differs from vc-lab/contexts/$ctx_path"
-  ok "context $ctx_path served by the VDR through the public gateway"
-done
+check_contexts http://localhost:9098 "the public gateway"
 
 csv_file="$INSTALLATION_DIR/adapter/student_identity_data.csv"
 kc_users=$(jq -r '.users[].username' "$INSTALLATION_DIR/keycloak-realm.json" | sorted_lines)
@@ -84,7 +60,7 @@ with p.open(newline='', encoding='utf-8') as f:
 ok "Keycloak users align with CSV ids"
 
 # Certify's data provider is the Gateway plugin, configured by the six keys of contracts.md section 2a and nothing else.
-certify_props=$(tr -d '\r' <"$INSTALLATION_DIR/certify-csvdp-student.properties")
+certify_props=$(tr -d '\r' <"$INSTALLATION_DIR/certify-installation.properties")
 plugin_keys=$( (grep -oE '^mosip\.certify\.(gateway\.[a-z-]+|integration\.(data-provider-plugin|scan-base-package))=' <<<"$certify_props" || true) \
   | tr -d = | LC_ALL=C sort)
 want_keys=$(printf '%s\n' mosip.certify.gateway.{auth-token,connect-timeout-ms,read-timeout-ms,url} \
@@ -110,18 +86,14 @@ after=$(docker compose ps -q | wc -l | tr -d ' ')
 [[ "$after" -ge "$before" ]] || fail "bootstrap re-run reduced container count"
 ok "bootstrap idempotent re-run"
 
-# The plugin jar joins the four bundled ones (a single-file mount), and Certify started with it selected.
+# The plugin jar joins the four bundled ones (a single-file mount); issuer_checks saw Certify start with it selected.
 certify_jars=$(docker compose exec -T certify ls /home/inji/additional_jars/ | tr -d '\r') \
   || fail "cannot list Certify's additional_jars/"
 for jar in gateway-data-provider-plugin mock-certify-plugin sunbird-rc-certify-integration-impl \
   postgres-dataprovider-plugin mosip-identity-certify-plugin; do
   grep -qE "^$jar.*\.jar$" <<<"$certify_jars" || fail "additional_jars/ lacks $jar (has: $(tr '\n' ' ' <<<"$certify_jars"))"
 done
-certify_log=$(docker compose logs --no-color certify 2>&1) || fail "cannot read the certify log"
-! grep -qE 'NoSuchBeanDefinitionException|NoUniqueBeanDefinitionException' <<<"$certify_log" \
-  || fail "missing-bean or duplicate-bean error in the certify log"
-grep -q 'GatewayDataProviderPlugin selected' <<<"$certify_log" || fail "the certify log does not name GatewayDataProviderPlugin"
-ok "Certify loads the Gateway plugin beside the four bundled jars"
+ok "Certify's additional_jars/ holds the Gateway plugin beside the four bundled jars"
 
 issuer=$(curl -sf "http://localhost:9080/realms/$REALM/.well-known/openid-configuration" | jq -r '.issuer')
 [[ "$issuer" == "$AUTH_SERVER_ISSUER" ]] || fail "the stand-in realm $REALM must be the configured issuer $AUTH_SERVER_ISSUER (got: ${issuer:-<empty>})"
@@ -167,35 +139,7 @@ rm -rf "$adapter_copy_dir"
 [[ "$adapter_rc" == 0 ]] || fail "mock adapter (adapter/test_adapter.py)"
 ok "mock adapter serves the degree list, the record and the eligibility attributes, and an edited value at once"
 
-# The Gateway answers contract 2a's cases with the mock adapter beside it and writes one issuance row per 200.
-# Run from the gateway image (httpx, psycopg), whose environment carries the token and the database URL.
-docker compose run --rm --no-deps -T \
-  -v "$REPO_ROOT/gateway/tests:/gateway/tests:ro" \
-  -v "$INSTALLATION_DIR:/installation:ro" \
-  gateway python tests/test_issuances.py http://gateway:8000 /installation/adapter/student_identity_data.csv \
-  /installation/smoke.json \
-  || fail "Gateway (gateway/tests/test_issuances.py)"
-ok "Gateway: 200, 403 per failing check, 404, 400, 401, one issuance row per 200"
-
-load_type 0  # the adapter-down and Gateway-down checks below run for the first type
-
-# An adapter failure during a request is a Gateway error (502), not a crash. The adapter is restarted
-# whether or not the check passes, so later steps still see it.
-docker compose stop adapter >/dev/null || fail "cannot stop the adapter"
-adapter_down_rc=0
-docker compose run --rm --no-deps -T -v "$REPO_ROOT/gateway/tests:/gateway/tests:ro" -v "$FIXTURES:/smoke.json:ro" \
-  gateway python tests/test_issuances.py adapter-down http://gateway:8000 /smoke.json || adapter_down_rc=$?
-docker compose start adapter >/dev/null || fail "cannot restart the adapter"
-adapter_up=0
-for _ in $(seq 1 30); do
-  if docker compose run --rm --no-deps -T gateway python -c     "import httpx; httpx.get('http://adapter:8000/students/${ELIGIBLE[0]}/eligibility', timeout=3).raise_for_status()" >/dev/null 2>&1; then
-    adapter_up=1; break
-  fi
-  sleep 2
-done
-[[ "$adapter_up" == 1 ]] || fail "adapter did not answer again after restart"
-[[ "$adapter_down_rc" == 0 ]] || fail "Gateway with the adapter down must answer 502 gateway_error (gateway/tests/test_issuances.py adapter-down)"
-ok "Gateway: adapter down is a 502 gateway_error, and the adapter is back"
+load_type 0  # the Gateway-down check below runs for the first type
 
 # Scripted issuance, then verification with a tampered copy, inside the Docker network (see the script's docstring).
 issue_and_verify() {
@@ -238,7 +182,6 @@ done
 # gateway_error. The Gateway is started again whether or not the checks pass, so later steps still see it.
 docker compose stop gateway >/dev/null || fail "cannot stop the Gateway"
 docker compose restart certify >/dev/null || fail "cannot restart certify"
-retry() { local tries=$1; shift; for _ in $(seq 1 "$tries"); do "$@" >/dev/null 2>&1 && return 0; sleep 2; done; return 1; }
 certify_up=0
 retry 90 curl -sf http://localhost:9091/.well-known/openid-credential-issuer && certify_up=1
 gateway_down_rc=1
@@ -249,9 +192,7 @@ fi
 docker compose start gateway >/dev/null || fail "cannot restart the Gateway"
 [[ "$certify_up" == 1 ]] || fail "Certify did not start while the Gateway was down"
 [[ "$gateway_down_rc" == 0 ]] || fail "with the Gateway down a credential request must be refused with gateway_error"
-retry 30 docker compose exec -T gateway python -c \
-  "import httpx; httpx.get('http://gateway:8000/docs', timeout=3).raise_for_status()" \
-  || fail "the Gateway did not answer again after restart"
+retry 30 in_network http://gateway:8000/docs || fail "the Gateway did not answer again after restart"
 ok "Certify starts with the Gateway down and then answers gateway_error; the Gateway is back"
 
 stack_logs=$(docker compose logs --no-color certify verify-service 2>&1) || fail "cannot read the certify and verify-service logs"

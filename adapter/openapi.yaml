@@ -12,13 +12,14 @@ info:
     request and stores none of it.
 
     The Gateway waits 3 seconds per call. A `404` means "no record" and the wallet gets `no_record`. Any other
-    status, a timeout, a refused connection, a missing field or a `null` value makes the Gateway refuse the
-    credential with `gateway_error`. It never issues an empty claim.
+    status, a timeout, a refused connection, or a field the credential type reads that is missing, `null` or not
+    as this file types it, makes the Gateway refuse the credential with `gateway_error`. It ignores every field
+    the credential type does not read. It never issues an empty claim.
 
     In v0.1 the adapter runs on the private network, reachable by the Gateway only, with no authentication.
 servers:
   - url: http://adapter:8000
-    description: Thas's mock in the Compose stack (`GATEWAY_ADAPTER_URL` in `installations/<name>/gateway.env`)
+    description: Thas's mock in the Compose stack (`GATEWAY_ADAPTER_URL`, defaulted in `installations/<name>/gateway.env`, set per environment in `vc-stack/.env`)
 paths:
   /students/{id}/degrees:
     get:
@@ -58,7 +59,7 @@ paths:
       description: |
         The transcript's checks are `no_holds` (`holds` is empty), `conferred` (`conferralStatus` is `Conferred`)
         and `zero_balance` (`balance` equals 0). The hackathon's are `on_roster` (`teamId` is not blank) and, for
-        the Achievement, `winner`. A `null` in any attribute is `gateway_error`.
+        the Achievement, `winner`. A `null` in a field the credential type reads is `gateway_error`.
       parameters:
         - $ref: '#/components/parameters/StudentId'
         - $ref: '#/components/parameters/DegreeId'
@@ -256,7 +257,8 @@ components:
       description: |
         The hackathon installation's roster row, served by Thas's mock only, the whole row on both paths.
         `teamId` is empty for a participant without a team; `winner` is `true` for a member of a winning team,
-        read case-insensitively, and anything else is not.
+        read case-insensitively, and anything else is not. Each credential type reads only some columns: a
+        `null` in a field the credential type reads is `gateway_error`, and other columns are ignored.
       required: [teamId, teamName, winner, award, oidcClientId, authEndpoint, issuerEndpoint, verifierEndpoint]
       properties:
         degreeId: {type: string}

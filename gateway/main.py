@@ -1,8 +1,10 @@
 """The Gateway: `POST /issuances` (contracts.md section 2a), the checklist runner behind Certify's data-provider plugin.
 
 The plugin posts the access-token claims; the Gateway picks the credential type by `scope`, fetches the record and
-the eligibility attributes from the data adapter (section 2b), evaluates the type's checks and answers the claim set
-(200), the checklist result (403), `no_record` (404) or `unknown_scope` (400). A 200 writes one issuance row.
+the eligibility attributes from the data adapter (section 2b), parsing each answer into the type's model, evaluates
+the type's checks and answers the claim set (200), the checklist result (403), `no_record` (404) or `unknown_scope`
+(400). An answer that does not parse is 502 `gateway_error`; a check that raises is a bug, so a 500. A 200 writes
+one issuance row.
 Startup touches only the database, never the adapter, so Certify, the adapter and the Gateway start in any order.
 
 Settings come from the environment, which Compose fills from installations/<name>/gateway.env.
@@ -15,15 +17,19 @@ import hmac
 import os
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
+from typing import TypeVar
 from urllib.parse import quote
 
 import httpx
 import psycopg
 from fastapi import Body, Depends, FastAPI, Header, HTTPException
 from fastapi.responses import JSONResponse
+from pydantic import TypeAdapter, ValidationError
 
 import credential_types as ct
 from store import Store
+
+Answer = TypeVar("Answer")  # what fetch parses an adapter answer into: a model, or a list of one
 
 
 @dataclass(frozen=True)
@@ -75,7 +81,8 @@ def create_app(settings: Settings, adapter: httpx.Client | None = None, store: S
         if not hmac.compare_digest(authorization.encode(), expected_auth):
             raise HTTPException(401, "missing or wrong bearer token", headers={"WWW-Authenticate": "Bearer"})
 
-    def fetch(path: str, **params) -> dict | list:
+    def fetch(path: str, shape: type[Answer], **params: str) -> Answer:
+        """The adapter's 200 parsed into `shape`; no answer, another status or malformed data is gateway_error."""
         try:
             r = adapter.get(path, params=params)
         except httpx.HTTPError as exc:
@@ -84,7 +91,10 @@ def create_app(settings: Settings, adapter: httpx.Client | None = None, store: S
             raise Refusal(404, "no_record")
         if r.status_code != 200:
             raise Refusal(502, "gateway_error")
-        return r.json()
+        try:
+            return TypeAdapter(shape).validate_json(r.content)
+        except ValidationError as exc:
+            raise Refusal(502, "gateway_error") from exc
 
     @app.post("/issuances", dependencies=[Depends(authenticate)])
     def issuances(claims: dict = Body(...)) -> dict:
@@ -97,25 +107,15 @@ def create_app(settings: Settings, adapter: httpx.Client | None = None, store: S
             raise Refusal(400, "unknown_scope")
 
         student = f"/students/{quote(sub, safe='')}"
-        degrees = fetch(f"{student}/degrees")
+        degrees = fetch(f"{student}/degrees", list[ct.Degree])
         if not degrees:
             raise Refusal(404, "no_record")
-        try:
-            degree_id = degrees[0]["degreeId"]  # one identity per degree in v0.1: the list has one entry
-            eligibility = fetch(f"{student}/eligibility", degreeId=degree_id)
-            if None in eligibility.values():  # a row missing a column: fail closed, never read it as a value
-                raise ValueError("null eligibility attribute")
-            checks = ct.evaluate(ctype, eligibility)
-        except (KeyError, IndexError, TypeError, ValueError, ArithmeticError, AttributeError) as exc:
-            raise Refusal(502, "gateway_error") from exc  # malformed adapter data
+        degree_id = degrees[0].degreeId  # one identity per degree in v0.1: the list has one entry
+        checks = ct.evaluate(ctype, fetch(f"{student}/eligibility", ctype.eligibility, degreeId=degree_id))
         if not all(c["passed"] for c in checks):
             raise Refusal(403, "checklist_failed", credentialType=ctype.credential_type, checks=checks)
 
-        record = fetch(f"{student}/transcript", degreeId=degree_id)
-        try:
-            body = ct.claims(ctype, record)
-        except (KeyError, IndexError, TypeError, ValueError, AttributeError) as exc:
-            raise Refusal(502, "gateway_error") from exc  # malformed adapter data
+        body = ct.claims(ctype, fetch(f"{student}/transcript", ctype.record, degreeId=degree_id))
         try:
             store.record(sub, ctype.credential_type, ctype.scope, claims.get("client_id"))
         except psycopg.Error as exc:

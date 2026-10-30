@@ -1,4 +1,4 @@
-"""The INSTALLATION guard: run-demo.sh, bootstrap.sh and smoke.sh refuse to start
+"""The INSTALLATION guard: run-demo.sh, bootstrap.sh, smoke.sh and issuer-smoke.sh refuse to start
 unless INSTALLATION names a directory under installations/, before Docker is touched.
 
 Runs the scripts from a throwaway copy of the repo layout with docker, jq and curl
@@ -15,7 +15,7 @@ import tempfile
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-SCRIPTS = ["run-demo.sh", "vc-stack/bootstrap.sh", "vc-stack/smoke.sh"]
+SCRIPTS = ["run-demo.sh", "vc-stack/bootstrap.sh", "vc-stack/smoke.sh", "vc-stack/issuer-smoke.sh"]
 STUBS = ["docker", "jq", "curl"]
 
 

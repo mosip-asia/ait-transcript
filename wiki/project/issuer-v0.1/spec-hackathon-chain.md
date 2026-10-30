@@ -1,4 +1,4 @@
-# Issuer v0.1 — hackathon chain spec
+# Issuer platform v0.1 — hackathon chain spec
 
 Status: draft of 2026-10-20, written from the closed build decisions; not yet split into build issues. Terms follow [`CONTEXT.md`](../../../CONTEXT.md). Ownership is in [`responsibilities.md`](responsibilities.md), the interfaces in [`contracts.md`](contracts.md), the departures from the proposal in [`deviations.md`](deviations.md). This page says what the hackathon chain is, how each piece behaves and how it is accepted; the build issues that come out of it say the same per ticket.
 
@@ -17,11 +17,11 @@ Milestones that bound it:
 
 The running demo issues one credential type from one Certify whose data-provider plugin reads a CSV, approval is enforced only in the demo app's UI, the course claims are not covered by the issuer signature because of how the JSON-LD context is scoped, and the hackathon's two credential types live in a frozen repository on VCDM 1.1 behind a Node issuance page and policy service. None of this can be handed to the infra team as a product: there is no gate at the credential endpoint, no second installation, no versioned context, no description of what to deploy.
 
-The hackathon needs a working Issuer that issues Developer Passport and Achievement credentials to participants who sign in, pass a roster check and claim into any OpenID4VCI wallet, deployed by the infra team by 2026-12-18 for a dry run on 2026-12-31. AIT needs the same Issuer, configured for the transcript, so that one codebase serves both.
+The hackathon needs a working Issuer platform that issues Developer Passport and Achievement credentials to participants who sign in, pass a roster check and claim into any OpenID4VCI wallet, deployed by the infra team by 2026-12-18 for a dry run on 2026-12-31. AIT needs the same Issuer platform, configured for the transcript, so that one codebase serves both.
 
 ## Solution
 
-One Issuer, two installations that differ only in configuration. A wallet signs the participant or student in through the Authorization Server and asks Certify for a credential; Certify's data-provider plugin, a thin Java REST client, posts the token's claims to the Gateway; the Gateway picks the credential type from the token's scope, fetches the record and its eligibility attributes from the data adapter (a CSV-backed mock in v0.1), evaluates the credential type's checklist, and returns the claims to sign or refuses with a checklist result; Certify signs a VCDM 2.0 credential with a status-list entry and hands it to the wallet. The transcript's JSON-LD context is fixed so every claim is signed, served from a versioned URL on a static mock VDR. The hackathon's two types are rows in the hackathon installation's Certify, on the same chain, with a roster CSV in the same mock adapter and a Keycloak realm of their own. A configuration contract tells the infra team what to deploy for each installation.
+One Issuer platform, two installations that differ only in configuration. A wallet signs the participant or student in through the Authorization Server and asks Certify for a credential; Certify's data-provider plugin, a thin Java REST client, posts the token's claims to the Gateway; the Gateway picks the credential type from the token's scope, fetches the record and its eligibility attributes from the data adapter (a CSV-backed mock in v0.1), evaluates the credential type's checklist, and returns the claims to sign or refuses with a checklist result; Certify signs a VCDM 2.0 credential with a status-list entry and hands it to the wallet. The transcript's JSON-LD context is fixed so every claim is signed, served from a versioned URL on a static mock VDR. The hackathon's two types are rows in the hackathon installation's Certify, on the same chain, with a roster CSV in the same mock adapter and a Keycloak realm of their own. A configuration contract tells the infra team what to deploy for each installation.
 
 ## User Stories
 
@@ -44,19 +44,19 @@ One Issuer, two installations that differ only in configuration. A wallet signs 
 17. As an AIT student, I want my transcript request refused with reasons when I have a hold, an unconferred degree or an outstanding balance, so that I know what to resolve.
 18. As an AIT student with two degrees, I want each degree to issue under its own sign-in identity, so that there is never a question of which degree I am claiming.
 19. As an AIT student, I want to claim my transcript into any OpenID4VCI wallet, so that my choice of wallet is mine.
-20. As the Issuer owner, I want the checks for each credential type to be code in the Gateway, so that the hackathon's roster predicates and AIT's eligibility predicates ship without a checklist file format.
-21. As the Issuer owner, I want the data-provider plugin to know one URL, one secret and two timeouts and nothing about claims, so that every business rule lives in the Gateway and the plugin never changes between installations.
-22. As the Issuer owner, I want the Gateway to own the error vocabulary, so that the plugin never learns a new error code.
-23. As the Issuer owner, I want the Gateway to record every issuance at the moment the plugin call succeeds, so that the admin API's search can be built on it later without re-deriving anything from Certify's ledger.
-24. As the Issuer owner, I want one `docker-compose.yaml` and one `installations/<name>/` directory per installation, so that the service set is identical and only files differ.
-25. As the Issuer owner, I want to run either installation locally by setting one variable, so that I can test the hackathon and AIT stacks on the same machine, one at a time.
-26. As the Issuer owner, I want the context fix to open with the six-step Compose check, so that the signing and verifying paths are observed to handle a JSON literal before the context is relied on.
-27. As the Issuer owner, I want the swap from the CSV mock to a real data adapter to be a configuration change, so that the real adapter can arrive without a code change in the Gateway.
-28. As the Issuer owner, I want the swap from the Keycloak realm to eSignet to be one configuration change per installation, so that the hackathon can take eSignet if it arrives in time.
-29. As the Issuer owner, I want the plugin jar built in CI and by the local bring-up script, so that no jar is ever committed.
-30. As the Issuer owner, I want `smoke.sh` to prove each installation issues and verifies every credential type it serves and refuses the cases it must refuse, so that a regression is caught before the infra team deploys.
-31. As the Issuer owner, I want the go/no-go on the plugin decided by one transcript issued end to end through the Gateway by 2026-11-13, so that the fallback is taken in time if the plugin path fails.
-32. As the Issuer owner, I want the repository's directories named by the glossary, so that a reader of `CONTEXT.md` finds `gateway/`, `portal/` and `vc-lab/` where the terms say.
+20. As the Issuer platform owner, I want the checks for each credential type to be code in the Gateway, so that the hackathon's roster predicates and AIT's eligibility predicates ship without a checklist file format.
+21. As the Issuer platform owner, I want the data-provider plugin to know one URL, one secret and two timeouts and nothing about claims, so that every business rule lives in the Gateway and the plugin never changes between installations.
+22. As the Issuer platform owner, I want the Gateway to own the error vocabulary, so that the plugin never learns a new error code.
+23. As the Issuer platform owner, I want the Gateway to record every issuance at the moment the plugin call succeeds, so that the admin API's search can be built on it later without re-deriving anything from Certify's ledger.
+24. As the Issuer platform owner, I want one set of Compose files and one `installations/<name>/` directory per installation, so that the service set is identical and only files differ.
+25. As the Issuer platform owner, I want to run either installation locally by setting one variable, so that I can test the hackathon and AIT stacks on the same machine, one at a time.
+26. As the Issuer platform owner, I want the context fix to open with the six-step Compose check, so that the signing and verifying paths are observed to handle a JSON literal before the context is relied on.
+27. As the Issuer platform owner, I want the swap from the CSV mock to a real data adapter to be a configuration change, so that the real adapter can arrive without a code change in the Gateway.
+28. As the Issuer platform owner, I want the swap from the Keycloak realm to eSignet to be one configuration change per installation, so that the hackathon can take eSignet if it arrives in time.
+29. As the Issuer platform owner, I want the plugin jar built in CI and by the local bring-up script, so that no jar is ever committed.
+30. As the Issuer platform owner, I want `smoke.sh` to prove each installation issues and verifies every credential type it serves and refuses the cases it must refuse, so that a regression is caught before the infra team deploys.
+31. As the Issuer platform owner, I want the go/no-go on the plugin decided by one transcript issued end to end through the Gateway by 2026-11-13, so that the fallback is taken in time if the plugin path fails.
+32. As the Issuer platform owner, I want the repository's directories named by the glossary, so that a reader of `CONTEXT.md` finds `gateway/`, `portal/` and `vc-lab/` where the terms say.
 33. As a member of the infra team, I want one document that lists every image, environment variable, mounted file, per-installation setting and public endpoint, so that I can deploy an installation without reading the code.
 34. As a member of the infra team, I want Certify listed once per instance per installation, so that an installation with more than one Certify later is a repetition of a known block.
 35. As a member of the infra team, I want the ingress allowlist stated as configuration, so that Certify's unauthenticated internal APIs are never exposed by accident.
@@ -82,16 +82,16 @@ Directories are named by `CONTEXT.md` terms. The first build pull request rename
 | `vc-lab/` | The authored credential artifacts. In this chain: `vc-lab/contexts/transcript/v1.json`, `vc-lab/contexts/developer-passport/v1.json`, `vc-lab/contexts/achievement/v1.json`. Templates, display metadata and the publish step join it in the VC Lab task | Contexts only |
 | `installations/ait/` | The AIT installation: Certify properties and `credential_config` rows, Keycloak realm `inji`, the generated adapter CSV (git-ignored), Gateway settings, wallet test-harness configuration (Mimoto issuers), the ingress allowlist | Built |
 | `installations/hackathon/` | The hackathon installation: the same set of files for Developer Passport and Achievement, Keycloak realm `hackathon`, a committed mock roster CSV | Built |
-| `vc-stack/` | The one `docker-compose.yaml`, `bootstrap.sh`, `smoke.sh`, the shared nginx configurations and seed SQL that do not differ per installation; `vc-stack/plugins/` is the git-ignored build output of the plugin jar | Changed |
+| `vc-stack/` | One folder per deployment (`issuer/`, `mock-adapter/`, `verify/`, `demo/`) with its own `compose.yaml`, the top-level `compose.yaml` and `issuer-dev.yaml` that include them, `bootstrap.sh`, `smoke.sh`, `issuer-smoke.sh`, the shared nginx configurations and seed SQL that do not differ per installation; `vc-stack/plugins/` is the git-ignored build output of the plugin jar | Changed |
 | `data/` | The mock personas (`students.json`) and the generators, unchanged in place; the generated CSV moves to `installations/ait/adapter/` | Changed |
 
 Each `installations/<name>/` directory carries a short `README.md` naming its files and the values that are the installation's own (realm, scopes, credential types, adapter CSV, Gateway token name). The prose that explains the files to the infra team is the configuration contract (below), one page for both installations.
 
 ### Compose changes
 
-- One `docker-compose.yaml`, no profiles, no second file. An `INSTALLATION` variable in `vc-stack/.env` names the directory under `installations/` that every per-installation mount and `env_file` reads from. Locally one installation runs at a time; `./run-demo.sh` and `bootstrap.sh` take the variable and refuse to start when it names no directory.
+- One `compose.yaml` per deployment folder, no profiles; `vc-stack/compose.yaml` includes them all, so the service set is the same for every installation. An `INSTALLATION` variable in `vc-stack/.env` names the directory under `installations/` that every per-installation mount and `env_file` reads from. Locally one installation runs at a time; `./run-demo.sh` and `bootstrap.sh` take the variable and refuse to start when it names no directory.
 - New services: `gateway` (Thas's image, built from `gateway/`), `adapter` (Thas's image, built from `adapter/`, bind-mounting the installation's CSV), `vdr` (stock nginx, serving `vc-lab/contexts/` read-only under `/contexts/`). All three join `vc_stack_network`; `gateway` also reaches Certify's Postgres.
-- Certify: the plugin jar is mounted as a single file into `/home/mosip/additional_jars/`, never as a directory, so the four jars bundled in `inji-certify-with-plugins:0.14.0` stay visible. The per-installation properties file replaces today's `certify-csvdp-student.properties` and selects `GatewayDataProviderPlugin` with the four `mosip.certify.gateway.*` keys of `contracts.md` section 2a. Certify's seed SQL (the `credential_config` rows) comes from the installation directory.
+- Certify: the plugin jar is mounted as a single file into `/home/mosip/additional_jars/`, never as a directory, so the four jars bundled in `inji-certify-with-plugins:0.14.0` stay visible. The per-installation properties file, `certify-installation.properties`, selects `GatewayDataProviderPlugin` with the four `mosip.certify.gateway.*` keys of `contracts.md` section 2a. Certify's seed SQL (the `credential_config` rows) comes from the installation directory.
 - Keycloak: the realm file comes from the installation directory (`inji` for AIT, `hackathon` for the hackathon). The hardcoded `client_id` protocol mapper the demo realm already carries for the wallet client is kept in both realms, as `contracts.md` section 1 requires of every client that obtains tokens for Certify.
 - Public gateway (nginx): routes `/contexts/` to the `vdr` container. The `/academic-transcript-context.json` and `/student-context.json` locations go, with the `certify-nginx` static context route and `vc-stack/config/academic-transcript-context.json`.
 - Mimoto and Inji Web stay as the wallet test harness, in the local Compose only; the Mimoto issuer list is rendered from the installation's template so each installation's Certify is the one issuer it shows.
@@ -196,7 +196,7 @@ Accepted when:
 - `INSTALLATION=hackathon ./run-demo.sh` brings the stack up and `smoke.sh` passes: Certify's issuer metadata lists exactly the two configurations with their claims and the realm's issuer; realm usernames match the roster's `id` column; one Developer Passport and one Achievement are issued for the winning participant and both verify in `verify-service`; the Developer Passport issues and the Achievement is refused (`winner` false) for the non-winning team member; the Developer Passport is refused (`on_roster` false) for the participant without a team; a tampered claim in each type fails verification.
 - `INSTALLATION=ait ./run-demo.sh` and `smoke.sh` still pass with the same script.
 - The `StudentIDCredential` leftovers are gone.
-- A short note at the top of `hackathon-configurations.md` records that the Issuer carries the two types on roster predicates.
+- A short note at the top of `hackathon-configurations.md` records that the Issuer platform carries the two types on roster predicates.
 
 ### Configuration contract to infra
 

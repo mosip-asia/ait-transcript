@@ -55,6 +55,16 @@ def test_smoke_personas_can_sign_in() -> None:
             assert {*eligible, *fixture["refused"]} <= users, (installation, fixture["scope"])
 
 
+def test_the_unknown_smoke_persona_has_no_record_and_no_sign_in() -> None:
+    """Each type's `unknown` persona is the Gateway's 404 `no_record` case, so the adapter must not know it."""
+    for installation in NAMES:
+        fixtures = json.loads((INSTALLATIONS / installation / "smoke.json").read_text(encoding="utf-8"))
+        known = {*csv_ids(installation), *realm_usernames(installation)}
+        for fixture in fixtures:
+            assert isinstance(fixture["unknown"], str) and fixture["unknown"], (installation, fixture["scope"])
+            assert fixture["unknown"] not in known, (installation, fixture["scope"], fixture["unknown"])
+
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("test_") and callable(fn):

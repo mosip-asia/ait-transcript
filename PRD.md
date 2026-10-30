@@ -74,7 +74,7 @@ sequenceDiagram
    - **Registrar portal** (`/registrar`): persona picker scoped to the registrar persona(s) → see all requests, approve or reject with one click, see a running log.
    - "Open Inji Verify" link/button always visible in the student portal once that student has a claimed credential, for the presentation step.
    - Both portals share the same backend, request/approval state, and mock-data fixture — this is an IA split (two entry URLs), not two separate deployments or databases.
-   - **The app itself is a Docker service** in the same `docker-compose.yaml` as the Inji stack (its own `Dockerfile`, its own entry in the compose file) — not a script that shells out to a host-installed Python/uvicorn. See §2's secondary-audience note: this is a handoff requirement, not just tidiness.
+   - **The app itself is a Docker service** in the same Compose project as the Inji stack (its own `Dockerfile`, its own service in `vc-stack/demo/compose.yaml`) — not a script that shells out to a host-installed Python/uvicorn. See §2's secondary-audience note: this is a handoff requirement, not just tidiness.
 2. **Local Docker stack** for the Inji side, vendored into this repo: PostgreSQL, Inji Certify (+ nginx), Mimoto, Keycloak (+ nginx), Inji Web, Inji Verify (service + UI), public gateway — same shape as `inji/vc-stack`.
 3. **AIT Transcript credential config** on Certify: one credential type, claims and PDF design based on `inji/schemas/academic-transcript.jsonld` and Credential Lab's `aittranscript` preset (see §7).
 4. **Mock student data**: a single fixture (student info + academic transcript: courses, grades, GPA, program, dates) that is the **one source of truth** for both the demo app's persona list and Certify's CSV data-provider file — generated/seeded from the same file, not hand-duplicated.
@@ -140,6 +140,6 @@ The demo is done when a presenter can, without touching a terminal after `docker
 
 ## 10. Open risks
 
-- Container image versions must match a working combination (pinned in `vc-stack/docker-compose.yaml`; see [wiki/architecture/vc-stack.md](./wiki/architecture/vc-stack.md#image-versions)).
+- Container image versions must match a working combination (pinned in the `compose.yaml` files under `vc-stack/`; see [wiki/architecture/vc-stack.md](./wiki/architecture/vc-stack.md#image-versions)).
 - Demo relies on the presenter’s machine running Docker; no cloud fallback.
 - Keycloak browser login uses **`http://localhost:9080`** (this repo’s remapped Keycloak nginx port). Containers reach the same realm via `host.docker.internal:9080` — configured in `vc-stack/.env` and `bootstrap.sh`. No `/etc/hosts` `keycloak` entry is required (unlike stock `inji/vc-stack` on port 8080).

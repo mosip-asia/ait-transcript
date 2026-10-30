@@ -17,7 +17,7 @@ It runs in the demo-app image (httpx, cryptography) inside the Docker network, w
 demo-app's environment carries AUTH_SERVER_TOKEN_ENDPOINT (from the installation's authorization-server.env), from
 the repository root: it reads the personas' passwords from installations/<name>/keycloak-realm.json. demo-app does not mount vc-stack/, so the run mounts this file:
 
-  docker compose -f vc-stack/docker-compose.yaml run --rm --no-deps \\
+  docker compose -f vc-stack/compose.yaml run --rm --no-deps \\
       -v "$PWD/vc-stack/issue_and_verify.py:/demo/vc-stack/issue_and_verify.py:ro" demo-app \\
       python vc-stack/issue_and_verify.py issue ait ait-2026-0001 ait_transcript_vc_ldp .demo-state/smoke-credential.json
   (same, ending in: python vc-stack/issue_and_verify.py verify .demo-state/smoke-credential.json fullName)
