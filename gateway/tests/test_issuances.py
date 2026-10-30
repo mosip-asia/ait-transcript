@@ -50,6 +50,11 @@ def escaped(row: dict, names) -> dict:
     return {k: row[k] if k == "courses" else ct.escape_vc_quoted_claim(row[k]) for k in names}
 
 
+def claim_names(ctype: ct.CredentialType) -> list[str]:
+    """The claims a type answers: its record model's fields, then the claims it derives."""
+    return [*ctype.record.model_fields, *ctype.derived]
+
+
 def assert_only_failing(checks: list[dict], failing: str | list[str], ctype: ct.CredentialType) -> None:
     """The checks of a 403 body exactly: every check of the type in order, the failing one(s) failed with a reason,
     every other check of the type passed without one."""
@@ -126,7 +131,7 @@ def check_gateway(post, rows, token: str, csv_path: Path, fixtures: dict) -> Non
     for sub in personas:
         status, body = post({**request, "sub": sub, "scope": f"openid {scope}", "accessTokenHash": "x", "iss": "y"}, token)
         assert status == 200, (sub, status, body)
-        assert stringify(body) == escaped(csv_rows[sub], ctype.claim_names), (sub, body)
+        assert stringify(body) == escaped(csv_rows[sub], claim_names(ctype)), (sub, body)
     assert rows()[before:] == [(sub, ctype.credential_type, scope, "wallet-demo") for sub in personas], rows()
 
 
@@ -194,24 +199,56 @@ def test_starts_while_the_adapter_is_down_and_answers_gateway_error() -> None:
         assert store.rows == []
 
 
-def test_malformed_adapter_data_is_a_gateway_error_not_a_crash() -> None:
+def answering(degrees, eligibility, record=None):
+    """An adapter that answers 200 with these bodies, by path; a str body is served as it is, not as JSON."""
     import httpx
 
-    def answer(eligibility: dict | None, degrees: list) -> httpx.Client:
-        def handler(request: httpx.Request) -> httpx.Response:
-            return httpx.Response(200, json=degrees if request.url.path.endswith("/degrees") else eligibility)
-        return httpx.Client(base_url="http://adapter:8000", transport=httpx.MockTransport(handler))
+    def handler(request: httpx.Request) -> httpx.Response:
+        answer = {"degrees": degrees, "eligibility": eligibility, "transcript": record}[request.url.path.rsplit("/", 1)[1]]
+        return httpx.Response(200, text=answer) if isinstance(answer, str) else httpx.Response(200, json=answer)
+    return httpx.Client(base_url="http://adapter:8000", transport=httpx.MockTransport(handler))
 
-    good = {"holds": [], "conferralStatus": "Conferred", "balance": "0"}
-    cases = [(answer(dict(good, balance="n/a"), [{"degreeId": "d1"}]), "balance is not a number"),
-             (answer({"holds": []}, [{"degreeId": "d1"}]), "eligibility lacks fields"),
-             (answer(good, [{"id": "d1"}]), "degree lacks degreeId")]
+
+def test_malformed_adapter_data_is_a_gateway_error_not_a_crash() -> None:
+    """An answer that does not parse into the type's model, on any of the three paths, is 502 and writes no row."""
+    degrees, good = [{"degreeId": "d1"}], {"holds": [], "conferralStatus": "Conferred", "balance": "0"}
+    record = {**dict.fromkeys(ct.REGISTRY[SCOPE].record.model_fields, "x"), "courses": []}
+    cases = [(answering(degrees, dict(good, balance="n/a")), "balance is not a number"),
+             (answering(degrees, dict(good, balance=0)), "balance served as a number"),
+             (answering(degrees, dict(good, conferralStatus="Revoked")), "unknown conferralStatus"),
+             (answering(degrees, {"holds": []}), "eligibility lacks fields"),
+             (answering(degrees, "not json"), "eligibility is not JSON"),
+             (answering([{"id": "d1"}], good), "degree lacks degreeId"),
+             (answering({"degreeId": "d1"}, good), "degrees is not a list"),
+             (answering(degrees, good, dict(record, faculty={"k": "v"})), "a dict faculty"),
+             (answering(degrees, good, dict(record, courses=[{"term": "T1"}])), "a term without courses")]
     for adapter, label in cases:
         store = FakeStore()
         with host_gateway(adapter, store) as client:
             status, body = post_with(client)({"sub": ELIGIBLE, "scope": SCOPE}, "test-token")
         assert (status, body) == (502, {"error": "gateway_error"}), (label, status, body)
         assert store.rows == []
+
+
+def test_a_check_that_raises_is_a_bug_answered_500_without_a_body() -> None:
+    """Not a gateway_error body: the plugin maps an answer without one to gateway_error itself."""
+    import dataclasses
+
+    import main
+    from fastapi.testclient import TestClient
+
+    broken = dataclasses.replace(ct.REGISTRY[SCOPE], checks=(ct.Check("broken", lambda e: 1 / 0),))
+    settings = main.Settings(enabled_scopes=(SCOPE,), adapter_url="http://adapter:8000", auth_token="test-token",
+                             database_url="postgresql://unused")
+    registry, ct.REGISTRY = ct.REGISTRY, {**ct.REGISTRY, SCOPE: broken}
+    try:
+        app = main.create_app(settings, adapter=answering([{"degreeId": "d1"}], {"holds": [], "conferralStatus": "Conferred",
+                                                                                  "balance": "0"}), store=FakeStore())
+    finally:
+        ct.REGISTRY = registry
+    with TestClient(app, raise_server_exceptions=False) as client:
+        r = client.post("/issuances", json={"sub": ELIGIBLE, "scope": SCOPE}, headers={"Authorization": "Bearer test-token"})
+    assert r.status_code == 500 and "json" not in r.headers["content-type"], (r.status_code, r.headers, r.text)
 
 
 def test_a_failed_issuance_record_is_a_gateway_error_not_a_200() -> None:
