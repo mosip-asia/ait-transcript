@@ -38,3 +38,11 @@ Source: [`responsibilities.md`](responsibilities.md) section 5 and the research 
 | # | Proposal says | v0.1 does | Why | Revisit |
 |---|---|---|---|---|
 | 20 | Hard copies released by Pre-Authorized Code (§3.3); walletless PDF from a catalog (§2.1) | The Portal is the hard copy's wallet: a hard copy is made from the student side, inside the student's own sign-in, the Portal redeeming the credential at Certify's issuance endpoint through the ordinary authorization-code flow and the plugin path, then embedding it in the QR and discarding it. No pre-authorized code in v0.1; no staff-triggered printing | Certify 0.14 serves pre-authorized offers and wallet-initiated issuance only from separate instances (one data-provider plugin and one token issuer each); the student side already has the sign-in, so the wallet path costs no second instance, no offer cache and no second place that runs the checklist | If OSA asks for counter printing by staff: a second hard-copy-only Certify instance sharing DB, keystore and DID, serving pre-authorized offers |
+
+## Changes on 2026-10-28
+
+Source: [`spec-part-2.md`](spec-part-2.md). Not yet put to the team.
+
+| # | Proposal says | v0.1 does | Why | Revisit |
+|---|---|---|---|---|
+| 21 | `did:web:credentials.ait.ac.th` on AIT domains (§5.2); the conformance profile's `did:web` with the DID document on the VDR (responsibilities.md section 6) | v0.1 issues under Certify's `did:key`, refreshed after a wipe, so a wipe changes the issuer identifier; nothing is published at the VDR's `/.well-known/did.json`; supersedes the `did:web` part of row 6 for v0.1 | Removes the DID publishing step and the question of `did:web` over plain HTTP from v0.1; credentials through v0.1 carry no compatibility promise anyway | After v0.1, with a stable public VDR hostname |
