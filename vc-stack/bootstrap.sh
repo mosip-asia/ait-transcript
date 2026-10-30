@@ -126,7 +126,11 @@ do_wipe() {
     docker compose down -v --remove-orphans 2>/dev/null || true
     ok "docker compose down -v"
   fi
-  rm -rf certs data .env "$OVERRIDE_FILE"
+  # Certify runs as root and writes data/ as root, which a host user other than root cannot remove: remove it from a
+  # container (the database's image, already pulled).
+  rm -rf certs data 2>/dev/null || docker run --rm -v "$PWD:/w" postgres:15 rm -rf /w/certs /w/data \
+    || die "could not remove certs/ and data/" 2
+  rm -rf .env "$OVERRIDE_FILE"
   ok "removed certs/, data/, .env, $OVERRIDE_FILE"
   # Clean sed leftovers from prior runs but never touch the user's tracked config
   # edits — those are deliberate and persist across wipes.
