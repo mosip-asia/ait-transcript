@@ -66,7 +66,7 @@ def stand_in(installation: str) -> dict[str, str]:
 def certify_properties(installation: str, env: dict[str, str]) -> dict[str, str]:
     """The installation's Certify properties with their placeholders resolved as Certify sees them in the container."""
     known = {**r.authorization_server(installation, env), "mosip.certify.domain.url": CERTIFY_DOMAIN}
-    text = (INSTALLATIONS / installation / "certify-csvdp-student.properties").read_text(encoding="utf-8")
+    text = (INSTALLATIONS / installation / "certify-installation.properties").read_text(encoding="utf-8")
     props = {}
     for line in text.replace("\\\n", "").splitlines():
         if line.strip() and not line.startswith("#"):

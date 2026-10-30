@@ -466,8 +466,8 @@ wait_healthy() {
 # -------- DID refresh (§11.3) --------
 # All credential_config rows share one signing key (the keystore), so every row's
 # did_url must match the live did:key derived from certify-nginx's /.well-known/did.json.
-# This iterates every row and every csvdp-*.properties file so the script stays
-# credential-type-agnostic as new VC types are added.
+# This iterates every row so the script stays credential-type-agnostic as new VC types are added,
+# then patches the installation's Certify properties.
 did_refresh() {
   step "did:key refresh (§11.3)"
   local new_pk new_did
@@ -501,19 +501,17 @@ did_refresh() {
     fi
   done <<< "$rows"
 
-  # Patch every csvdp-*.properties file so a future wipe seeds with the correct DID.
-  for prop in "$INSTALLATION_DIR"/certify-csvdp-*.properties; do
-    [[ -f "$prop" ]] || continue
-    if grep -q "^mosip.certify.data-provider-plugin.did-url=" "$prop"; then
-      local cur_prop_did
-      cur_prop_did=$(grep "^mosip.certify.data-provider-plugin.did-url=" "$prop" | head -1 | cut -d= -f2-)
-      if [[ "$cur_prop_did" != "$new_did" ]]; then
-        sed -i.bak "s|^mosip.certify.data-provider-plugin.did-url=.*$|mosip.certify.data-provider-plugin.did-url=${new_did}|" "$prop"
-        rm -f "${prop}.bak"
-        ok "patched $(basename "$prop")"
-      fi
+  # Patch the installation's Certify properties so a future wipe seeds with the correct DID.
+  local prop="$INSTALLATION_DIR/certify-installation.properties"
+  if grep -q "^mosip.certify.data-provider-plugin.did-url=" "$prop"; then
+    local cur_prop_did
+    cur_prop_did=$(grep "^mosip.certify.data-provider-plugin.did-url=" "$prop" | head -1 | cut -d= -f2-)
+    if [[ "$cur_prop_did" != "$new_did" ]]; then
+      sed -i.bak "s|^mosip.certify.data-provider-plugin.did-url=.*$|mosip.certify.data-provider-plugin.did-url=${new_did}|" "$prop"
+      rm -f "${prop}.bak"
+      ok "patched $(basename "$prop")"
     fi
-  done
+  fi
 
   if (( restart_needed == 0 )); then
     ok "all rows already current — no restart needed"

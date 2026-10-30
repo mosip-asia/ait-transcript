@@ -6,7 +6,7 @@ How the infra team deploys this directory (the service set, every variable and m
 
 | File | Read by | Notes |
 |---|---|---|
-| `certify-csvdp-student.properties` | Certify (`csvdp-student` profile) | Certify's settings: the Authorization Server keys (read from `authorization-server.env`), the Gateway data-provider plugin's six keys (below), the issuer display; `bootstrap.sh` rewrites `did-url` after a wipe |
+| `certify-installation.properties` | Certify (`installation` profile) | Certify's settings: the Authorization Server keys (read from `authorization-server.env`), the Gateway data-provider plugin's six keys (below), the issuer display; `bootstrap.sh` rewrites `did-url` after a wipe |
 | `authorization-server.env` | Certify and the Portal (`demo-app`), through Compose's `env_file`; `bootstrap.sh`, `smoke.sh` | The Authorization Server this installation trusts: issuer, JWKS URL, token endpoint, browser URL and wallet client id, each `${KEY:-<stand-in realm `hackathon`'s value>}`. An environment points the installation at another server by setting the same variable in `vc-stack/.env` (the VM's `app.env`), with no file changed. Certify's properties, Mimoto's issuer template and the Portal's sign-out link read these settings; the configuration contract's Authorization Server section lists them |
 | `certify_seed.sql` | Postgres, first start only | The `credential_config` rows for `developer-passport` and `achievement-certificate`, mounted after `vc-stack/certify_init.sql` |
 | `keycloak-realm.json` | Keycloak (`--import-realm`) | Realm `hackathon`: one user per roster `id`, the `wallet-demo` client, the test-only `smoke` client, the `developer_passport_vc_ldp` and `achievement_certificate_vc_ldp` scopes with Certify's audience. `bootstrap.sh` syncs the `wallet-demo` certificate into it |
@@ -30,7 +30,7 @@ The installation's own values:
   - `hack-2026-0001`: team `team-01` "Sandbox Pioneers", the winning team: gets both credentials
   - `hack-2026-0002`: team `team-02` "Chain Gang", not a winner: gets the Developer Passport, refused the Achievement (`winner` fails, `on_roster` passes)
   - `hack-2026-0003`: registered, no team (empty `teamId`): refused both, `on_roster` fails (and `winner`, as the row is no winner)
-- Certify data-provider plugin, in `certify-csvdp-student.properties` (contracts.md section 2a; these six keys and nothing else; edit the file and restart Certify, `docker compose restart certify`):
+- Certify data-provider plugin, in `certify-installation.properties` (contracts.md section 2a; these six keys and nothing else; edit the file and restart Certify, `docker compose restart certify`):
   - `mosip.certify.integration.data-provider-plugin`: `GatewayDataProviderPlugin`
   - `mosip.certify.integration.scan-base-package`: `asia.mosip.issuer.gateway.plugin`
   - `mosip.certify.gateway.url`: `http://gateway:8000`
