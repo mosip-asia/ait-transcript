@@ -1,0 +1,35 @@
+{
+  "@context": {
+    "@version": 1.1,
+    "@protected": true,
+    "ait": "https://ait.example/transcript#",
+    "AitTranscriptCredential": "ait:AitTranscriptCredential",
+    "fullName": "ait:fullName",
+    "dateOfBirth": "ait:dateOfBirth",
+    "country": "ait:country",
+    "registrationNo": "ait:registrationNo",
+    "previousDegree": "ait:previousDegree",
+    "yearAwarded": "ait:yearAwarded",
+    "dateAdmitted": "ait:dateAdmitted",
+    "option": "ait:option",
+    "degreeAwarded": "ait:degreeAwarded",
+    "dateGraduation": "ait:dateGraduation",
+    "faculty": "ait:faculty",
+    "academicProgram": "ait:academicProgram",
+    "areaOfSpecialization": "ait:areaOfSpecialization",
+    "notes": "ait:notes",
+    "issueDate": "ait:issueDate",
+    "courses": {
+      "@id": "ait:courses",
+      "@type": "@json"
+    },
+    "courseList": "ait:courseList",
+    "thesisTitle": "ait:thesisTitle",
+    "thesisGrade": "ait:thesisGrade",
+    "programCommittee": "ait:programCommittee",
+    "courseworkCredits": "ait:courseworkCredits",
+    "thesisCredits": "ait:thesisCredits",
+    "totalCredits": "ait:totalCredits",
+    "thesisExamination": "ait:thesisExamination"
+  }
+}

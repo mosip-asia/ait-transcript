@@ -1,0 +1,7 @@
+name: vc-stack
+
+include:
+  - issuer/compose.yaml
+  - verify/compose.yaml
+  - mock-adapter/compose.yaml
+  - demo/compose.yaml

@@ -1,0 +1,192 @@
+# Tests only: never publishes images and never deploys (deploy.yml does that, by hand).
+# Most tests run locally (see CLAUDE.md); CI runs on merges, releases and by hand.
+name: Test
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# The installations/ directory the host tests run against; stack-smoke runs every installation.
+env:
+  INSTALLATION: ait
+
+jobs:
+  host-tests:
+    name: Host tests (no Docker)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - run: pip install -r portal/requirements.txt -r gateway/requirements.txt tzdata
+
+      # The readiness test reads installations/ait/mimoto-issuers-config.json, which is git-ignored.
+      - name: Render the issuer config
+        run: python data/render_mimoto_issuers_config.py
+
+      - name: Run test scripts
+        run: |
+          status=0
+          for t in \
+            vc-stack/test_inji_web_vc_readiness.py \
+            vc-stack/test_installation_guard.py \
+            vc-stack/test_installations.py \
+            vc-stack/test_configuration_contract.py \
+            vc-stack/test_authorization_server.py \
+            vc-stack/test_issue_and_verify.py \
+            portal/test_auth.py \
+            portal/test_requests.py \
+            data/test_ait_courses.py \
+            data/test_generate_csv.py \
+            data/test_render_mimoto_issuers_config.py \
+            adapter/test_adapter.py \
+            gateway/tests/test_credential_types.py \
+            gateway/tests/test_issuances.py
+          do
+            echo "::group::$t"
+            if python "$t"; then r=PASS; else r=FAIL; status=1; fi
+            echo "::endgroup::"
+            echo "$r $t"
+          done
+          exit "$status"
+
+  # One fresh runner per installation: Certify's seed runs only on a fresh database, so nothing is wiped between them.
+  stack-smoke:
+    name: Stack smoke (Docker Compose, ${{ matrix.installation }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        installation: [ait, hackathon]
+    env:
+      COMPOSE: docker compose -f vc-stack/compose.yaml
+      INSTALLATION: ${{ matrix.installation }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # run-demo.sh builds the plugin jar in a Maven container with its repository in vc-stack/plugins/.m2.
+      - uses: actions/cache@v4
+        with:
+          path: vc-stack/plugins/.m2
+          key: plugin-m2-${{ hashFiles('gateway/plugin/pom.xml') }}
+
+      - name: Bring up the stack
+        run: ./run-demo.sh
+
+      - run: ./vc-stack/smoke.sh
+
+      - uses: actions/upload-artifact@v5
+        if: always()
+        with:
+          name: smoke-credential-${{ matrix.installation }}-${{ github.sha }}
+          path: .demo-state/smoke-credential-*.json
+          if-no-files-found: ignore
+          include-hidden-files: true
+          retention-days: 30
+
+      # context_refresh.sql moves the ait-transcript row only.
+      - if: matrix.installation == 'ait'
+        run: python3 vc-stack/test_context_refresh.py
+
+      # The stack writes only git-ignored files; a run that changes a tracked one puts a machine's key, certificate or
+      # DID into the next commit.
+      - name: The run left every tracked file unchanged
+        run: git status --porcelain && test -z "$(git status --porcelain)"
+
+      - name: Collect stack logs
+        if: failure()
+        run: |
+          mkdir -p stack-logs
+          docker ps -a > stack-logs/docker-ps.txt 2>&1 || true
+          $COMPOSE logs --no-color --timestamps > stack-logs/compose.log 2>&1 || true
+
+      - uses: actions/upload-artifact@v5
+        if: failure()
+        with:
+          name: stack-logs-${{ matrix.installation }}
+          path: stack-logs/
+
+      - name: Tear down
+        if: always()
+        run: $COMPOSE down -v --remove-orphans
+
+  # The Issuer and the mock Adapter alone (vc-stack/issuer-dev.yaml), as issuer-dev runs them: demo/ and verify/ are
+  # down, so there is no Keycloak and no credential is issued (stack-smoke does that). One fresh runner per installation.
+  issuer-smoke:
+    name: Issuer-only smoke (Docker Compose, ${{ matrix.installation }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        installation: [ait, hackathon]
+    env:
+      COMPOSE: docker compose -f vc-stack/issuer-dev.yaml
+      INSTALLATION: ${{ matrix.installation }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/cache@v4
+        with:
+          path: vc-stack/plugins/.m2
+          key: plugin-m2-${{ hashFiles('gateway/plugin/pom.xml') }}
+
+      # .env naming the installation, and the external network.
+      - run: ./vc-stack/bootstrap.sh --prepare
+
+      # The git-ignored files the two folders mount: the ait adapter CSV and the plugin jar (as run-demo.sh builds it).
+      - name: Generate the adapter CSV and build the plugin jar
+        run: |
+          python3 data/generate_csv.py
+          mkdir -p vc-stack/plugins/.m2
+          docker run --rm --user "$(id -u):$(id -g)" \
+            -v "$PWD/gateway/plugin:/src" -w /src \
+            -v "$PWD/vc-stack/plugins/.m2:/var/maven/.m2" -e MAVEN_CONFIG=/var/maven/.m2 \
+            maven:3.9-eclipse-temurin-21 mvn -q -B -Duser.home=/var/maven package
+          cp gateway/plugin/target/gateway-data-provider-plugin.jar vc-stack/plugins/
+
+      - name: Bring up the Issuer and the mock Adapter
+        run: $COMPOSE up -d --build
+
+      # The README's issuer-dev step, so it is tested: it writes the live did:key and recreates Certify (the smoke
+      # fails without it); a local http base moves no context URL.
+      - run: ./vc-stack/bootstrap.sh --did-refresh
+
+      - run: ./vc-stack/issuer-smoke.sh
+
+      # As in stack-smoke: the run leaves every tracked file as committed.
+      - name: The run left every tracked file unchanged
+        run: git status --porcelain && test -z "$(git status --porcelain)"
+
+      - name: Collect stack logs
+        if: failure()
+        run: |
+          mkdir -p stack-logs
+          docker ps -a > stack-logs/docker-ps.txt 2>&1 || true
+          $COMPOSE logs --no-color --timestamps > stack-logs/compose.log 2>&1 || true
+
+      - uses: actions/upload-artifact@v5
+        if: failure()
+        with:
+          name: issuer-stack-logs-${{ matrix.installation }}
+          path: stack-logs/
+
+      - name: Tear down
+        if: always()
+        run: $COMPOSE down -v --remove-orphans

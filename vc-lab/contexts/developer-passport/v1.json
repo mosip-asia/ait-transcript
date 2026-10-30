@@ -1,0 +1,14 @@
+{
+  "@context": {
+    "@version": 1.1,
+    "@protected": true,
+    "ait": "https://ait.example/credential#",
+    "DeveloperPassportCredential": "ait:DeveloperPassportCredential",
+    "teamId": "ait:teamId",
+    "teamName": "ait:teamName",
+    "oidcClientId": "ait:oidcClientId",
+    "authEndpoint": "ait:authEndpoint",
+    "issuerEndpoint": "ait:issuerEndpoint",
+    "verifierEndpoint": "ait:verifierEndpoint"
+  }
+}

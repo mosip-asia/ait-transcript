@@ -5,7 +5,10 @@ Run: python3 data/test_generate_csv.py
 
 from __future__ import annotations
 
+import base64
 import csv
+import json
+import re
 import sys
 import tempfile
 from pathlib import Path
@@ -53,10 +56,84 @@ def test_generated_csv_roundtrip() -> None:
             reader = csv.DictReader(f)
             assert reader.fieldnames == gc.CSV_COLUMNS
             read_rows = list(reader)
-    assert len(read_rows) == len(rows)
-    assert any("CS601" in (r["courseTableHtml"] or "") for r in read_rows)
-    assert all("${" not in (r["courseTableHtml"] or "") for r in read_rows)
+    assert read_rows == rows  # every cell back as written, newlines included
+    assert any("CS601" in (r["courses"] or "") for r in read_rows)
     assert all("${" not in (r["courses"] or "") for r in read_rows)
+
+
+def test_claims_are_written_verbatim_not_escaped() -> None:
+    # The Gateway is the only escaper (gateway/credential_types.py); the CSV holds the values themselves.
+    rows = gc.build_rows(gc.load_students()["students"])
+    for claim in ("courseList", "programCommittee"):
+        assert any("\n" in r[claim] for r in rows), claim
+        assert all("\\" not in r[claim] for r in rows), claim
+    assert all(json.loads(r["courses"]) for r in rows)  # courses stays a JSON column
+
+
+def test_columns_carry_no_course_table_html() -> None:
+    # Every claim is signed now; the course record travels once, as courses (spec: Context fix).
+    assert "courseTableHtml" not in gc.CSV_COLUMNS
+
+
+AIT = gc.REPO_ROOT / "installations" / "ait"
+
+
+def seed_value(pattern: str) -> str:
+    """One SQL string literal of the ait-transcript credential_config row, found by its shape."""
+    return re.search(pattern, (AIT / "certify_seed.sql").read_text(encoding="utf-8"))[1]
+
+
+def seed_template() -> dict:
+    template = base64.b64decode(seed_value(r"'(ewo[A-Za-z0-9+/=]+)'")).decode()
+    return json.loads(template.replace("${courses}", "[]"))  # the one unquoted placeholder
+
+
+def test_certify_configuration_names_the_generated_columns() -> None:
+    columns = ",".join(["id", *gc.CLAIM_COLUMNS])  # the adapter columns after them are not claims
+    (plugin_config,) = json.loads(seed_value(r"'(\[\{\"mosip\.certify\.mock[^']*)'::JSONB"))
+    assert plugin_config["mosip.certify.mock.data-provider.csv.data-columns"] == columns
+    assert list(json.loads(seed_value(r"'(\{\"fullName\": \{\"display\"[^']*)'::JSONB"))) == gc.CLAIM_COLUMNS
+    assert list(seed_template()["credentialSubject"]) == ["id", *gc.CLAIM_COLUMNS]
+
+
+def test_template_and_context_column_name_the_same_vdr_url() -> None:
+    url = seed_value(r"'([^']*/contexts/transcript/v1\.json[^']*)'").split(",")[0]
+    assert url == "http://host.docker.internal:9098/contexts/transcript/v1.json", url
+    assert seed_template()["@context"] == ["https://www.w3.org/ns/credentials/v2", url,
+                                           "https://w3id.org/security/suites/ed25519-2020/v1"]
+
+
+def test_context_v1_signs_every_generated_claim() -> None:
+    # Claim terms at the top level, untyped strings except courses as a JSON literal (spec: Context fix).
+    context = gc.REPO_ROOT / "vc-lab" / "contexts" / "transcript" / "v1.json"
+    terms = json.loads(context.read_text(encoding="utf-8"))["@context"]
+    assert terms["ait"] == "https://ait.example/transcript#"
+    assert terms["AitTranscriptCredential"] == "ait:AitTranscriptCredential"
+    for claim in gc.CLAIM_COLUMNS:
+        want = {"@id": "ait:courses", "@type": "@json"} if claim == "courses" else f"ait:{claim}"
+        assert terms.get(claim) == want, (claim, terms.get(claim))
+    assert set(terms) == {"@version", "@protected", "ait", "AitTranscriptCredential", *gc.CLAIM_COLUMNS}
+
+
+def test_eligibility_columns_follow_the_claims() -> None:
+    # The mock adapter's columns come after the claims; Certify maps by header name and ignores them.
+    assert gc.CSV_COLUMNS == ["id", *gc.CLAIM_COLUMNS, "level", "holds", "conferralStatus", "balance"]
+
+
+def test_personas_cover_each_transcript_check() -> None:
+    rows = gc.build_rows(gc.load_students()["students"])
+    holds = [json.loads(r["holds"]) for r in rows]
+    assert any(holds) and not all(holds)  # a hold fails the no-holds check
+    assert {"Conferred"} < {r["conferralStatus"] for r in rows}  # and a student that is not conferred
+    assert any(float(r["balance"]) > 0 for r in rows) and any(float(r["balance"]) == 0 for r in rows)
+    clean = [r for r in rows if not json.loads(r["holds"]) and r["conferralStatus"] == "Conferred" and float(r["balance"]) == 0]
+    assert clean  # someone still passes all three
+
+
+def test_csv_goes_to_the_ait_installation_adapter() -> None:
+    # Certify and, later, the mock adapter mount it from there (spec: Directory layout).
+    repo_root = Path(__file__).resolve().parent.parent
+    assert gc.OUT_CSV.resolve() == repo_root / "installations" / "ait" / "adapter" / "student_identity_data.csv"
 
 
 if __name__ == "__main__":

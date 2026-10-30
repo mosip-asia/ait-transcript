@@ -1,0 +1,15 @@
+[
+  {
+    "credentialConfig": "ait-transcript",
+    "scope": "ait_transcript_vc_ldp",
+    "eligible": "ait-2026-0001",
+    "unknown": "ait-2026-9999",
+    "refused": {
+      "ait-2026-0002": "no_holds",
+      "ait-2026-0003": "conferred",
+      "ait-2026-0004": "zero_balance"
+    },
+    "tamper": ["fullName", "courses[0].courses[0].grade"],
+    "mimotoTemplate": "AITUniversity-ait-transcript-template.html"
+  }
+]

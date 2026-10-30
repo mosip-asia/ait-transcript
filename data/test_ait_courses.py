@@ -13,7 +13,6 @@ from ait_courses import (  # noqa: E402
     PackValidationError,
     enrich_ait_transcript_subject,
     parse_courses,
-    render_course_table_html,
 )
 
 _SAMPLE_COURSES = [
@@ -29,12 +28,26 @@ _SAMPLE_COURSES = [
 ]
 
 
-def test_enrich_happy_path() -> None:
+def test_enrich_derives_courses_and_course_list_only() -> None:
     subject = {"id": "x", "courses": _SAMPLE_COURSES}
     out = enrich_ait_transcript_subject(subject)
-    assert "CS601" in out["courseTableHtml"]
-    assert "Advanced Algorithms" in out["courseTableHtml"]
+    assert out["courses"] == (
+        '[{"term":"August Semester 2024","courses":[{"no":"CS601","title":"Advanced Algorithms",'
+        '"lab":"0","lec":"45","credits":"3","grade":"A"}],"credits":"3","gpa":"4.00","cumGpa":"4.00"}]'
+    )
     assert out["courseList"] == "Advanced Algorithms — A"
+    assert set(out) == {"id", "courses", "courseList"}, "no other derived claim (the HTML course table is gone)"
+
+
+def test_numbers_inside_courses_become_strings() -> None:
+    # The context types courses as @json with no datatypes, so every value inside is a string.
+    semesters = parse_courses(
+        [{"term": "T", "courses": [{"no": "X1", "title": "Y", "lab": 0, "lec": 45, "credits": 3, "grade": "A"}],
+          "credits": 3, "gpa": 4.0, "cumGpa": 3.5}]
+    )
+    assert semesters == [{"term": "T", "courses": [{"no": "X1", "title": "Y", "lab": "0", "lec": "45",
+                                                    "credits": "3", "grade": "A"}],
+                          "credits": "3", "gpa": "4.0", "cumGpa": "3.5"}]
 
 
 def test_missing_term_raises() -> None:
@@ -51,33 +64,6 @@ def test_missing_course_no_or_title_raises() -> None:
     except PackValidationError:
         return
     raise AssertionError("expected PackValidationError for missing course no")
-
-
-def test_html_escaped_in_table() -> None:
-    semesters = parse_courses(
-        [
-            {
-                "term": "T",
-                "courses": [
-                    {
-                        "no": "X1",
-                        "title": "<script>alert(1)</script> & Co",
-                        "lab": "0",
-                        "lec": "0",
-                        "credits": "1",
-                        "grade": "A",
-                    }
-                ],
-                "credits": "1",
-                "gpa": "4",
-                "cumGpa": "4",
-            }
-        ]
-    )
-    html = render_course_table_html(semesters)
-    assert "<script>" not in html
-    assert "&lt;script&gt;" in html
-    assert "&amp;" in html
 
 
 def test_subject_without_courses_passthrough() -> None:

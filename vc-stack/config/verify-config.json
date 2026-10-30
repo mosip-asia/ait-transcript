@@ -143,41 +143,6 @@
     },
     {
       "logo": "/assets/cert.png",
-      "name": "AIT Student ID",
-      "type": "StudentIDCredential",
-      "clientIdScheme": "did",
-      "definition": {
-        "purpose": "Relying party is requesting your AIT student credential to verify enrollment.",
-        "format": {
-          "ldp_vc": {
-            "proof_type": ["Ed25519Signature2020"]
-          }
-        },
-        "input_descriptors": [
-          {
-            "id": "ait student id credential",
-            "format": {
-              "ldp_vc": {
-                "proof_type": ["Ed25519Signature2020"]
-              }
-            },
-            "constraints": {
-              "fields": [
-                {
-                  "path": ["$.type"],
-                  "filter": {
-                    "type": "object",
-                    "pattern": "StudentIDCredential"
-                  }
-                }
-              ]
-            }
-          }
-        ]
-      }
-    },
-    {
-      "logo": "/assets/cert.png",
       "name": "AIT Transcript",
       "type": "AitTranscriptCredential",
       "clientIdScheme": "did",
@@ -274,12 +239,6 @@
       "province",
       "region",
       "postalCode"
-    ],
-    "StudentIDCredentialRenderOrder": [
-      "studentID",
-      "fullName",
-      "faculty",
-      "expiryDate"
     ],
     "AitTranscriptCredentialRenderOrder": [
       "fullName",
