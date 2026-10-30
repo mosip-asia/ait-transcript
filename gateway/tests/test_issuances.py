@@ -69,7 +69,8 @@ def assert_only_failing(checks: list[dict], failing: str | list[str], ctype: ct.
 
 def read_fixtures(path: Path) -> list[dict]:
     """An installation's smoke.json: one entry per credential type, each with the scope, the eligible persona (or a
-    list of them) and each refused persona's failing check (one name, or a list when several fail together)."""
+    list of them), the unknown persona the adapter has no record of, and each refused persona's failing check (one
+    name, or a list when several fail together)."""
     return json.loads(path.read_text(encoding="utf-8"))
 
 
@@ -118,7 +119,7 @@ def check_gateway(post, rows, token: str, csv_path: Path, fixtures: dict) -> Non
     assert post({**request, "scope": "openid some_other_scope"}, token) == (400, {"error": "unknown_scope"})
     assert post({"sub": eligible}, token) == (400, {"error": "unknown_scope"})
     assert post({"scope": scope}, token) == (400, {"error": "invalid_access_token"})
-    assert post({**request, "sub": "nobody"}, token) == (404, {"error": "no_record"})
+    assert post({**request, "sub": fixtures["unknown"]}, token) == (404, {"error": "no_record"})
 
     for sub, failing in fixtures["refused"].items():
         status, body = post({**request, "sub": sub}, token)
