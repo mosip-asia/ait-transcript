@@ -150,12 +150,12 @@ def test_mock_adapter_on_the_hackathon_roster() -> None:
 
 def drift(schema: dict, spec: dict, defs: dict, components: dict, where: str) -> list[str]:
     """What a model's input schema `schema` asks of the wire that openapi.yaml's `spec` does not promise: a field the
-    model requires and the YAML does not, or another type, enum or pattern, compared down through arrays and objects.
-    `defs` and `components` resolve the `$ref`s of each side."""
+    model requires and the YAML does not, or another type, enum, pattern or minLength, compared down through arrays
+    and objects. `defs` and `components` resolve the `$ref`s of each side."""
     schema = defs[schema["$ref"].rsplit("/", 1)[1]] if "$ref" in schema else schema
     spec = components[spec["$ref"].rsplit("/", 1)[1]] if "$ref" in spec else spec
     found = [f"{where}: {key} {schema.get(key)!r} in the model, {spec.get(key)!r} in openapi.yaml"
-             for key in ("type", "enum", "pattern") if key in schema and schema[key] != spec.get(key)]
+             for key in ("type", "enum", "pattern", "minLength") if key in schema and schema[key] != spec.get(key)]
     if found or schema.get("type") not in ("array", "object"):
         return found
     if schema["type"] == "array":
@@ -193,9 +193,11 @@ def test_every_field_a_gateway_model_requires_is_required_in_openapi_yaml() -> N
         pair for t in ct.REGISTRY.values() for pair in ((t.eligibility, "eligibility"), (t.record, "transcript"))]
     for model, path in checked:
         assert [] in drifts(model, path), drifts(model, path)
-    # The comparison can fail: a field the YAML does not require, and a wire type it does not give.
+    # The comparison can fail: a field the YAML does not require, a wire type it does not give, and a minimum length
+    # it does not state.
     assert drift({"type": "object", "required": ["x"]}, {"type": "object"}, {}, {}, "m") != []
     assert drift({"type": "string"}, {"$ref": "#/components/schemas/Term"}, {}, components, "m") != []
+    assert drift({"type": "string", "minLength": 1}, {"type": "string"}, {}, {}, "m") != []
 
 
 def run_live(url: str, csv_path: Path, copy_url: str, copy_csv: Path) -> None:
