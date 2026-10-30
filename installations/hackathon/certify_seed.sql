@@ -1,5 +1,5 @@
 -- The hackathon installation's credential_config rows, seeded on a fresh database only.
--- docker-compose.yaml mounts this file as /docker-entrypoint-initdb.d/certify_seed.sql,
+-- vc-stack/issuer/compose.yaml mounts this file as /docker-entrypoint-initdb.d/certify_seed.sql,
 -- a name that sorts after vc-stack/certify_init.sql, which creates the table.
 \c inji_certify postgres
 
