@@ -75,9 +75,10 @@ docker run --rm --user "$(id -u):$(id -g)" \
   maven:3.9-eclipse-temurin-21 mvn -q -B -Duser.home=/var/maven package
 cp gateway/plugin/target/gateway-data-provider-plugin.jar vc-stack/plugins/
 docker compose -f vc-stack/issuer-dev.yaml up -d --build
+./vc-stack/bootstrap.sh --context-refresh   # moves the AIT context URL to CERTIFY_PUBLIC_BASE_URL, restarts Certify
 ```
 
-Certify answers on `http://localhost:9091/.well-known/openid-credential-issuer` once it is up; [How to test](#how-to-test) has the smoke that checks it. Running one folder's own file (`vc-stack/issuer/compose.yaml`) needs `--env-file vc-stack/.env` as well, because the folder reads no `.env` of its own.
+Certify answers on `http://localhost:9091/.well-known/openid-credential-issuer` once it is up, and certify-nginx, the Issuer's single entry point, also serves the JSON-LD contexts from the mock VDR on `http://localhost:9091/contexts/`; [How to test](#how-to-test) has the smoke that checks it. The plain `compose up` leaves the contexts at the seed's local URL, `http://host.docker.internal:9098/contexts/…`, which is the full stack's public gateway and does not exist here. `--context-refresh` moves the AIT row to `<CERTIFY_PUBLIC_BASE_URL>/contexts/transcript/v1.json` when `CERTIFY_PUBLIC_BASE_URL` in `vc-stack/.env` is `https` (the issuer-dev ingress, which sends `/contexts/` to certify-nginx), or to `STUDENT_CONTEXT_URL` when `.env` sets it; it does nothing for a local `http` base. It covers only the AIT row: the hackathon Installation's rows keep the seed's local URLs, so on issuer-dev Certify cannot load their contexts yet. Running one folder's own file (`vc-stack/issuer/compose.yaml`) needs `--env-file vc-stack/.env` as well, because the folder reads no `.env` of its own.
 
 ### Reset
 
@@ -140,7 +141,7 @@ A smoke test needs the stack up (see [Deploy locally](#deploy-locally)) with the
 | Issuer-only | `vc-stack/issuer-dev.yaml` up | `./vc-stack/issuer-smoke.sh` | `All Issuer-only smoke checks passed.` |
 | Full stack | `vc-stack/compose.yaml` up | `./vc-stack/smoke.sh` | `All smoke checks passed.` |
 
-- **Issuer-only** checks that Certify loaded the Gateway plugin and lists exactly the Installation's credential types with the Gateway's claims, that the VDR serves their contexts, and that the Gateway answers every persona of `installations/<name>/smoke.json`: 200 for the eligible, 403 `checklist_failed` for the refused, 404 `no_record` for the unknown, and 502 `gateway_error` with the Adapter stopped. It issues no credential, because there is no Authorization Server.
+- **Issuer-only** checks that Certify loaded the Gateway plugin and lists exactly the Installation's credential types with the Gateway's claims, that certify-nginx serves their contexts from the VDR, and that the Gateway answers every persona of `installations/<name>/smoke.json`: 200 for the eligible, 403 `checklist_failed` for the refused, 404 `no_record` for the unknown, and 502 `gateway_error` with the Adapter stopped. It issues no credential, because there is no Authorization Server.
 - **Full stack** runs the Gateway checks directly and through Certify, and adds Mimoto, Keycloak and Inji Web configuration checks, a bootstrap re-run, `issue_and_verify.py` (issue each type with the Keycloak `smoke` client, verify it, then verify tampered copies and expect `ERR_SIGNATURE_VERIFICATION_FAILED`), and `test_inji_web_vc_readiness.py --live`. It runs only against the stand-in Keycloak, not a campus realm.
 
 The browser OAuth login and the PDF download are still manual (PRD §9).

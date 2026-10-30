@@ -63,13 +63,16 @@ def scope_of(text: str) -> str:
     return "environment" if "${" in text else "shared"
 
 
-def env_file_keys(path: Path) -> list[str]:
-    keys = []
+def env_file_scopes(path: Path) -> tuple[tuple[str, str], ...]:
+    """Each variable an env file sets, with its scope: environment when its value is a ${…} that .env can override,
+    else installation, since the file is the installation's."""
+    scopes = []
     for line in path.read_text(encoding="utf-8").splitlines():
         line = line.strip()
         if line and not line.startswith("#"):
-            keys.append(line.split("=", 1)[0])
-    return keys
+            name, value = line.split("=", 1)
+            scopes.append((name, "environment" if "${" in value else "installation"))
+    return tuple(sorted(scopes))
 
 
 def compose_rows() -> set[tuple[str, str, str, str, str, str]]:
@@ -82,10 +85,10 @@ def compose_rows() -> set[tuple[str, str, str, str, str, str]]:
         for env_file in spec.get("env_file", []):
             rows.add((folder, service, "env_file", repo_path(env_file, folder), "", "installation"))
             files = [Path(repo_path(env_file, folder).replace("<name>", n)) for n in NAMES]
-            key_sets = {tuple(sorted(env_file_keys(REPO_ROOT / f))) for f in files}
-            assert len(key_sets) == 1, f"{env_file} names different variables per installation: {key_sets}"
-            for name in key_sets.pop():
-                rows.add((folder, service, "env", name, "", "installation"))
+            key_sets = {env_file_scopes(REPO_ROOT / f) for f in files}
+            assert len(key_sets) == 1, f"{env_file} names different variables or scopes per installation: {key_sets}"
+            for name, scope in key_sets.pop():
+                rows.add((folder, service, "env", name, "", scope))
         for volume in spec.get("volumes", []):
             if isinstance(volume, dict):
                 source, target = volume["source"], volume["target"]

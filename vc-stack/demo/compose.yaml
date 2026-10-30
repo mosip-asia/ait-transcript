@@ -51,9 +51,11 @@ services:
       - ../../installations/${INSTALLATION:?set INSTALLATION in vc-stack/.env}/mimoto-issuers-config.json:/home/mosip/mimoto-issuers-config.json
       - ../config/mimoto-trusted-verifiers.json:/home/mosip/mimoto-trusted-verifiers.json
       - ../certs/oidckeystore.p12:/home/mosip/certs/oidckeystore.p12
+    # public-gateway's port 8080 is Mimoto's Spring config server (mimoto-bootstrap.properties), read at start.
     depends_on:
       - demo-database
       - certify-nginx
+      - public-gateway
     restart: unless-stopped
 
   inji-web:
@@ -129,10 +131,10 @@ services:
       # Mimoto's config server (the second server in public-gateway-nginx.conf).
       - ../config:/config/server:ro
       - ../../installations/${INSTALLATION}/mimoto-issuers-config.json:/config/installation/mimoto-issuers-config.json:ro
+    # Every upstream resolves per request (resolver + set in public-gateway-nginx.conf), so it starts before
+    # mimoto-service, which needs its config server, and without keycloak, which Mode A leaves down.
     depends_on:
-      - mimoto-service
       - certify-nginx
-      - keycloak
       - verify-service
       - vdr
     restart: unless-stopped

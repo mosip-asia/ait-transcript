@@ -90,7 +90,8 @@ services:
     networks:
       - network
 
-  # Static mock VDR: the authored JSON-LD contexts under /contexts/, reached through public-gateway.
+  # Static mock VDR: the authored JSON-LD contexts under /contexts/, reached through certify-nginx (:9091), and in the
+  # full stack also through public-gateway (:9098), the context base the local seeds name.
   # nginx reads the files per request, so an edited context is served without a restart.
   vdr:
     container_name: vdr

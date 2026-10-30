@@ -1,7 +1,7 @@
 """The credential types the Gateway serves, keyed by the OAuth scope, and the models it parses the adapter's answers
-into (adapter/openapi.yaml), so nothing after the fetch reads a raw dict. Each type names its credential type, its
-`eligibility` model, which its checks read in order, its `record` model, whose fields are the template's claims, and
-the claims it derives from the record. The installation's settings say which scopes are enabled.
+into (adapter/openapi.yaml): nothing after the fetch reads a raw dict except `courses`, validated and then served as
+received. Each type names its credential type, its `eligibility` model, which its checks read in order, its `record`
+model, whose fields are the template's claims, and the claims it derives. The installation enables the scopes.
 """
 
 from __future__ import annotations
@@ -14,13 +14,13 @@ from typing import Annotated, Callable, Literal
 from pydantic import BaseModel, BeforeValidator, Field, WrapValidator, create_model
 
 
-def model(name: str, *strings: str, **typed) -> type[BaseModel]:
+def adapter_model(name: str, *strings: str, **typed) -> type[BaseModel]:
     """A model of an adapter answer: the `strings` fields, each a str, and the `typed` ones, every one required. It
     declares only what its type reads and ignores the rest, so a null in another field is no refusal."""
     return create_model(name, **dict.fromkeys(strings, str), **typed)
 
 
-Degree = model("Degree", degreeId=Annotated[str, Field(min_length=1)])
+Degree = adapter_model("Degree", degreeId=Annotated[str, Field(min_length=1)])
 
 
 @dataclass(frozen=True)
@@ -63,13 +63,14 @@ def claims(ctype: CredentialType, record: BaseModel) -> dict:
 
 # --- AIT transcript ---------------------------------------------------------------------------------------
 
-Course = model("Course", "no", "title", "credits", "grade")
-Term = model("Term", "term", courses=list[Course])
-TranscriptEligibility = model("TranscriptEligibility", holds=list[str], conferralStatus=Literal["Conferred", "Pending"],
-                              balance=Annotated[str, Field(pattern=r"^-?[0-9]+(\.[0-9]+)?$")])  # never a number
+Course = adapter_model("Course", "no", "title", "credits", "grade")
+Term = adapter_model("Term", "term", courses=list[Course])
+TranscriptEligibility = adapter_model(
+    "TranscriptEligibility", holds=list[str], conferralStatus=Literal["Conferred", "Pending"],
+    balance=Annotated[str, Field(pattern=r"^-?[0-9]+(\.[0-9]+)?$")])  # never a number
 # The claims Certify's ait-transcript template substitutes but `courseList`, which the type derives. `courses` is
 # validated as Terms and Courses but kept as the adapter served it, key order and extra keys included.
-TranscriptRecord = model(
+TranscriptRecord = adapter_model(
     "TranscriptRecord", "fullName", "dateOfBirth", "country", "registrationNo", "previousDegree", "yearAwarded",
     "dateAdmitted", "option", "degreeAwarded", "dateGraduation", "faculty", "academicProgram", "areaOfSpecialization",
     "notes", "issueDate", "thesisTitle", "thesisGrade", "programCommittee", "courseworkCredits", "thesisCredits",
@@ -99,14 +100,14 @@ TRANSCRIPT = CredentialType(
 
 # --- Hackathon Developer Passport and Achievement -----------------------------------------------------------
 
-OnRoster = model("OnRoster", "teamId")  # an empty teamId: a registered participant without a team
+OnRoster = adapter_model("OnRoster", "teamId")  # an empty teamId: a registered participant without a team
 # `winner` is "true" for a member of a winning team, in any case; any other string is not.
-Winner = model("Winner", "teamId", winner=Annotated[bool, BeforeValidator(
+Winner = adapter_model("Winner", "teamId", winner=Annotated[bool, BeforeValidator(
     lambda v: v.strip().lower() == "true" if isinstance(v, str) else None, json_schema_input_type=str)])
 # The claims Certify's developer-passport and achievement templates substitute: roster columns.
-PassportRecord = model("PassportRecord", "teamId", "teamName", "oidcClientId", "authEndpoint", "issuerEndpoint",
-                       "verifierEndpoint")
-AchievementRecord = model("AchievementRecord", "teamId", "award")
+PassportRecord = adapter_model("PassportRecord", "teamId", "teamName", "oidcClientId", "authEndpoint",
+                               "issuerEndpoint", "verifierEndpoint")
+AchievementRecord = adapter_model("AchievementRecord", "teamId", "award")
 
 ON_ROSTER = Check("on_roster", lambda e: None if e.teamId.strip() else "Not on a team on the hackathon roster")
 
