@@ -94,7 +94,7 @@ Runs as `root` with `host.docker.internal` mapped to the host (the local context
 | Kind | Name | Source | Scope | Notes |
 |---|---|---|---|---|
 | env | `container_user` | | shared | `mosip` |
-| env | `active_profile_env` | | shared | `default, csvdp-student`: loads `certify-default.properties` and the installation's `certify-csvdp-student.properties` |
+| env | `active_profile_env` | | shared | `default, installation`: loads `certify-default.properties` and the installation's `certify-installation.properties` |
 | env | `SPRING_CONFIG_NAME` | | shared | `certify` |
 | env | `SPRING_CONFIG_LOCATION` | | shared | `/home/mosip/config/` |
 | env | `enable_certify_artifactory` | | shared | `false`: configuration from the mounts, nothing downloaded |
@@ -107,7 +107,7 @@ Runs as `root` with `host.docker.internal` mapped to the host (the local context
 | env | `AUTH_SERVER_PUBLIC_URL` | | installation | Not read by Certify |
 | env | `AUTH_SERVER_WALLET_CLIENT_ID` | | installation | The first of the properties' allowed audiences |
 | mount | `/home/mosip/config/certify-default.properties` | `vc-stack/config/certify-default.properties` | shared | Base settings: database, keystore (type, path, password), cache, status list |
-| mount | `/home/mosip/config/certify-csvdp-student.properties` | `installations/<name>/certify-csvdp-student.properties` | installation | The per-instance properties: the Authorization Server keys read from the settings (authorization URL, issuer URI, JWK set URI, and the allowed audiences: the wallet client, the in-network credential endpoints and `<CERTIFY_PUBLIC_BASE_URL>/v1/certify/issuance/credential`), the plugin's six keys including the Gateway token, the issuer display, `did-url`, the indexed mappings. `bootstrap.sh` rewrites its `did-url` line after a fresh keystore |
+| mount | `/home/mosip/config/certify-installation.properties` | `installations/<name>/certify-installation.properties` | installation | The per-instance properties: the Authorization Server keys read from the settings (authorization URL, issuer URI, JWK set URI, and the allowed audiences: the wallet client, the in-network credential endpoints and `<CERTIFY_PUBLIC_BASE_URL>/v1/certify/issuance/credential`), the plugin's six keys including the Gateway token, the issuer display, `did-url`, the indexed mappings. `bootstrap.sh` rewrites its `did-url` line after a fresh keystore |
 | mount | `/home/inji/CERTIFY_PKCS12` | `vc-stack/data/CERTIFY_PKCS12` | shared | The keystore directory; Certify creates `local.p12`, the signing key, on first start (git-ignored; ask 2) |
 | mount | `/home/mosip/config/vp_request_config.json` | `vc-stack/config/vp_request_config.json` | shared | Stock Certify file |
 | mount | `/home/inji/additional_jars/gateway-data-provider-plugin.jar` | `vc-stack/plugins/gateway-data-provider-plugin.jar` | shared | The plugin jar, a single read-only file ([Plugin jar](#plugin-jar)) |
@@ -327,7 +327,7 @@ Every committed value below is test-only; a deployment replaces each one.
 
 | Secret | Where it is read | Committed value |
 |---|---|---|
-| The Gateway's shared bearer token | The Gateway, `GATEWAY_AUTH_TOKEN` in `gateway.env`; Certify's plugin, `mosip.certify.gateway.auth-token` in `certify-csvdp-student.properties`. Both must be equal; one per installation | `dev-only-<name>-gateway-token` |
+| The Gateway's shared bearer token | The Gateway, `GATEWAY_AUTH_TOKEN` in `gateway.env`; Certify's plugin, `mosip.certify.gateway.auth-token` in `certify-installation.properties`. Both must be equal; one per installation | `dev-only-<name>-gateway-token` |
 | The Gateway's database URL | The Gateway, `GATEWAY_DATABASE_URL` in `gateway.env`, for its `gateway` schema in Certify's Postgres | The `postgres` superuser; a dedicated role limited to the `gateway` schema is recorded debt |
 | Postgres superuser password | `database` (`POSTGRES_PASSWORD`), Certify (`spring.datasource.password` in `certify-default.properties`), `verify-service` (`DATABASE_PASSWORD`), the Gateway's URL, Mimoto | `postgres` |
 | Certify's keystore password | Certify, `mosip.kernel.keymanager.hsm.keystore-pass` in `certify-default.properties`, for the keystore in `vc-stack/data/CERTIFY_PKCS12/` (ask 2) | `local` |

@@ -28,7 +28,7 @@ services:
       - 9090:8090
     environment:
       - container_user=mosip
-      - active_profile_env=default, csvdp-student
+      - active_profile_env=default, installation
       - SPRING_CONFIG_NAME=certify
       - SPRING_CONFIG_LOCATION=/home/mosip/config/
       - enable_certify_artifactory=false
@@ -44,7 +44,7 @@ services:
       - ../../installations/${INSTALLATION}/authorization-server.env
     volumes:
       - ../config/certify-default.properties:/home/mosip/config/certify-default.properties
-      - ../../installations/${INSTALLATION}/certify-csvdp-student.properties:/home/mosip/config/certify-csvdp-student.properties
+      - ../../installations/${INSTALLATION}/certify-installation.properties:/home/mosip/config/certify-installation.properties
       - ../data/CERTIFY_PKCS12:/home/inji/CERTIFY_PKCS12
       - ../config/vp_request_config.json:/home/mosip/config/vp_request_config.json
       # The Gateway data-provider plugin, built by run-demo.sh. A single file, never the directory, so the four

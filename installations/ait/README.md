@@ -6,7 +6,7 @@ How the infra team deploys this directory (the service set, every variable and m
 
 | File | Read by | Notes |
 |---|---|---|
-| `certify-csvdp-student.properties` | Certify (`csvdp-student` profile) | Certify's settings, including the Authorization Server keys (read from `authorization-server.env`) and the Gateway data-provider plugin's six keys (below); `bootstrap.sh` rewrites `did-url` after a wipe |
+| `certify-installation.properties` | Certify (`installation` profile) | Certify's settings, including the Authorization Server keys (read from `authorization-server.env`) and the Gateway data-provider plugin's six keys (below); `bootstrap.sh` rewrites `did-url` after a wipe |
 | `authorization-server.env` | Certify and the Portal (`demo-app`), through Compose's `env_file`; `bootstrap.sh`, `smoke.sh` | The Authorization Server this installation trusts: issuer, JWKS URL, token endpoint, browser URL and wallet client id, each `${KEY:-<stand-in realm `inji`'s value>}`. An environment points the installation at another server by setting the same variable in `vc-stack/.env` (the VM's `app.env`), with no file changed. Certify's properties, Mimoto's issuer template and the Portal's sign-out link read these settings; the configuration contract's Authorization Server section lists them |
 | `certify_seed.sql` | Postgres, first start only | The `credential_config` row for `ait-transcript`, mounted after `vc-stack/certify_init.sql` |
 | `keycloak-realm.json` | Keycloak (`--import-realm`) | Realm `inji`: one user per CSV `id`, the `wallet-demo` client, the test-only `smoke` client, the `ait_transcript_vc_ldp` scope. `bootstrap.sh` syncs the `wallet-demo` certificate into it |
@@ -26,7 +26,7 @@ The installation's own values:
 - Credential configuration: `ait-transcript`, type `AitTranscriptCredential`
 - Issuer display: "AIT University Registrar"; Mimoto issuer id `AITUniversity`
 - Adapter CSV: `adapter/student_identity_data.csv`, one row per degree, keyed by the `id` column (the Keycloak username)
-- Certify data-provider plugin, in `certify-csvdp-student.properties` (contracts.md section 2a; these six keys and nothing else; edit the file and restart Certify, `docker compose restart certify`):
+- Certify data-provider plugin, in `certify-installation.properties` (contracts.md section 2a; these six keys and nothing else; edit the file and restart Certify, `docker compose restart certify`):
   - `mosip.certify.integration.data-provider-plugin`: `GatewayDataProviderPlugin`
   - `mosip.certify.integration.scan-base-package`: `asia.mosip.issuer.gateway.plugin`
   - `mosip.certify.gateway.url`: the Gateway's base URL, `http://gateway:8000`

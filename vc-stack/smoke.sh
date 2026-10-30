@@ -85,7 +85,7 @@ with p.open(newline='', encoding='utf-8') as f:
 ok "Keycloak users align with CSV ids"
 
 # Certify's data provider is the Gateway plugin, configured by the six keys of contracts.md section 2a and nothing else.
-certify_props=$(tr -d '\r' <"$INSTALLATION_DIR/certify-csvdp-student.properties")
+certify_props=$(tr -d '\r' <"$INSTALLATION_DIR/certify-installation.properties")
 plugin_keys=$( (grep -oE '^mosip\.certify\.(gateway\.[a-z-]+|integration\.(data-provider-plugin|scan-base-package))=' <<<"$certify_props" || true) \
   | tr -d = | LC_ALL=C sort)
 want_keys=$(printf '%s\n' mosip.certify.gateway.{auth-token,connect-timeout-ms,read-timeout-ms,url} \
