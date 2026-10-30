@@ -1,6 +1,8 @@
 name: vc-stack
 
 services:
+  # The Issuer's Postgres: Certify's schema, and the gateway schema the Gateway creates on start. verify/ and demo/
+  # bring their own (verify-database, demo-database); only this one keeps a host port.
   database:
     image: 'postgres:15'
     environment:
@@ -8,8 +10,6 @@ services:
       - POSTGRES_PASSWORD=postgres
     volumes:
       - ../certify_init.sql:/docker-entrypoint-initdb.d/certify_init.sql
-      - ../mimoto_init.sql:/docker-entrypoint-initdb.d/mimoto_init.sql
-      - ../verify_init.sql:/docker-entrypoint-initdb.d/verify_init.sql
       # Every per-installation file comes from installations/$INSTALLATION (set in .env);
       # Compose refuses the whole file when it is unset, as it does mock-adapter/ and demo/.
       # The credential_config rows; the name sorts after certify_init.sql, which creates the table.
@@ -66,8 +66,7 @@ services:
       - 9091:80
     volumes:
       - ../certify-nginx.conf:/etc/nginx/conf.d/default.conf
-      - ../config:/config/server:ro
-      - ../../installations/${INSTALLATION}/mimoto-issuers-config.json:/config/installation/mimoto-issuers-config.json:ro
+      - ../config/vp_request_config.json:/config/server/vp_request_config.json:ro
     networks:
       - network
     depends_on:

@@ -186,6 +186,35 @@ def test_both_installations_are_found() -> None:
     assert {"ait", "hackathon"} <= set(NAMES), NAMES
 
 
+def test_every_folder_but_demo_runs_alone() -> None:
+    """Every service a folder's services depend on is in that folder, its database included; demo/ needs the Issuer."""
+    for service, (folder, spec) in services().items():
+        if folder == "vc-stack/demo":
+            continue
+        for needed in spec.get("depends_on", []):
+            assert services()[needed][0] == folder, f"{service} in {folder} depends on {needed} in {services()[needed][0]}"
+
+
+def test_mimoto_config_comes_from_demo() -> None:
+    """Both of Mimoto's config-server URIs name a demo/ service that mounts its files; the Issuer mounts none."""
+    mounts = {}
+    for service, kind, _, source, _ in compose_rows():
+        if kind == "mount":
+            mounts.setdefault(service, set()).add(source)
+    props = dict(line.split("=", 1) for line in (STACK / "config/mimoto-bootstrap.properties").read_text(
+        encoding="utf-8").splitlines() if "=" in line and not line.startswith("#"))
+    hosts = {re.match(r"http://([^:/]+)", props[key]).group(1)
+             for key in ("spring.cloud.config.uri", "config.server.file.storage.uri")}
+    assert len(hosts) == 1, hosts
+    host = hosts.pop()
+    assert services()[host][0] == "vc-stack/demo", (host, services()[host][0])
+    assert {"vc-stack/config", "installations/<name>/mimoto-issuers-config.json"} <= mounts[host], mounts[host]
+    for service, (folder, _) in services().items():
+        if folder == "vc-stack/issuer":
+            found = {s for s in mounts.get(service, set()) if s == "vc-stack/config" or "mimoto" in s}
+            assert not found, f"{service} in the Issuer mounts Mimoto's files: {found}"
+
+
 def test_the_service_set_is_the_compose_file_with_its_images() -> None:
     found = services()
     rows = [row for table in tables(section("Service set and images")) for row in table]

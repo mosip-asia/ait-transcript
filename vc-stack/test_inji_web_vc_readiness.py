@@ -2,8 +2,9 @@
 
 Config checks (no Docker): token_endpoint same-origin :4004, Keycloak redirect, Mimoto Keycloak URLs.
 
-Live checks (--live, stack must be up): Mimoto issuers/configuration APIs and that
-credentials/download is reachable via the Inji Web proxy (not blocked with 403).
+Live checks (--live, stack must be up): Mimoto issuers/configuration APIs, that certify-nginx
+serves none of Mimoto's config files, and that credentials/download is reachable via the Inji Web
+proxy (not blocked with 403).
 
 Full browser OAuth + PDF is still manual (PRD §9); this guards the misconfigurations that
 caused empty issuers, Keycloak not loading, and "session is not valid" on download.
@@ -153,6 +154,17 @@ def test_live_download_endpoint_reachable_via_inji_web_proxy() -> None:
     )
 
 
+def test_live_certify_nginx_serves_none_of_mimotos_files() -> None:
+    """Mimoto's config server is demo's public-gateway; certify-nginx (:9091) serves only Certify."""
+    for path in ("/mimoto-issuers-config.json", "/mimoto-default.properties"):
+        try:
+            with urllib.request.urlopen(f"http://localhost:9091{path}", timeout=15) as resp:
+                status = resp.status
+        except urllib.error.HTTPError as e:
+            status = e.code
+        assert status == 404, f"certify-nginx answered {status} for {path}; Mimoto's files belong to demo's nginx"
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--live", action="store_true", help="HTTP checks against running stack")
@@ -166,6 +178,7 @@ def main() -> None:
 
     if args.live:
         test_live_issuer_list_and_configuration()
+        test_live_certify_nginx_serves_none_of_mimotos_files()
         test_live_download_endpoint_reachable_via_inji_web_proxy()
 
     mode = "config + live" if args.live else "config"
