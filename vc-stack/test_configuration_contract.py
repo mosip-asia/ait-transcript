@@ -1,9 +1,10 @@
-"""The configuration contract page (wiki/project/issuer-v0.1/configuration-contract.md) against the Compose file.
+"""The configuration contract page (wiki/project/issuer-v0.1/configuration-contract.md) against the Compose files.
 
 Both directions: every service, image, environment variable, env file, mounted file, host port and Compose variable
-of vc-stack/docker-compose.yaml appears in the page's tables, and nothing in those tables is absent from the Compose
-file. The Gateway's variables come from its env_file, installations/<name>/gateway.env, which must name the same
-variables in every installation. Every host port is named public or internal in the ingress allowlist.
+of the folder files vc-stack/compose.yaml includes (vc-stack/<folder>/compose.yaml, each path relative to its own
+folder) appears in the page's tables, and nothing in those tables is absent from the Compose files. The Gateway's
+variables come from its env_file, installations/<name>/gateway.env, which must name the same variables in every
+installation. Every host port is named public or internal in the ingress allowlist.
 
 Host only, no Docker. Needs PyYAML, which uvicorn[standard] (portal/requirements.txt) installs.
 Run: python3 vc-stack/test_configuration_contract.py
@@ -11,13 +12,14 @@ Run: python3 vc-stack/test_configuration_contract.py
 
 from __future__ import annotations
 
+import posixpath
 import re
 from pathlib import Path
 
 import yaml
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-COMPOSE = REPO_ROOT / "vc-stack" / "docker-compose.yaml"
+STACK = REPO_ROOT / "vc-stack"
 PAGE = REPO_ROOT / "wiki" / "project" / "issuer-v0.1" / "configuration-contract.md"
 INSTALLATIONS = REPO_ROOT / "installations"
 NAMES = sorted(p.parent.name for p in INSTALLATIONS.glob("*/gateway.env"))
@@ -26,20 +28,31 @@ SCOPES = {"installation", "shared", "environment"}
 VARIABLE = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)")
 
 
-# ---------- the Compose file ----------
+# ---------- the Compose files ----------
 
-def compose() -> dict:
-    return yaml.safe_load(COMPOSE.read_text(encoding="utf-8"))
+def load(path: Path) -> dict:
+    return yaml.safe_load(path.read_text(encoding="utf-8"))
 
 
-def repo_path(source: str) -> str:
-    """A Compose source path (relative to vc-stack/) as a repository path, the installation written <name>."""
+def folders() -> list[str]:
+    """The folders vc-stack/compose.yaml includes, each as its path from the repository root."""
+    return [posixpath.dirname(f"vc-stack/{path}") for path in load(STACK / "compose.yaml")["include"]]
+
+
+def services() -> dict[str, tuple[str, dict]]:
+    """Every service of the folder files: its folder and its spec. A service is defined in one folder only."""
+    found: dict[str, tuple[str, dict]] = {}
+    for folder in folders():
+        for service, spec in load(REPO_ROOT / folder / "compose.yaml")["services"].items():
+            assert service not in found, f"{service} is in both {found[service][0]} and {folder}"
+            found[service] = (folder, spec)
+    return found
+
+
+def repo_path(source: str, folder: str) -> str:
+    """A Compose source path (relative to its folder) as a repository path, the installation written <name>."""
     source = re.sub(r"\$\{INSTALLATION[^}]*\}", "<name>", source)
-    if source.startswith("../"):
-        return source[3:]
-    if source.startswith("./"):
-        return "vc-stack/" + source[2:]
-    return source
+    return posixpath.normpath(posixpath.join(folder, source))
 
 
 def scope_of(text: str) -> str:
@@ -60,13 +73,13 @@ def env_file_keys(path: Path) -> list[str]:
 def compose_rows() -> set[tuple[str, str, str, str, str]]:
     """(service, kind, name, source, scope) for every env, env_file, mount and port in the Compose file."""
     rows = set()
-    for service, spec in compose()["services"].items():
+    for service, (folder, spec) in services().items():
         for item in spec.get("environment", []):
             name, value = item.split("=", 1)
             rows.add((service, "env", name, "", scope_of(value)))
         for env_file in spec.get("env_file", []):
-            rows.add((service, "env_file", repo_path(env_file), "", "installation"))
-            files = [Path(repo_path(env_file).replace("<name>", n)) for n in NAMES]
+            rows.add((service, "env_file", repo_path(env_file, folder), "", "installation"))
+            files = [Path(repo_path(env_file, folder).replace("<name>", n)) for n in NAMES]
             key_sets = {tuple(sorted(env_file_keys(REPO_ROOT / f))) for f in files}
             assert len(key_sets) == 1, f"{env_file} names different variables per installation: {key_sets}"
             for name in key_sets.pop():
@@ -76,7 +89,7 @@ def compose_rows() -> set[tuple[str, str, str, str, str]]:
                 source, target = volume["source"], volume["target"]
             else:  # short form; ${INSTALLATION:?message} carries a colon of its own
                 source, target = re.sub(r"\$\{INSTALLATION[^}]*\}", "${INSTALLATION}", volume).split(":")[:2]
-            rows.add((service, "mount", target, repo_path(source), scope_of(source)))
+            rows.add((service, "mount", target, repo_path(source, folder), scope_of(source)))
         for port in spec.get("ports", []):
             rows.add((service, "port", str(port), "", "shared"))
     return rows
@@ -85,10 +98,10 @@ def compose_rows() -> set[tuple[str, str, str, str, str]]:
 def compose_variables() -> set[str]:
     """Every ${VARIABLE} Compose interpolates from vc-stack/.env or the environment, in the file or its env files."""
     found: set[str] = set()
-    for spec in compose()["services"].values():
+    for folder, spec in services().values():
         for env_file in spec.get("env_file", []):
             for name in NAMES:
-                found.update(VARIABLE.findall((REPO_ROOT / repo_path(env_file).replace("<name>", name))
+                found.update(VARIABLE.findall((REPO_ROOT / repo_path(env_file, folder).replace("<name>", name))
                                               .read_text(encoding="utf-8")))
 
     def walk(node: object) -> None:
@@ -101,7 +114,7 @@ def compose_variables() -> set[str]:
         elif isinstance(node, str):
             found.update(VARIABLE.findall(node))
 
-    walk(compose()["services"])
+    walk([spec for _, spec in services().values()])
     return found
 
 
@@ -113,7 +126,7 @@ def host_port(binding: object) -> str:
 
 def compose_ports() -> dict[str, str]:
     return {host_port(port): service
-            for service, spec in compose()["services"].items() for port in spec.get("ports", [])}
+            for service, (_, spec) in services().items() for port in spec.get("ports", [])}
 
 
 # ---------- the page ----------
@@ -174,12 +187,14 @@ def test_both_installations_are_found() -> None:
 
 
 def test_the_service_set_is_the_compose_file_with_its_images() -> None:
-    services = compose()["services"]
+    found = services()
     rows = [row for table in tables(section("Service set and images")) for row in table]
     listed = {row["Compose service"]: row["Image"] for row in rows}
-    assert set(listed) == set(services), sorted(set(listed) ^ set(services))
-    for service, spec in services.items():
-        expected = spec["image"] if "image" in spec else "built from " + repo_path("../" + spec["build"]["dockerfile"])
+    assert set(listed) == set(found), sorted(set(listed) ^ set(found))
+    for service, (folder, spec) in found.items():
+        build = spec.get("build", {})
+        expected = spec["image"] if "image" in spec else \
+            "built from " + repo_path(posixpath.join(build["context"], build["dockerfile"]), folder)
         assert listed[service] == expected, (service, listed[service], expected)
 
 

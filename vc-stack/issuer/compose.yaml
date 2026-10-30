@@ -1,0 +1,108 @@
+name: vc-stack
+
+services:
+  database:
+    image: 'postgres:15'
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+    volumes:
+      - ../certify_init.sql:/docker-entrypoint-initdb.d/certify_init.sql
+      - ../mimoto_init.sql:/docker-entrypoint-initdb.d/mimoto_init.sql
+      - ../verify_init.sql:/docker-entrypoint-initdb.d/verify_init.sql
+      # Every per-installation file comes from installations/$INSTALLATION (set in .env);
+      # Compose refuses the whole file when it is unset, as it does mock-adapter/ and demo/.
+      # The credential_config rows; the name sorts after certify_init.sql, which creates the table.
+      - ../../installations/${INSTALLATION:?set INSTALLATION in vc-stack/.env}/certify_seed.sql:/docker-entrypoint-initdb.d/certify_seed.sql
+    networks:
+      - network
+    ports:
+      - "6440:5432"
+
+  certify:
+    image: injistack/inji-certify-with-plugins:0.14.0
+    user: root
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - 9090:8090
+    environment:
+      - container_user=mosip
+      - active_profile_env=default, csvdp-student
+      - SPRING_CONFIG_NAME=certify
+      - SPRING_CONFIG_LOCATION=/home/mosip/config/
+      - enable_certify_artifactory=false
+      - download_hsm_client=false
+      - mosip_certify_domain_url=${CERTIFY_PUBLIC_BASE_URL:-http://certify-nginx}
+    # The Authorization Server: the installation's settings, each set per environment in .env. With the stand-in,
+    # Keycloak's --hostname-url=http://keycloak:8080 (see keycloak-server service) makes every token it issues carry
+    # iss=http://keycloak:8080/realms/<realm>, regardless of which URL the browser used to log in (that's rewritten
+    # separately by keycloak-nginx's sub_filter for localhost:9080). Certify's resource-server issuer-uri must match
+    # that iss exactly or JWT validation fails, so AUTH_SERVER_ISSUER is the Docker URL, not the browser's. The
+    # installation's Certify properties read the issuer, the JWK set URL and the wallet client (an allowed audience).
+    env_file:
+      - ../../installations/${INSTALLATION}/authorization-server.env
+    volumes:
+      - ../config/certify-default.properties:/home/mosip/config/certify-default.properties
+      - ../../installations/${INSTALLATION}/certify-csvdp-student.properties:/home/mosip/config/certify-csvdp-student.properties
+      - ../data/CERTIFY_PKCS12:/home/inji/CERTIFY_PKCS12
+      - ../config/vp_request_config.json:/home/mosip/config/vp_request_config.json
+      # The Gateway data-provider plugin, built by run-demo.sh. A single file, never the directory, so the four
+      # jars bundled in additional_jars/ stay visible; a missing jar fails here instead of mounting an empty directory.
+      - type: bind
+        source: ../plugins/gateway-data-provider-plugin.jar
+        target: /home/inji/additional_jars/gateway-data-provider-plugin.jar
+        read_only: true
+        bind:
+          create_host_path: false
+    networks:
+      - network
+    depends_on:
+      - database
+
+  certify-nginx:
+    image: nginx:stable
+    ports:
+      - 9091:80
+    volumes:
+      - ../certify-nginx.conf:/etc/nginx/conf.d/default.conf
+      - ../config:/config/server:ro
+      - ../../installations/${INSTALLATION}/mimoto-issuers-config.json:/config/installation/mimoto-issuers-config.json:ro
+    networks:
+      - network
+    depends_on:
+      - certify
+    restart: unless-stopped
+
+  # The Gateway (contracts.md section 2a): POST /issuances, the checklist runner behind Certify's data-provider
+  # plugin. Settings (enabled scopes, adapter URL, bearer token, database URL) come from the installation's
+  # gateway.env. Reached as http://gateway:8000; no host port. It does not wait for the adapter; it creates its
+  # gateway schema in Certify's Postgres on start and restarts until that database accepts connections.
+  gateway:
+    container_name: gateway
+    build:
+      context: ../..
+      dockerfile: gateway/Dockerfile
+    env_file:
+      - ../../installations/${INSTALLATION}/gateway.env
+    depends_on:
+      - database
+    restart: unless-stopped
+    networks:
+      - network
+
+  # Static mock VDR: the authored JSON-LD contexts under /contexts/, reached through public-gateway.
+  # nginx reads the files per request, so an edited context is served without a restart.
+  vdr:
+    container_name: vdr
+    image: nginx:stable
+    volumes:
+      - ../../vc-lab/contexts:/usr/share/nginx/html/contexts:ro
+    restart: unless-stopped
+    networks:
+      - network
+
+networks:
+  network:
+    name: vc_stack_network
+    external: true
