@@ -9,9 +9,9 @@
 #   ./bootstrap.sh --wipe           # tear down volumes + remove ephemeral files first
 #   ./bootstrap.sh --mode=a         # Mode A (esignet-mock); writes a compose override
 #   ./bootstrap.sh --validate       # only run end-to-end health checks
-#   ./bootstrap.sh --did-refresh    # only run the post-wipe did:key dance (§11.3)
+#   ./bootstrap.sh --did-refresh    # only write the live did:key, move the AIT context URL and check the Issuer
+#                                   # (issuer-dev runs it after every compose up)
 #   ./bootstrap.sh --prepare        # only write .env and create the Docker network
-#   ./bootstrap.sh --context-refresh  # only move the AIT context URL (issuer-dev, after its compose up)
 #   ./bootstrap.sh --help
 #
 # INSTALLATION (environment, else .env, else the git-ignored .installation marker) names the installations/ directory to run.
@@ -28,7 +28,6 @@ DO_WIPE=0
 ONLY_VALIDATE=0
 ONLY_DID=0
 ONLY_PREPARE=0
-ONLY_CONTEXT=0
 P12_PASS_DEFAULT="xy4gh6swa2i"
 NETWORK_NAME="vc_stack_network"
 OVERRIDE_FILE="docker-compose.override.yaml"
@@ -90,7 +89,6 @@ for a in "$@"; do
     --validate)        ONLY_VALIDATE=1 ;;
     --did-refresh)     ONLY_DID=1 ;;
     --prepare)         ONLY_PREPARE=1 ;;
-    --context-refresh) ONLY_CONTEXT=1 ;;
     -h|--help)
       sed -n '2,19p' "$0" | sed 's/^# \?//'
       exit 0
@@ -483,13 +481,19 @@ wait_healthy() {
 # -------- DID refresh (§11.3) --------
 # All credential_config rows share one signing key (the keystore), so every row's
 # did_url must match the live did:key derived from certify-nginx's /.well-known/did.json.
-# This iterates every row so the script stays credential-type-agnostic as new VC types are added,
-# then patches the installation's Certify properties.
+# This iterates every row so the script stays credential-type-agnostic as new VC types are added.
+# Certify's own DID (a credential's issuer, did.json's id) is CERTIFY_DID, which this writes to .env: never a tracked
+# file, since a fresh keystore on every machine holds a different key.
 did_refresh() {
   step "did:key refresh (§11.3)"
-  local new_pk new_did
-  new_pk=$(curl -sf http://localhost:9091/.well-known/did.json | jq -r '.verificationMethod[0].publicKeyMultibase')
-  [[ -n "$new_pk" && "$new_pk" != "null" ]] || die "could not read publicKeyMultibase from certify-nginx" 2
+  local new_pk new_did deadline
+  # issuer-dev runs this straight after its compose up, while Certify is still starting: did.json may answer before
+  # it carries the key.
+  deadline=$(( $(date +%s) + 300 ))
+  until new_pk=$(curl -sf http://localhost:9091/.well-known/did.json | jq -er '.verificationMethod[0].publicKeyMultibase'); do
+    (( $(date +%s) <= deadline )) || die "could not read publicKeyMultibase from certify-nginx within 300s" 2
+    sleep 3
+  done
   new_did="did:key:$new_pk"
 
   # Pull every (key_id, did_url) pair so we know which rows need updating.
@@ -518,29 +522,35 @@ did_refresh() {
     fi
   done <<< "$rows"
 
-  # Patch the installation's Certify properties so a future wipe seeds with the correct DID.
-  local prop="$INSTALLATION_DIR/certify-installation.properties"
-  if grep -q "^mosip.certify.data-provider-plugin.did-url=" "$prop"; then
-    local cur_prop_did
-    cur_prop_did=$(grep "^mosip.certify.data-provider-plugin.did-url=" "$prop" | head -1 | cut -d= -f2-)
-    if [[ "$cur_prop_did" != "$new_did" ]]; then
-      sed_in_place "s|^mosip.certify.data-provider-plugin.did-url=.*$|mosip.certify.data-provider-plugin.did-url=${new_did}|" "$prop"
-      ok "patched $(basename "$prop")"
-    fi
+  local certify running_did
+  certify=$(docker compose ps -q certify)
+  running_did=$(docker compose exec -T certify printenv CERTIFY_DID 2>/dev/null || true)
+  if [[ "$(env_value CERTIFY_DID)" != "$new_did" ]]; then
+    local tmp
+    tmp=$(mktemp)
+    grep -v '^CERTIFY_DID=' .env > "$tmp" || true
+    printf 'CERTIFY_DID=%s\n' "$new_did" >> "$tmp"
+    mv "$tmp" .env
+    ok "set CERTIFY_DID in .env"
   fi
+  [[ "$running_did" == "$new_did" ]] || restart_needed=1
 
   if (( restart_needed == 0 )); then
-    ok "all rows already current — no restart needed"
+    ok "all rows and Certify's DID already current — no restart needed"
     return
   fi
 
-  docker compose restart certify >/dev/null
-  ok "restarted certify ($stale_rows row(s) updated)"
+  # Recreated, not restarted, so it reads CERTIFY_DID; from the Compose files it was started with (compose.yaml, or
+  # issuer-dev.yaml on issuer-dev), so nothing else about it changes.
+  local files
+  files=$(docker inspect -f '{{index .Config.Labels "com.docker.compose.project.config_files"}}' "$certify")
+  docker compose $(printf -- '-f %s ' ${files//,/ }) up -d --no-deps certify >/dev/null 2>&1 || die "could not recreate certify" 2
+  ok "recreated certify ($stale_rows row(s) updated, CERTIFY_DID $new_did)"
 
-  local recheck deadline
-  deadline=$(( $(date +%s) + 60 ))
-  until recheck=$(curl -sf http://localhost:9091/.well-known/did.json | jq -r '.verificationMethod[0].publicKeyMultibase'); do
-    (( $(date +%s) <= deadline )) || die "certify did.json not available after restart" 2
+  local recheck
+  deadline=$(( $(date +%s) + 180 ))
+  until recheck=$(curl -sf http://localhost:9091/.well-known/did.json | jq -r 'select(.id == "'"$new_did"'") | .verificationMethod[0].publicKeyMultibase' | grep .); do
+    (( $(date +%s) <= deadline )) || die "certify did.json does not name $new_did after the recreate" 2
     sleep 2
   done
   [[ "did:key:$recheck" == "$new_did" ]] || die "post-restart DID drifted: $recheck" 2
@@ -584,30 +594,14 @@ context_refresh() {
 }
 
 # -------- validate --------
-validate() {
-  step "End-to-end validation"
+# The Issuer alone (issuer-dev runs nothing else): its metadata, its contexts, and the DID it signs as.
+validate_issuer() {
+  step "Issuer validation"
 
   # Certify is auth-protected on /actuator/health — probe via certify-nginx's .well-known
-  local certify_issuer verify_status mimoto_issuers
+  local certify_issuer
   certify_issuer=$(curl -sf http://localhost:9091/.well-known/openid-credential-issuer | jq -r '.credential_issuer // empty')
   [[ -n "$certify_issuer" ]] && ok "certify issuer metadata: $certify_issuer" || die "certify .well-known not serving" 2
-
-  verify_status=$(curl -sf http://localhost:9095/v1/verify/actuator/health | jq -r '.status')
-  [[ "$verify_status" == "UP" ]] && ok "verify-service: UP" || die "verify health: $verify_status" 2
-
-  local verify_ui_api_url verify_ui_proxy_status
-  verify_ui_api_url=$(curl -sf http://localhost:4007/env.config.js | awk -F'"' '/VERIFY_SERVICE_API_URL:/ {print $2; exit}')
-  [[ "$verify_ui_api_url" == "/v1/verify" ]] \
-    && ok "verify-ui API path: $verify_ui_api_url" \
-    || die "verify-ui VERIFY_SERVICE_API_URL must be /v1/verify (got: ${verify_ui_api_url:-<empty>})" 2
-
-  verify_ui_proxy_status=$(curl -sf http://localhost:4007/v1/verify/actuator/health | jq -r '.status')
-  [[ "$verify_ui_proxy_status" == "UP" ]] \
-    && ok "verify-ui proxy: /v1/verify -> verify-service" \
-    || die "verify-ui /v1/verify proxy unhealthy: $verify_ui_proxy_status" 2
-
-  mimoto_issuers=$(curl -sf http://localhost:9099/v1/mimoto/issuers | jq -r '.response.issuers[].issuer_id' | paste -sd, -)
-  [[ -n "$mimoto_issuers" ]] && ok "mimoto issuers: $mimoto_issuers" || die "mimoto issuers empty" 2
 
   # Every credential_config row: its context column (the QR signing lookup) is its type's context on the VDR, then
   # the VCDM 2.0 base, and the issuer metadata lists the same @context in the same order.
@@ -629,6 +623,48 @@ validate() {
       || die "$key issuer metadata context mismatch: ${metadata_context:-<empty>}" 2
   done <<<"$config_contexts"
 
+  # Certify signs as its live key: every row's did_url (a credential's verificationMethod) and Certify's own DID
+  # (did.json's id, a credential's issuer) are the did:key of the key did.json publishes.
+  local did_doc live_did certify_did mismatches
+  did_doc=$(curl -sf http://localhost:9091/.well-known/did.json) || die "certify did.json not serving" 2
+  live_did="did:key:$(jq -r '.verificationMethod[0].publicKeyMultibase' <<<"$did_doc")"
+  certify_did=$(jq -r '.id' <<<"$did_doc")
+  mismatches=$(docker compose exec -T database 2>/dev/null psql -U postgres -d inji_certify -tAc \
+    "select credential_config_key_id || '=' || coalesce(did_url,'<null>') from certify.credential_config where did_url is distinct from '${live_did}';" \
+    | sed '/^$/d')
+  [[ "$certify_did" == "$live_did" ]] || mismatches+="${mismatches:+$'\n'}CERTIFY_DID=$certify_did"
+  if [[ -z "$mismatches" ]]; then
+    ok "DID consistency: $live_did (Certify and all rows aligned)"
+  else
+    say "  live signing key: $live_did"
+    while IFS= read -r row; do say "    drift: $row"; done <<< "$mismatches"
+    die "DID mismatch — run with --did-refresh" 2
+  fi
+}
+
+# The whole stack: the Issuer, then Verify, Mimoto and the stand-in Keycloak.
+validate() {
+  validate_issuer
+  step "End-to-end validation"
+
+  local verify_status mimoto_issuers
+  verify_status=$(curl -sf http://localhost:9095/v1/verify/actuator/health | jq -r '.status')
+  [[ "$verify_status" == "UP" ]] && ok "verify-service: UP" || die "verify health: $verify_status" 2
+
+  local verify_ui_api_url verify_ui_proxy_status
+  verify_ui_api_url=$(curl -sf http://localhost:4007/env.config.js | awk -F'"' '/VERIFY_SERVICE_API_URL:/ {print $2; exit}')
+  [[ "$verify_ui_api_url" == "/v1/verify" ]] \
+    && ok "verify-ui API path: $verify_ui_api_url" \
+    || die "verify-ui VERIFY_SERVICE_API_URL must be /v1/verify (got: ${verify_ui_api_url:-<empty>})" 2
+
+  verify_ui_proxy_status=$(curl -sf http://localhost:4007/v1/verify/actuator/health | jq -r '.status')
+  [[ "$verify_ui_proxy_status" == "UP" ]] \
+    && ok "verify-ui proxy: /v1/verify -> verify-service" \
+    || die "verify-ui /v1/verify proxy unhealthy: $verify_ui_proxy_status" 2
+
+  mimoto_issuers=$(curl -sf http://localhost:9099/v1/mimoto/issuers | jq -r '.response.issuers[].issuer_id' | paste -sd, -)
+  [[ -n "$mimoto_issuers" ]] && ok "mimoto issuers: $mimoto_issuers" || die "mimoto issuers empty" 2
+
   if [[ "$MODE" == "b" ]]; then
     local kc_iss expected_kc_iss auth_endpoint expected_auth_prefix
     kc_iss=$(curl -sf "http://localhost:9080$KEYCLOAK_REALM_PATH/.well-known/openid-configuration" | jq -r '.issuer')
@@ -643,20 +679,6 @@ validate() {
       || die "mimoto authorization_endpoint must start with $expected_auth_prefix (got: ${auth_endpoint:-<empty>})" 2
   fi
 
-  # Final DID consistency check — every row in credential_config must match the live key.
-  local live_did mismatches
-  live_did="did:key:$(curl -sf http://localhost:9091/.well-known/did.json | jq -r '.verificationMethod[0].publicKeyMultibase')"
-  mismatches=$(docker compose exec -T database 2>/dev/null psql -U postgres -d inji_certify -tAc \
-    "select credential_config_key_id || '=' || coalesce(did_url,'<null>') from certify.credential_config where did_url is distinct from '${live_did}';" \
-    | sed '/^$/d')
-  if [[ -z "$mismatches" ]]; then
-    ok "DID consistency: $live_did (all rows aligned)"
-  else
-    say "  live signing key: $live_did"
-    while IFS= read -r row; do say "    drift: $row"; done <<< "$mismatches"
-    die "DID mismatch — run with --did-refresh" 2
-  fi
-
   printf "\n%sStack is healthy.%s\n" "$BOLD$GRN" "$RST"
   say "  Inji Web (holder wallet):  http://localhost:4004"
   say "  Inji Verify UI:            http://localhost:4007"
@@ -668,8 +690,7 @@ validate() {
 # -------- main --------
 main() {
   if (( ONLY_VALIDATE )); then load_auth_server_settings; validate; exit 0; fi
-  if (( ONLY_DID ));      then load_auth_server_settings; did_refresh; context_refresh; validate; exit 0; fi
-  if (( ONLY_CONTEXT ));  then context_refresh; exit 0; fi
+  if (( ONLY_DID ));      then load_auth_server_settings; did_refresh; context_refresh; validate_issuer; exit 0; fi
 
   preflight
   (( DO_WIPE )) && do_wipe

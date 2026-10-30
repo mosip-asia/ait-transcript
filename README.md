@@ -75,10 +75,15 @@ docker run --rm --user "$(id -u):$(id -g)" \
   maven:3.9-eclipse-temurin-21 mvn -q -B -Duser.home=/var/maven package
 cp gateway/plugin/target/gateway-data-provider-plugin.jar vc-stack/plugins/
 docker compose -f vc-stack/issuer-dev.yaml up -d --build
-./vc-stack/bootstrap.sh --context-refresh   # moves the AIT context URL to CERTIFY_PUBLIC_BASE_URL, restarts Certify
+./vc-stack/bootstrap.sh --did-refresh       # after every compose up: Certify's live did:key, the AIT context URL
 ```
 
-Certify answers on `http://localhost:9091/.well-known/openid-credential-issuer` once it is up, and certify-nginx, the Issuer's single entry point, also serves the JSON-LD contexts from the mock VDR on `http://localhost:9091/contexts/`; [How to test](#how-to-test) has the smoke that checks it. The plain `compose up` leaves the contexts at the seed's local URL, `http://host.docker.internal:9098/contexts/…`, which is the full stack's public gateway and does not exist here. `--context-refresh` moves the AIT row to `<CERTIFY_PUBLIC_BASE_URL>/contexts/transcript/v1.json` when `CERTIFY_PUBLIC_BASE_URL` in `vc-stack/.env` is `https` (the issuer-dev ingress, which sends `/contexts/` to certify-nginx), or to `STUDENT_CONTEXT_URL` when `.env` sets it; it does nothing for a local `http` base. It covers only the AIT row: the hackathon Installation's rows keep the seed's local URLs, so on issuer-dev Certify cannot load their contexts yet. Running one folder's own file (`vc-stack/issuer/compose.yaml`) needs `--env-file vc-stack/.env` as well, because the folder reads no `.env` of its own.
+Certify answers on `http://localhost:9091/.well-known/openid-credential-issuer` once it is up, and certify-nginx, the Issuer's single entry point, also serves the JSON-LD contexts from the mock VDR on `http://localhost:9091/contexts/`; [How to test](#how-to-test) has the smoke that checks it.
+
+`--did-refresh` does two things the plain `compose up` cannot:
+
+- **The DID.** A fresh keystore holds a new signing key, and a `did:key` is that key, so Certify's DID is only known once Certify runs. `--did-refresh` reads it from `did.json`, writes it to every credential configuration and to `CERTIFY_DID` in `vc-stack/.env`, and recreates Certify. Until then Certify signs as the seed's placeholder, and every credential fails verification. It is safe to run again: with nothing to change it restarts nothing.
+- **The context URL.** The `compose up` leaves the contexts at the seed's local URL, `http://host.docker.internal:9098/contexts/…`, which is the full stack's public gateway and does not exist here. `--did-refresh` moves the AIT row to `<CERTIFY_PUBLIC_BASE_URL>/contexts/transcript/v1.json` when `CERTIFY_PUBLIC_BASE_URL` in `vc-stack/.env` is `https` (the issuer-dev ingress, which sends `/contexts/` to certify-nginx), or to `STUDENT_CONTEXT_URL` when `.env` sets it; it does nothing for a local `http` base. It covers only the AIT row: the hackathon Installation's rows keep the seed's local URLs, so on issuer-dev Certify cannot load their contexts yet. Running one folder's own file (`vc-stack/issuer/compose.yaml`) needs `--env-file vc-stack/.env` as well, because the folder reads no `.env` of its own.
 
 ### Reset
 

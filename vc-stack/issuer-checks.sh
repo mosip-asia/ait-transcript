@@ -41,7 +41,20 @@ issuer_checks() {
   grep -q 'GatewayDataProviderPlugin selected' <<<"$certify_log" || fail "the certify log does not name GatewayDataProviderPlugin"
   ok "Certify started with GatewayDataProviderPlugin"
 
-  # 2. Certify's issuer metadata lists exactly the installation's credential types, each with the Gateway's claims.
+  # 2. Certify signs as its live key: did.json's id (a credential's issuer) is the did:key of the key it publishes, and
+  # every credential configuration's did_url (a credential's verificationMethod) is that DID. A fresh keystore holds a
+  # new key, so until bootstrap.sh --did-refresh writes the DID, every credential fails verification.
+  local did_doc live_did stale
+  did_doc=$(curl -sf http://localhost:9091/.well-known/did.json) || fail "Certify's did.json not reachable on :9091"
+  live_did="did:key:$(jq -r '.verificationMethod[0].publicKeyMultibase' <<<"$did_doc")"
+  [[ "$(jq -r .id <<<"$did_doc")" == "$live_did" ]] \
+    || fail "Certify's DID is $(jq -r .id <<<"$did_doc"), not its live key $live_did: run bootstrap.sh --did-refresh"
+  stale=$(docker compose exec -T database psql -U postgres -d inji_certify -tAc \
+    "select credential_config_key_id from certify.credential_config where did_url is distinct from '$live_did'" | awk 'NF' | paste -sd' ')
+  [[ -z "$stale" ]] || fail "$stale name another DID than the live key $live_did: run bootstrap.sh --did-refresh"
+  ok "Certify signs as its live key $live_did"
+
+  # 3. Certify's issuer metadata lists exactly the installation's credential types, each with the Gateway's claims.
   issuer_json=$(curl -sf http://localhost:9091/.well-known/openid-credential-issuer) \
     || fail "Certify's issuer metadata not reachable on :9091"
   want_configs=$(jq -r '[.[].credentialConfig] | sort | join(" ")' "$FIXTURES")
@@ -59,10 +72,10 @@ t = ct.REGISTRY[sys.argv[1]]; print('\n'.join([*t.record.model_fields, *t.derive
     ok "Certify lists $config with the Gateway's claims for $scope"
   done
 
-  # 3. certify-nginx, the Issuer's entry point, serves the contexts from the VDR.
+  # 4. certify-nginx, the Issuer's entry point, serves the contexts from the VDR.
   check_contexts http://localhost:9091 certify-nginx
 
-  # 4. The Gateway answers every persona of smoke.json with the mock Adapter beside it (the live mode of
+  # 5. The Gateway answers every persona of smoke.json with the mock Adapter beside it (the live mode of
   # gateway/tests/test_issuances.py) and writes one issuance row per 200. Run from the gateway image (httpx, psycopg),
   # whose environment carries the token and the database URL.
   docker compose run --rm --no-deps -T \
@@ -73,7 +86,7 @@ t = ct.REGISTRY[sys.argv[1]]; print('\n'.join([*t.record.model_fields, *t.derive
     || fail "Gateway (gateway/tests/test_issuances.py)"
   ok "Gateway: 200 eligible, 403 checklist_failed with the failing checks, 404 no_record unknown, 400, 401, one issuance row per 200"
 
-  # 5. An Adapter failure during a request is a Gateway error (502), not a crash. The Adapter is started again whether
+  # 6. An Adapter failure during a request is a Gateway error (502), not a crash. The Adapter is started again whether
   # or not the check passes, and answers again before the next step, so the stack is left as it was.
   docker compose stop adapter >/dev/null || fail "cannot stop the adapter"
   adapter_down_rc=0

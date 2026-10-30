@@ -41,6 +41,9 @@ services:
       - enable_certify_artifactory=false
       - download_hsm_client=false
       - mosip_certify_domain_url=${CERTIFY_PUBLIC_BASE_URL:-http://certify-nginx}
+      # Certify's DID: a credential's issuer and did.json's id. A fresh keystore makes a new key, so the value is only
+      # known once Certify runs; bootstrap.sh --did-refresh writes it to .env. Until then, the seed's placeholder.
+      - CERTIFY_DID=${CERTIFY_DID:-did:key:z6MkpPLACEHOLDERreplaceMeViaBootstrapDidRefreshScript1}
     # The Authorization Server: the installation's settings, each set per environment in .env. With the stand-in,
     # Keycloak's --hostname-url=http://keycloak:8080 (see keycloak-server service) makes every token it issues carry
     # iss=http://keycloak:8080/realms/<realm>, regardless of which URL the browser used to log in (that's rewritten
