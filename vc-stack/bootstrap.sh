@@ -381,8 +381,8 @@ compose_up() {
   step "docker compose up -d (mode=$MODE)"
   if [[ "$MODE" == "a" ]]; then
     docker compose up -d database certify certify-nginx mimoto-service inji-web verify-service verify-ui
-    # The transcript context is served by vdr through public-gateway; --no-deps keeps keycloak-* down.
-    docker compose up -d --no-deps vdr public-gateway adapter gateway
+    # mimoto-service brought up its config server, public-gateway, and vdr behind it; keycloak-* stay down.
+    docker compose up -d adapter gateway
     ensure_certify_nginx_up
     docker compose restart mimoto-service inji-web verify-ui
     ok "started Mode A services (keycloak-* skipped)"
