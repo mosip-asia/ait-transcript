@@ -86,7 +86,7 @@ Certify's own app log (`docker logs vc-stack-certify-1`) shows **nothing** for t
 
 **Root cause:** `MOSIP_CERTIFY_AUTHN_ISSUER_URI` was templated from `KEYCLOAK_PUBLIC_BASE_URL` (`${KEYCLOAK_PUBLIC_BASE_URL:-http://localhost:9080}/realms/inji`), but the JWT's real `iss` claim is `http://keycloak:8080/realms/inji` (Keycloak's `--hostname-url`, same value `MOSIP_CERTIFY_AUTHORIZATION_URL` already correctly used). Neither `http://localhost:9080/realms/inji` nor the malformed `.env` value `http://keycloak:9080/realms/inji` (a hybrid of internal hostname + public port that matches neither Docker DNS nor the host) ever matched — every JWT failed issuer validation.
 
-**Fix ([vc-stack/docker-compose.yaml](../../vc-stack/docker-compose.yaml)):** `MOSIP_CERTIFY_AUTHN_ISSUER_URI` now uses `${KEYCLOAK_DOCKER_AUTH_SERVER:-http://keycloak:8080}/realms/inji` — the same variable `MOSIP_CERTIFY_AUTHORIZATION_URL` already used. Also fixed [vc-stack/.env](../../vc-stack/.env)'s `KEYCLOAK_PUBLIC_BASE_URL` from the malformed `http://keycloak:9080` to `http://localhost:9080` (it still feeds `--hostname-admin-url` for the admin console, which needs the real public URL).
+**Fix (Certify's issuer URI, now `mosip.certify.authn.issuer-uri=${AUTH_SERVER_ISSUER}` in `installations/<name>/certify-installation.properties`):** the issuer URI used `${KEYCLOAK_DOCKER_AUTH_SERVER:-http://keycloak:8080}/realms/inji` — the same variable the authorization URL already used. Also fixed [vc-stack/.env](../../vc-stack/.env)'s `KEYCLOAK_PUBLIC_BASE_URL` from the malformed `http://keycloak:9080` to `http://localhost:9080` (it still feeds `--hostname-admin-url` for the admin console, which needs the real public URL).
 
 **Verify:**
 

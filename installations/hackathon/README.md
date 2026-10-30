@@ -14,7 +14,7 @@ How the infra team deploys this directory (the service set, every variable and m
 | `mimoto-issuers-config.json.template` | `data/render_mimoto_issuers_config.py` | Mimoto's issuer list (wallet test harness), with `${INJI_WEB_URL}` left to fill |
 | `mimoto-issuers-config.json` | Mimoto, Inji Web | Rendered by `run-demo.sh` from the template, then patched by `bootstrap.sh`. Git-ignored |
 | `adapter/student_identity_data.csv` | The mock adapter (`adapter/`, mounted read-only at `/data`) | The roster, committed and edited by hand: one row per participant, keyed by `id` (the Keycloak username). The adapter reads it on every request, no restart of anything |
-| `smoke.json` | `vc-stack/smoke.sh`, `gateway/tests/test_issuances.py`, `vc-stack/test_inji_web_vc_readiness.py` | The installation's test fixtures, below |
+| `smoke.json` | `vc-stack/smoke.sh`, `vc-stack/issuer-smoke.sh`, `gateway/tests/test_issuances.py`, `vc-stack/test_inji_web_vc_readiness.py` | The installation's test fixtures, below |
 
 The installation's own values:
 
@@ -42,4 +42,4 @@ The installation's own values:
   - `GATEWAY_ADAPTER_URL`: `http://adapter:8000` (the mock adapter)
   - `GATEWAY_AUTH_TOKEN`: equal to `mosip.certify.gateway.auth-token` above; test-only
   - `GATEWAY_DATABASE_URL`: Certify's Postgres, where the Gateway creates its `gateway` schema
-- Test fixtures, in `smoke.json`, a list with one entry per credential type (Certify must list exactly these configurations): `credentialConfig`, `scope`, `eligible` (one persona or a list, each issued and verified, then tampered: `hack-2026-0001` and the non-winning `hack-2026-0002` for the Developer Passport, `hack-2026-0001` for the Achievement), `refused` (each persona with the check that fails, or the list of checks that fail together), `tamper` (the claim paths changed in the tampered copies: `teamName` for the Developer Passport, `award` for the Achievement). The Developer Passport refuses `hack-2026-0003` (`on_roster`); the Achievement refuses `hack-2026-0002` (`winner`) and `hack-2026-0003` (`on_roster` and `winner`)
+- Test fixtures, in `smoke.json`, a list with one entry per credential type (Certify must list exactly these configurations): `credentialConfig`, `scope`, `eligible` (one persona or a list, each issued and verified, then tampered: `hack-2026-0001` and the non-winning `hack-2026-0002` for the Developer Passport, `hack-2026-0001` for the Achievement), `unknown` (`hack-2026-9999` for both types, a persona the adapter has no record of: the Gateway's 404 `no_record`), `refused` (each persona with the check that fails, or the list of checks that fail together), `tamper` (the claim paths changed in the tampered copies: `teamName` for the Developer Passport, `award` for the Achievement). The Developer Passport refuses `hack-2026-0003` (`on_roster`); the Achievement refuses `hack-2026-0002` (`winner`) and `hack-2026-0003` (`on_roster` and `winner`)

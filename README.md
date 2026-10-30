@@ -22,27 +22,70 @@ Full service and port topology: [wiki/architecture/vc-stack.md](./wiki/architect
 - `jq`, `curl`, `awk` on the host (used by the setup scripts, not just inside containers). `curl`/`awk` ship with macOS/Linux; `jq` may need `brew install jq`.
 - **Windows:** run everything inside WSL2, not Git Bash — enable Docker Desktop's WSL integration, clone the repo into the WSL filesystem (not `/mnt/c/...`), and `sudo apt install jq` if it's missing. Git Bash mangles absolute paths in bind-mount arguments (e.g. the keystore step's `-v "$PWD/certs:/certs"`), which silently breaks the mount.
 
-## Local development
+## Deploy locally
 
-### Start the stack
+Run every command from the repo root, in WSL2 on Windows (see Prerequisites). The stack is four deployments, one folder each under `vc-stack/`, each with its own `compose.yaml`. Every folder file is `name: vc-stack`, so they all belong to one Compose project and share its network, volumes, keystore and DID.
 
-From the repo root:
+| Folder | Containers | Host ports |
+|---|---|---|
+| `issuer/` | `database` (Postgres), `certify`, `certify-nginx`, `gateway`, `vdr` (the mock VDR) | 6440, 9090, 9091 |
+| `mock-adapter/` | `adapter` (the mock data Adapter) | none |
+| `verify/` | `verify-database`, `verify-service`, `verify-ui` | 9095, 4007 |
+| `demo/` | `demo-database`, `mimoto-service`, `inji-web`, `keycloak-server`, `keycloak`, `public-gateway`, `demo-app` | 9099, 4004, 9080, 9098, 4100 |
+
+Two top-level files pull the folders in with `include:`:
+
+- `vc-stack/compose.yaml`: all four folders, the whole journey.
+- `vc-stack/issuer-dev.yaml`: `issuer/` and `mock-adapter/`, the Issuer alone.
+
+What each service is configured with, and which values a deployment replaces, is in [the configuration contract](./wiki/project/issuer-v0.1/configuration-contract.md); this README does not repeat it. How the folders fit together is in [wiki/architecture/vc-stack.md](./wiki/architecture/vc-stack.md).
+
+### Choose an Installation
+
+An Installation is a directory under `installations/` (`ait` issues the transcript, `hackathon` issues the Developer Passport and the Achievement). Name it with `INSTALLATION` in the environment, or in `vc-stack/.env`. The scripts stop before any container starts when it names no directory, and `bootstrap.sh` writes the value it ran with into `vc-stack/.env`. Certify's seed runs only on a fresh database, so switching to another Installation needs a reset (below).
+
+### The whole stack
 
 ```sh
-chmod +x run-demo.sh vc-stack/bootstrap.sh vc-stack/smoke.sh
+chmod +x run-demo.sh vc-stack/bootstrap.sh vc-stack/smoke.sh vc-stack/issuer-smoke.sh
 INSTALLATION=ait ./run-demo.sh
 ```
 
-This builds the demo app image, regenerates `installations/ait/adapter/student_identity_data.csv` from `data/students.json` (inside Docker), runs `./vc-stack/bootstrap.sh` (full stack + demo app), and leaves everything running.
+`run-demo.sh` builds the demo app, adapter and gateway images, regenerates `installations/ait/adapter/student_identity_data.csv` from `data/students.json`, renders Mimoto's issuer list, builds the Certify plugin jar into `vc-stack/plugins/`, then runs `vc-stack/bootstrap.sh`, which brings the folders up in order and checks the result. A pass ends with `Stack is healthy.` and the URLs under [Accessing the demo locally](#accessing-the-demo-locally). Run it again whenever `data/students.json` changes, so the adapter CSV stays in sync.
 
-**Docker-only equivalent** (after first `./run-demo.sh` has created `vc-stack/.env` and the external network):
+After the first run has written `vc-stack/.env` and created the Docker network, the plain Compose form works too (it needs the plugin jar and the CSV `run-demo.sh` made):
 
 ```sh
 mkdir -p .demo-state
-docker compose -f vc-stack/docker-compose.yaml up -d --build
+docker compose -f vc-stack/compose.yaml up -d --build
 ```
 
-Use `./run-demo.sh` when you change `data/students.json` so Certify’s CSV stays in sync.
+### The Issuer alone
+
+`vc-stack/issuer-dev.yaml` runs the Issuer and the mock Adapter, with no Keycloak, wallet or verifier. It is what the dev server runs until a real Adapter serves credential data.
+
+```sh
+export INSTALLATION=ait                     # or hackathon
+./vc-stack/bootstrap.sh --prepare           # writes vc-stack/.env, creates the Docker network, starts nothing
+python3 data/generate_csv.py                # ait only: the adapter CSV. The hackathon roster is committed
+mkdir -p vc-stack/plugins/.m2
+docker run --rm --user "$(id -u):$(id -g)" \
+  -v "$PWD/gateway/plugin:/src" -w /src \
+  -v "$PWD/vc-stack/plugins/.m2:/var/maven/.m2" -e MAVEN_CONFIG=/var/maven/.m2 \
+  maven:3.9-eclipse-temurin-21 mvn -q -B -Duser.home=/var/maven package
+cp gateway/plugin/target/gateway-data-provider-plugin.jar vc-stack/plugins/
+docker compose -f vc-stack/issuer-dev.yaml up -d --build
+```
+
+Certify answers on `http://localhost:9091/.well-known/openid-credential-issuer` once it is up; [How to test](#how-to-test) has the smoke that checks it. Running one folder's own file (`vc-stack/issuer/compose.yaml`) needs `--env-file vc-stack/.env` as well, because the folder reads no `.env` of its own.
+
+### Reset
+
+```sh
+INSTALLATION=ait ./run-demo.sh --wipe       # or: INSTALLATION=ait ./vc-stack/bootstrap.sh --wipe
+```
+
+`--wipe` removes the containers and volumes of the whole `vc-stack` project (every folder, since they share it), plus `vc-stack/certs/`, `vc-stack/data/` and `vc-stack/.env`, so the next bring-up has a new signing key and `did:key`. It then brings the full stack back up. No folder has a reset of its own. Use it to switch Installation too: `INSTALLATION=hackathon ./run-demo.sh --wipe`.
 
 ### Demo app persistence
 
@@ -53,47 +96,56 @@ Request/approval SQLite state lives at **`.demo-state/demo_requests.db`** on the
 `portal/` and `data/` are **bind-mounted** into the container; `uvicorn` runs with **`--reload`**, so Python and template edits apply without rebuilding. Rebuild only when `portal/requirements.txt` changes:
 
 ```sh
-docker compose -f vc-stack/docker-compose.yaml build demo-app
-docker compose -f vc-stack/docker-compose.yaml up -d demo-app
+docker compose -f vc-stack/compose.yaml build demo-app
+docker compose -f vc-stack/compose.yaml up -d demo-app
 ```
 
 The demo app calls Certify server-to-server (`ledger-search`, status list, revoke — see [wiki/concepts/vc-revocation.md](./wiki/concepts/vc-revocation.md)) but never Mimoto or Keycloak; for claiming and verifying it only renders links to **http://localhost:4004** and **http://localhost:4007** for the presenter’s browser.
 
-## Local testing
+## How to test
 
-Stack smoke (Inji services must be up):
+Every test is a plain script, not pytest. A script prints one `PASS <name>` line per test and a closing count (or `all tests passed`) and exits 0; a failure is a traceback and a non-zero exit status.
 
-```sh
-./vc-stack/smoke.sh
-```
+### Unit tests
 
-Inji Web VC download readiness (config always; `--live` needs stack up — also run from `smoke.sh`):
+None of these needs the stack up (the plugin test and `test_context_refresh.py` use Docker for a throwaway container). Install the host dependencies once (Python 3.11 or later), and render the issuer config that one test reads (a git-ignored file):
 
 ```sh
-python3 vc-stack/test_inji_web_vc_readiness.py
-python3 vc-stack/test_inji_web_vc_readiness.py --live
+pip install -r portal/requirements.txt -r gateway/requirements.txt tzdata
+INSTALLATION=ait python3 data/render_mimoto_issuers_config.py
 ```
 
-Guards regressions that broke issuer list, Keycloak login, or same-origin token/download (`:4004` vs `:9099`). Full OAuth + PDF is still manual.
+| Module | Command | What a pass shows |
+|---|---|---|
+| Gateway | `python3 gateway/tests/test_credential_types.py` | each credential type's checklist and claim mapping |
+| Gateway | `python3 gateway/tests/test_issuances.py` | `POST /issuances` against the mock Adapter in-process, for every type in every Installation's `smoke.json`: 200, 403 per failing check, 404 for the unknown persona, 502 for bad Adapter data |
+| Adapter | `python3 adapter/test_adapter.py` | the mock Adapter on the generated CSV and on the hackathon roster, and `adapter/openapi.yaml` requiring every field a Gateway model requires |
+| Plugin | `docker run --rm -v "$PWD/gateway/plugin:/src" -w /src maven:3.9-eclipse-temurin-21 mvn -q package` | needs Docker; prints nothing, exits 0, and leaves `gateway/plugin/target/gateway-data-provider-plugin.jar` |
+| `vc-stack/` | `python3 vc-stack/test_installation_guard.py` | the scripts refuse a missing `INSTALLATION` |
+| `vc-stack/` | `python3 vc-stack/test_installations.py` | each Installation's realm users match its adapter CSV, and its `smoke.json` personas are among them |
+| `vc-stack/` | `python3 vc-stack/test_authorization_server.py` | Certify's properties and Mimoto's issuer list for the stand-in and the campus realm |
+| `vc-stack/` | `python3 vc-stack/test_configuration_contract.py` | the configuration contract's tables match the folders' `compose.yaml` files |
+| `vc-stack/` | `python3 vc-stack/test_issue_and_verify.py` | the smoke's token request, proof JWT and verify outcomes, HTTP mocked |
+| `vc-stack/` | `python3 vc-stack/test_inji_web_vc_readiness.py` | the config behind Inji Web's download path |
+| `vc-stack/` | `python3 vc-stack/test_context_refresh.py` | needs Docker: `context_refresh.sql` against a throwaway Postgres |
+| Portal | `python3 portal/test_auth.py`, `python3 portal/test_requests.py` | the demo app's logic; also runnable inside the image: `docker compose -f vc-stack/compose.yaml run --rm --no-deps demo-app python portal/test_requests.py` |
+| Data | `python3 data/test_ait_courses.py`, `data/test_generate_csv.py`, `data/test_render_mimoto_issuers_config.py` | the fixtures and generators |
 
-Demo app logic (host Python **or** inside the demo image):
+### Smoke tests
 
-```sh
-python3 portal/test_auth.py
-python3 portal/test_requests.py
-```
+A smoke test needs the stack up (see [Deploy locally](#deploy-locally)) with the same `INSTALLATION` in the environment or in `vc-stack/.env`. Each prints `OK: <check>` per check; a failure prints `FAIL: <reason>` and exits 1.
 
-```sh
-docker compose -f vc-stack/docker-compose.yaml run --rm --no-deps demo-app python portal/test_auth.py
-docker compose -f vc-stack/docker-compose.yaml run --rm --no-deps demo-app python portal/test_requests.py
-```
+| Smoke | Stack | Command | A pass ends with |
+|---|---|---|---|
+| Issuer-only | `vc-stack/issuer-dev.yaml` up | `./vc-stack/issuer-smoke.sh` | `All Issuer-only smoke checks passed.` |
+| Full stack | `vc-stack/compose.yaml` up | `./vc-stack/smoke.sh` | `All smoke checks passed.` |
 
-Data fixture tests still need Python on the host (or run similarly via `demo-app`):
+- **Issuer-only** checks that Certify loaded the Gateway plugin and lists exactly the Installation's credential types with the Gateway's claims, that the VDR serves their contexts, and that the Gateway answers every persona of `installations/<name>/smoke.json`: 200 for the eligible, 403 `checklist_failed` for the refused, 404 `no_record` for the unknown, and 502 `gateway_error` with the Adapter stopped. It issues no credential, because there is no Authorization Server.
+- **Full stack** runs the Gateway checks directly and through Certify, and adds Mimoto, Keycloak and Inji Web configuration checks, a bootstrap re-run, `issue_and_verify.py` (issue each type with the Keycloak `smoke` client, verify it, then verify tampered copies and expect `ERR_SIGNATURE_VERIFICATION_FAILED`), and `test_inji_web_vc_readiness.py --live`. It runs only against the stand-in Keycloak, not a campus realm.
 
-```sh
-python3 data/test_ait_courses.py
-python3 data/test_generate_csv.py
-```
+The browser OAuth login and the PDF download are still manual (PRD §9).
+
+CI runs the host tests, then the full-stack smoke and the Issuer-only smoke once per Installation, each on a fresh runner (`.github/workflows/test.yml`).
 
 ## Deploying to GCP
 
@@ -221,6 +273,7 @@ A generic OpenID4VCI wallet cannot connect to the platform yet: the only OAuth c
 ## Docs
 
 - [wiki/OVERVIEW.md](./wiki/OVERVIEW.md) — architecture and gotchas
+- [wiki/project/issuer-v0.1/configuration-contract.md](./wiki/project/issuer-v0.1/configuration-contract.md) — every service's variables, files and ports
 - [wallet/README.md](./wallet/README.md) — the per-platform patches (`common/`, `ios/`) and one-command script that turn Inji Wallet v0.22.1 into the AIT-connected wallet
 - [wiki/guides/wallet-developer-urls.md](./wiki/guides/wallet-developer-urls.md) — URLs, flow and iOS build recipe for Inji-based wallets
 - [wiki/guides/other-openid4vci-wallets.md](./wiki/guides/other-openid4vci-wallets.md) — connecting a non-Inji OpenID4VCI wallet
