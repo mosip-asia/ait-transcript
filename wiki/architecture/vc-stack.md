@@ -13,29 +13,68 @@ tags:
 
 ```mermaid
 flowchart TD
-  Browser["Browser: demo app"] --> DemoApp["Demo app (FastAPI :4100, its own Docker service)"]
-  DemoApp -->|approved: shows deep link| Web["Inji Web :4004"]
+  Browser["Browser"] --> DemoApp
   Browser --> Web
-  Browser --> VerifyUI["Verify UI :4007"]
-  Web --> Mimoto["Mimoto :9099"]
-  Mimoto --> KeycloakNginx["Keycloak nginx :9080"]
-  Mimoto --> CertifyNginx["Certify nginx :9091"]
-  CertifyNginx --> Certify["Inji Certify"]
-  KeycloakNginx --> Keycloak["Keycloak server"]
-  VerifyUI --> VerifyAPI["Verify service :9095"]
-  Certify --> DB[(PostgreSQL :6440)]
-  Mimoto --> DB
-  VerifyAPI --> DB
-  DemoApp --> SQLite[(SQLite: requests)]
+  Browser --> VerifyUI
+
+  subgraph demo["demo/"]
+    DemoApp["demo-app :4100 (the Portal)"] -->|approved: shows deep link| Web["inji-web :4004"]
+    Web --> Mimoto["mimoto-service :9099"]
+    Mimoto --> KeycloakNginx["keycloak :9080"] --> Keycloak["keycloak-server"]
+    Mimoto --> DemoDB[("demo-database")]
+    Mimoto -->|Spring config, issuer list| PublicGateway["public-gateway :9098 (and :8080, internal)"]
+    DemoApp --> SQLite[("SQLite: requests")]
+  end
+
+  subgraph issuer["issuer/"]
+    CertifyNginx["certify-nginx :9091"] --> Certify["certify :9090"]
+    Certify -->|"data-provider plugin, POST /issuances"| Gateway["gateway"]
+    Certify --> DB[("database :6440")]
+    Gateway --> DB
+    VDR["vdr (mock VDR)"]
+  end
+
+  subgraph mockadapter["mock-adapter/"]
+    Adapter["adapter"]
+  end
+
+  subgraph verify["verify/"]
+    VerifyUI["verify-ui :4007"] --> VerifyAPI["verify-service :9095"] --> VerifyDB[("verify-database")]
+  end
+
+  Mimoto --> CertifyNginx
+  Gateway --> Adapter
+  PublicGateway -->|/contexts/| VDR
+  PublicGateway --> CertifyNginx
+  PublicGateway --> VerifyAPI
+  DemoApp -.->|ledger search, revoke| CertifyNginx
 ```
+
+## Deployments
+
+`vc-stack/` has one folder per deployment, each with its own `compose.yaml`. All of them are `name: vc-stack`, so one folder run alone is part of the same Compose project as the full stack and shares its volumes, keystore and DID. Mount sources (`config/`, `certs/`, `data/`, `plugins/`) stay in `vc-stack/`, so the keystore and DID survive whichever file is run. `docker compose -f vc-stack/<file> ...` reads `vc-stack/.env` by itself for a top-level file; a folder's own `compose.yaml` needs `--env-file vc-stack/.env`.
+
+| Folder | Containers | Host ports |
+|---|---|---|
+| `issuer/` | `database` (Postgres, with Certify's schema and the `gateway` schema the Gateway creates), `certify`, `certify-nginx`, `gateway`, `vdr` (the mock VDR, which serves the Issuer's JSON-LD contexts) | 6440, 9090, 9091 |
+| `mock-adapter/` | `adapter`, the mock data Adapter; a folder of its own because the Issuer-only run needs it until infra's Adapter serves credential data | none |
+| `verify/` | `verify-database`, `verify-service`, `verify-ui` | 9095, 4007 |
+| `demo/` | `demo-database` (Mimoto's Postgres), `mimoto-service`, `inji-web`, `keycloak-server`, `keycloak` (its nginx), `public-gateway`, `demo-app` | 9099, 4004, 9080, 9098, 4100 |
+
+| Top-level file | Includes | Used for |
+|---|---|---|
+| `vc-stack/compose.yaml` | all four folders | the whole journey; `run-demo.sh`, `bootstrap.sh`, `smoke.sh` and the `stack-smoke` CI job |
+| `vc-stack/issuer-dev.yaml` | `issuer/`, `mock-adapter/` | the Issuer alone, as the issuer-dev server runs it; `issuer-smoke.sh` and the `issuer-smoke` CI job. It has no Keycloak, so the smoke issues no credential |
+
+Each of the three groups that needs a Postgres brings its own, under its own service name, for now. `public-gateway` is two nginx servers: the public one on port 80, and Mimoto's Spring config server and issuer-list host on port 8080, which has no host port because the directory it serves holds passwords. certify-nginx no longer does that job. How to run each is in the [README](../../README.md#deploy-locally); every service's variables, files and ports are in the [configuration contract](../project/issuer-v0.1/configuration-contract.md).
 
 ## Installations
 
-The stack runs one installation at a time. `INSTALLATION` (the environment, else `vc-stack/.env`, else the git-ignored `vc-stack/.installation` marker) names a directory under `installations/`, and every per-installation mount in `docker-compose.yaml` reads from that directory: Certify's `certify-csvdp-student.properties` and adapter CSV (`adapter/student_identity_data.csv`), the `credential_config` rows (`certify_seed.sql`, a Postgres init script that runs after `certify_init.sql`), the Keycloak realm, and Mimoto's rendered issuer list (also served by certify-nginx at `/mimoto-issuers-config.json`, which is where Mimoto fetches it). `run-demo.sh`, `bootstrap.sh` and `smoke.sh` stop with a message, before any container starts, when it is unset or names no directory; `bootstrap.sh` writes the value it ran with into `.env`, so the plain `docker compose` form mounts the same files. Everything else under `vc-stack/` is shared. Today there is one installation, `installations/ait/` (see its `README.md`); `deploy/remote-deploy.sh` writes the `.installation` marker so a VM reboot, which regenerates `app.env`, keeps the value.
+The stack runs one installation at a time. `INSTALLATION` (the environment, else `vc-stack/.env`, else the git-ignored `vc-stack/.installation` marker) names a directory under `installations/`, and every per-installation mount in the folders' `compose.yaml` files reads from that directory: Certify's `certify-installation.properties` and the adapter CSV (`adapter/student_identity_data.csv`), the `credential_config` rows (`certify_seed.sql`, a Postgres init script that runs after `certify_init.sql`), the Keycloak realm, and Mimoto's rendered issuer list (also served by the public gateway's config server on port 8080 at `/mimoto-issuers-config.json`, which is where Mimoto fetches it). `run-demo.sh`, `bootstrap.sh` and `smoke.sh` stop with a message, before any container starts, when it is unset or names no directory; `bootstrap.sh` writes the value it ran with into `.env`, so the plain `docker compose` form mounts the same files. Everything else under `vc-stack/` is shared. There are two, `installations/ait/` and `installations/hackathon/` (see their `README.md` files); `deploy/remote-deploy.sh` writes the `.installation` marker so a VM reboot, which regenerates `app.env`, keeps the value.
 
 ## Image versions
 
-Pinned in [`vc-stack/docker-compose.yaml`](../../vc-stack/docker-compose.yaml) (the source of truth — update this table when you bump one):
+Pinned in the folders' `compose.yaml` files, [`issuer/`](../../vc-stack/issuer/compose.yaml), [`verify/`](../../vc-stack/verify/compose.yaml) and [`demo/`](../../vc-stack/demo/compose.yaml) (the source of truth — update this table when you bump one):
 
 | Component | Image |
 |---|---|
@@ -44,8 +83,8 @@ Pinned in [`vc-stack/docker-compose.yaml`](../../vc-stack/docker-compose.yaml) (
 | Inji Web | `injistack/inji-web:0.16.0` |
 | Inji Verify service / UI | `injistack/inji-verify-service:0.17.0` / `injistack/inji-verify-ui:0.17.0` |
 | Keycloak | `quay.io/keycloak/keycloak:24.0` |
-| PostgreSQL | `postgres:15` |
-| nginx (×3) | `nginx:stable` (floating tag) |
+| PostgreSQL (×3: `database`, `verify-database`, `demo-database`) | `postgres:15` |
+| nginx (×4: `certify-nginx`, `vdr`, `keycloak`, `public-gateway`) | `nginx:stable` (floating tag) |
 
 These are a known-working combination, and the `vc-stack/config/*.properties` and `installations/*/*.properties` files are tuned to them. Bump images together and re-check the config against the new releases' defaults. The demo app itself runs on `python:3.12-slim-bookworm`; its Python deps in `portal/requirements.txt` are lower-bounded (`>=`), not pinned.
 
@@ -78,10 +117,10 @@ Service topology, ports, and bootstrap approach: PostgreSQL, Inji Certify (+ ngi
 
 ## What's different
 
-- **One credential type**: AIT Transcript only (see [Transcript credential design](../concepts/transcript-credential.md)) — no Credential Lab `lab-*` types.
+- **Credential types per installation**: `ait` issues the AIT Transcript (see [Transcript credential design](../concepts/transcript-credential.md)); `hackathon` issues the Developer Passport and the Achievement. No Credential Lab `lab-*` types.
 - **Mock data source of truth**: `data/students.json` in this repo, not `inji/vc-stack/config/student_identity_data.csv` — the Certify CSV here is generated from that fixture, not hand-maintained.
 - **Certify/Keycloak identity is per-degree, not per-student**: a student who holds both a Masters and a PhD is one `students.json` entry with `degrees: [...]`, but each degree gets its own CSV row / Keycloak user (`degree.keycloakId`) so it can be claimed as a distinct VC. The demo-app login/session is still per-student; only the claim-panel's "Keycloak username" is degree-specific.
-- **New component**: the demo app (`portal/`, the Portal) sits in front of Inji Web/Verify with its own SQLite-backed request/approval state. It **is** a service in the same `docker-compose.yaml` (`PLAN.md` Phase 5) — not a separate host `uvicorn` process. A colleague picking up this repo should only ever need Docker. Through Phase 5 it made no server-to-server calls into the Inji stack (browser-only deep links); Phase 6 (registrar revoke/reissue, [VC revocation](../concepts/vc-revocation.md)) added its first ones, so it now joins `vc_stack_network` too.
+- **New component**: the demo app (`portal/`, the Portal) sits in front of Inji Web/Verify with its own SQLite-backed request/approval state. It **is** a service in the `demo/` folder's `compose.yaml` (`PLAN.md` Phase 5) — not a separate host `uvicorn` process. A colleague picking up this repo should only ever need Docker. Through Phase 5 it made no server-to-server calls into the Inji stack (browser-only deep links); Phase 6 (registrar revoke/reissue, [VC revocation](../concepts/vc-revocation.md)) added its first ones, so it now joins `vc_stack_network` too.
 - **Docker network name:** `vc_stack_network` (separate from `inji/vc-stack`'s `mosip_network` so both stacks can coexist without sharing the same external network object).
 - **Certify nginx on restart:** `certify-nginx` proxies to the `certify` service. Stock nginx resolves upstream hostnames at **startup**; after a plain `docker compose restart`, `certify` may not be on Docker DNS yet and nginx exits (`host not found in upstream "certify"`) → empty issuers / `:4004` 502. This repo uses Docker’s embedded resolver (`127.0.0.11`) and variable `proxy_pass` in `certify-nginx.conf` and `public-gateway-nginx.conf` so nginx starts reliably; `bootstrap.sh` still waits for `:9091` before declaring health.
 - **Inji Web → Mimoto:** set `MIMOTO_URL=http://localhost:4004/v1/mimoto` so the browser uses the inji-web nginx proxy (same origin). Pointing Mimoto at `localhost:9099` directly causes CORS failures and an empty issuer list. **`mimoto-issuers-config.json` `token_endpoint` must also use `:4004`** (via `LOCAL_MIMOTO_PUBLIC_BASE_URL` in `bootstrap.sh`), not `:9099`, or OAuth completes but VC download fails with “session is not valid or session is completed”. **`mosip.security.origins` in `mimoto-default.properties` must be `http://localhost:4004`** (not `3004`) so Mimoto accepts the browser `Origin` on proxied POSTs; wrong origin → HTTP 403 and the same Inji Web “invalid session” message. For **download after Keycloak login**, `mimoto-issuers-config.json`'s `authorization_audience` and `proxy_token_endpoint` are both `AUTH_SERVER_TOKEN_ENDPOINT`, for the stand-in `http://keycloak:8080/realms/<realm>/protocol/openid-connect/token` — informational fields Mimoto 0.21 exposes on its APIs but does **not** actually use for the token exchange (`IdpServiceImpl.getTokenResponse` uses the auth-server well-known's `token_endpoint` instead, which is why that value has to match too — see the Keycloak paragraph above). Set **`redirect_uri`** to `http://localhost:4004/redirect` for Inji Web.
