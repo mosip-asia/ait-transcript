@@ -159,6 +159,10 @@ jobs:
       - name: Bring up the Issuer and the mock Adapter
         run: $COMPOSE up -d --build
 
+      # The README's issuer-dev step, so it is tested: a local http base moves nothing, but it still waits for the
+      # database and queries it.
+      - run: ./vc-stack/bootstrap.sh --context-refresh
+
       - run: ./vc-stack/issuer-smoke.sh
 
       - name: Collect stack logs

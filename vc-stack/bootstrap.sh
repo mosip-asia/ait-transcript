@@ -543,6 +543,13 @@ context_refresh() {
   step "VC @context URL"
   local url changed
   url="$(student_context_url)"
+  # issuer-dev runs this straight after its compose up, before the database's init scripts may have finished.
+  local db deadline=$(( $(date +%s) + 120 ))
+  db=$(docker compose ps -q database) && [[ -n "$db" ]] || die "database is not running" 2
+  until [[ "$(docker inspect -f '{{.State.Health.Status}}' "$db")" == "healthy" ]]; do
+    (( $(date +%s) <= deadline )) || die "database not healthy after 120s" 2
+    sleep 2
+  done
   changed=$(docker compose exec -T database psql -U postgres -d inji_certify -tAq -v ON_ERROR_STOP=1 -v "new_url=$url" \
     < context_refresh.sql | tr -d '[:space:]') || die "context_refresh.sql failed" 2
   if [[ "$changed" != "1" ]]; then

@@ -14,6 +14,13 @@ services:
       # Compose refuses the whole file when it is unset, as it does mock-adapter/ and demo/.
       # The credential_config rows; the name sorts after certify_init.sql, which creates the table.
       - ../../installations/${INSTALLATION:?set INSTALLATION in vc-stack/.env}/certify_seed.sql:/docker-entrypoint-initdb.d/certify_seed.sql
+    # Healthy only after the init scripts: during them Postgres listens on its socket alone, so a TCP check fails
+    # until inji_certify and its seed exist. Certify, the Gateway and bootstrap.sh's context refresh wait for it.
+    healthcheck:
+      test: ["CMD", "pg_isready", "-h", "127.0.0.1", "-U", "postgres", "-d", "inji_certify"]
+      interval: 2s
+      timeout: 3s
+      retries: 60
     networks:
       - network
     ports:
@@ -58,7 +65,8 @@ services:
     networks:
       - network
     depends_on:
-      - database
+      database:
+        condition: service_healthy
 
   certify-nginx:
     image: nginx:stable
@@ -85,7 +93,8 @@ services:
     env_file:
       - ../../installations/${INSTALLATION}/gateway.env
     depends_on:
-      - database
+      database:
+        condition: service_healthy
     restart: unless-stopped
     networks:
       - network
