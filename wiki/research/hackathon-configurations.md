@@ -1,8 +1,8 @@
 # What the hackathon credential configurations look like today
 
-> **Note (2026-10-21).** The Issuer carries the two hackathon types, Developer Passport and Achievement, as VCDM 2.0 configurations on roster predicates (`on_roster`; `on_roster` then `winner`), not the chain below. This note is the inventory they were migrated from and is otherwise unchanged.
+> **Note (2026-10-21).** The Issuer platform carries the two hackathon types, Developer Passport and Achievement, as VCDM 2.0 configurations on roster predicates (`on_roster`; `on_roster` then `winner`), not the chain below. This note is the inventory they were migrated from and is otherwise unchanged.
 
-Research note, recorded 2026-10-20. Decided the same day, after this inventory: the chain is not carried into the Issuer; the VPID is dropped, and Developer Passport and Achievement are issued on two roster predicates (on the roster; `winner`), so the presentation, anchor and validity rows of the migration table below reduce to those two checks (`wiki/project/issuer-v0.1/responsibilities.md`, sections 5 and 7). Inventory of the three hackathon credential types (VPID, Developer Passport, Achievement Certificate) as they exist in `mosip-asia/ait-vc` on branch `playground/transcript-demo`, read only, for the work of absorbing them into the Issuer as VCDM 2.0 configurations with Bitstring status lists, issued by Certify behind a Gateway checklist. Nothing here has been applied; the `ait-vc` repository is frozen and untouched. Paths below are relative to `D:\MOSIP\ait-vc\local-stack\` unless they name another repository.
+Research note, recorded 2026-10-20. Decided the same day, after this inventory: the chain is not carried into the Issuer platform; the VPID is dropped, and Developer Passport and Achievement are issued on two roster predicates (on the roster; `winner`), so the presentation, anchor and validity rows of the migration table below reduce to those two checks (`wiki/project/issuer-v0.1/responsibilities.md`, sections 5 and 7). Inventory of the three hackathon credential types (VPID, Developer Passport, Achievement Certificate) as they exist in `mosip-asia/ait-vc` on branch `playground/transcript-demo`, read only, for the work of absorbing them into the Issuer platform as VCDM 2.0 configurations with Bitstring status lists, issued by Certify behind a Gateway checklist. Nothing here has been applied; the `ait-vc` repository is frozen and untouched. Paths below are relative to `D:\MOSIP\ait-vc\local-stack\` unless they name another repository.
 
 ## Short answer
 
@@ -97,7 +97,7 @@ Different per type:
 
 ## What a 2.0 migration changes
 
-The transcript has already been through this in the Issuer's own stack; `wiki/concepts/vc-revocation.md` lines 42–64 records the three changes and the decoded `ait-transcript` template shows the result (`vc-stack/certify_init.sql` lines 150–170). Applied to the three hackathon rows:
+The transcript has already been through this in the Issuer platform's own stack; `wiki/concepts/vc-revocation.md` lines 42–64 records the three changes and the decoded `ait-transcript` template shows the result (`vc-stack/certify_init.sql` lines 150–170). Applied to the three hackathon rows:
 
 | VCDM 1.1 trait today | Where | What 2.0 requires |
 |---|---|---|
@@ -105,13 +105,13 @@ The transcript has already been through this in the Issuer's own stack; `wiki/co
 | `issuanceDate: ${validFrom}` and `expirationDate: ${<type>ValidUntil}` | the three templates | Rename to `validFrom` and `validUntil` (`vc-revocation.md` line 51). The value sources can stay: the transcript uses Certify's `${validUntil}`, the hackathon rows read a per-row column, and the page's earlier-of rule only needs the column name to survive |
 | No `credentialStatus` block | the three templates | Add the dot-notation block (`id`, `type`, `statusPurpose`, `statusListIndex`, `statusListCredential` from `${credentialStatus.*}`), not a bare `${credentialStatus}` which Velocity renders as Java map syntax (`vc-revocation.md` lines 52–64) |
 | `credential_status_purpose = ARRAY['revocation']` present but inert | `certify_init.sql` lines 415, 465, 515 | Becomes live once the context is v2: Certify 0.14 calls the status-list service only then (`vc-revocation.md` line 44; the repository's own note at `certify_init.sql` lines 524–525). `ledger-enabled=true` and the allowed purpose are already set (`config/certify-default.properties` lines 203–208) |
-| Status list signed with `Ed25519Signature2020` | `config/certify-csvdp-student.properties` line 25 | Already the value the Issuer's transcript stack uses (`vc-stack/config/certify-csvdp-student.properties` line 21); the `BitstringStatusListCredential` Certify signs is v2 only (`contexts-nginx.conf` lines 33–35) |
+| Status list signed with `Ed25519Signature2020` | `config/certify-csvdp-student.properties` line 25 | Already the value the Issuer platform's transcript stack uses (`vc-stack/config/certify-csvdp-student.properties` line 21); the `BitstringStatusListCredential` Certify signs is v2 only (`contexts-nginx.conf` lines 33–35) |
 | Standard v2 context must resolve | `contexts-nginx.conf` lines 36–38 | Already vendored and served in-stack as `/ns/credentials/v2`; nothing to add for the hackathon types |
 | Credential `credentialSubject.id = ${_holderId}` (did:jwk), credential `id` from the `id-field-prefix-uri` | templates; `config/certify-csvdp-student.properties` line 19 | Unchanged by 2.0, but the chain check compares `anchorId` to the VPID's `id` (`policy-service/server.js` line 173), so the Issuer's `id` convention must stay stable across the migration |
-| Type-specific context files | `config/*-context.json` | Nothing in them names a VCDM version; they define terms at the top level, the shape the Issuer chose for the transcript in v0.1 (`wiki/research/signing-coverage.md`, decision line), so they carry over as they are once their host moves from `http://certify-nginx/` to the VDR |
+| Type-specific context files | `config/*-context.json` | Nothing in them names a VCDM version; they define terms at the top level, the shape the Issuer platform chose for the transcript in v0.1 (`wiki/research/signing-coverage.md`, decision line), so they carry over as they are once their host moves from `http://certify-nginx/` to the VDR |
 | Policy service verifies with `skipStatusChecks: true` | `policy-service/server.js` line 61 | Once the VPID carries a status-list entry, a Gateway "required presentation" check has a revocation signal the hackathon never had; the choice to honour it is new |
 | Issuance page and policy service hold the rules in code (presentation definition, roster lookup, winner flag, earlier-of validity) | `issuance-page/server.js` lines 63–100, 180–217; `policy-service/server.js` | In the Issuer these become checklist entries evaluated by the Gateway: a required presentation of `VPIDCredential` (the DIF definition at `issuance-page/server.js` lines 86–100 is the complete spec of what was demanded), and predicates over the record for roster membership, `winner`, and a future validity. The page's column writes (`anchorId`, `teamId`, team fields, validity) are what the Gateway's data-provider plugin must supply instead |
-| ADR-0003 says the page hands the wallet an OpenID4VCI offer | `D:\MOSIP\docs\adr\0003-…md` | The code hands a link to the issuer tile, not an offer (`issuance-page/server.js` lines 44–48, 310); the Issuer's "valid credential offer" promise (CONTEXT.md, Wallet) is new work, not a port |
+| ADR-0003 says the page hands the wallet an OpenID4VCI offer | `D:\MOSIP\docs\adr\0003-…md` | The code hands a link to the issuer tile, not an offer (`issuance-page/server.js` lines 44–48, 310); the Issuer platform's "valid credential offer" promise (CONTEXT.md, Wallet) is new work, not a port |
 
 ## Hackathon decisions in `D:\MOSIP\docs\adr\` that touch these types
 
@@ -128,7 +128,7 @@ The transcript has already been through this in the Issuer's own stack; `wiki/co
 
 All read on 2026-10-20, read only.
 
-- `D:\MOSIP\ait-transcript\CONTEXT.md` — the Issuer vocabulary used above (Issuer, Certify, Gateway, Checklist, Check, VDR, Wallet).
+- `D:\MOSIP\ait-transcript\CONTEXT.md` — the Issuer platform vocabulary used above (Issuer platform, Issuer, Certify, Gateway, Checklist, Check, VDR, Wallet).
 - `D:\MOSIP\ait-vc\local-stack\certify_init.sql` — `identity_data` table and seed (lines 100–172), the three `credential_config` rows (376–521), the transcript row and its v2 note (523–549).
 - `D:\MOSIP\ait-vc\local-stack\config\vpid-context.json`, `passport-context.json`, `achievement-context.json` — the three JSON-LD contexts.
 - `D:\MOSIP\ait-vc\local-stack\config\certify-csvdp-student.properties` — plugin, DID, `id` prefix, scope queries, issuer display, status-list suite.
