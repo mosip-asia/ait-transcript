@@ -101,6 +101,7 @@ Values the implementation fixed, which the real adapter must keep:
 - `balance` is a decimal string such as `"1250.00"` (`"0.00"` when nothing is owed), never a number.
 - `teamId` is empty for a participant on the roster without a team.
 - `winner` is `true` for a member of a winning team (read case-insensitively); anything else, empty included, is not.
+- A field the credential type reads is present, not `null`, and typed as `openapi.yaml` gives it, or the Gateway answers `gateway_error`; it ignores every other field.
 - `degreeId` equals the row's `id`. v0.1 holds one degree per `sub`, so `degrees` returns one entry and a `degreeId` that differs from the `sub` finds no record.
 
 Read-only, fetched once per request, not stored by the Issuer (§3.2). Which fields may leave the SIS is OSA's decision; this list is the demo's, not an agreed one. Until the real adapter exists, Thas's CSV-backed mock implements this contract and its eligibility attributes are editable so the Checklist can be exercised.
