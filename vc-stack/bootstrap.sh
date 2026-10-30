@@ -51,6 +51,9 @@ ok()   { printf "  %s✓%s %s\n" "$GRN" "$RST" "$*"; }
 warn() { printf "  %s!%s %s\n" "$YLW" "$RST" "$*"; }
 die()  { printf "  %sx%s %s\n" "$RED" "$RST" "$*" >&2; exit "${2:-1}"; }
 skip() { printf "  %s·%s %s\n" "$DIM" "$RST" "$*"; }
+# sed_in_place SCRIPT FILE: GNU sed takes -i with an optional attached suffix, BSD sed (macOS) requires one, so -i.bak is
+# the only in-place form both accept; the backup is removed at once (--wipe clears any a failed run left).
+sed_in_place() { sed -i.bak "$1" "$2" && rm -f "$2.bak"; }
 
 # JSON-LD context URL baked into every transcript VC (the AIT installation's; context_refresh.sql moves only that row). Local runs keep the Docker-only name (nothing but
 # containers reads it). Both go through the public gateway's /contexts/ route to the vdr container. A public
@@ -308,8 +311,7 @@ configure_mode() {
       ok "mimoto-issuers-config.json already targets esignet-mock"
     else
       # B → A
-      sed -i.bak "s|$AUTH_SERVER_TOKEN_ENDPOINT|$ESIGNET_TOKEN_URL|g" "$INSTALLATION_DIR/mimoto-issuers-config.json"
-      rm -f "$INSTALLATION_DIR/mimoto-issuers-config.json.bak"
+      sed_in_place "s|$AUTH_SERVER_TOKEN_ENDPOINT|$ESIGNET_TOKEN_URL|g" "$INSTALLATION_DIR/mimoto-issuers-config.json"
       ok "rewrote issuers config: keycloak → esignet-mock"
     fi
     # Override file: blank out Mode B-specific Certify env so it falls back to certify-default.properties
@@ -511,8 +513,7 @@ did_refresh() {
     local cur_prop_did
     cur_prop_did=$(grep "^mosip.certify.data-provider-plugin.did-url=" "$prop" | head -1 | cut -d= -f2-)
     if [[ "$cur_prop_did" != "$new_did" ]]; then
-      sed -i.bak "s|^mosip.certify.data-provider-plugin.did-url=.*$|mosip.certify.data-provider-plugin.did-url=${new_did}|" "$prop"
-      rm -f "${prop}.bak"
+      sed_in_place "s|^mosip.certify.data-provider-plugin.did-url=.*$|mosip.certify.data-provider-plugin.did-url=${new_did}|" "$prop"
       ok "patched $(basename "$prop")"
     fi
   fi
