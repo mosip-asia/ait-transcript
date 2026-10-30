@@ -1,4 +1,5 @@
-# Sourced by run-demo.sh, bootstrap.sh and smoke.sh before they touch Docker.
+# Sourced by run-demo.sh, bootstrap.sh, smoke.sh and issuer-smoke.sh before they touch Docker; the two smokes then
+# source issuer-checks.sh, which reads INSTALLATION_DIR.
 # INSTALLATION names the directory under installations/ that vc-stack's compose files
 # mount; the environment wins over vc-stack/.env, which wins over the marker file
 # vc-stack/.installation. Exits when it names no directory,
