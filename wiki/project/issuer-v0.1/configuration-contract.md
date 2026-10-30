@@ -443,7 +443,7 @@ Command, as in Compose: `start-dev --import-realm --hostname-strict=true --hostn
 |---|---|---|---|---|
 | env | `KEYCLOAK_ADMIN` | | shared | Secret, committed test-only |
 | env | `KEYCLOAK_ADMIN_PASSWORD` | | shared | Secret, committed test-only |
-| mount | `/opt/keycloak/data/import/realm.json` | `installations/<name>/keycloak-realm.json` | installation | Imported on start; a changed realm needs the container recreated. The committed realm is a fixture ([Fixtures to replace](#fixtures-to-replace-3)) |
+| mount | `/opt/keycloak/data/import/realm.json` | `vc-stack/certs/keycloak-realm.json` | shared | Imported on start; a changed realm needs the container recreated. `bootstrap.sh` writes it from `installations/<name>/keycloak-realm.json` with the Mimoto keystore's `wallet-demo` certificate; the committed realm is a fixture ([Fixtures to replace](#fixtures-to-replace-3)) |
 
 ### `keycloak`
 

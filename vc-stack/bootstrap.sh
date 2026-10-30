@@ -288,24 +288,25 @@ gen_client_cert() {
 }
 
 # -------- realm cert sync --------
+# Keycloak imports certs/keycloak-realm.json: the installation's realm with this machine's wallet-demo certificate. It
+# sits beside the keystore it comes from, git-ignored, so no run changes the committed realm.
+REALM_FILE=certs/keycloak-realm.json
 sync_realm_cert() {
-  [[ "$MODE" == "b" ]] || return 0
-  step "Sync wallet-demo cert into keycloak-realm.json"
-  local new_b64 cur_b64 tmp
-  new_b64=$(cat certs/client-cert-b64.txt)
-  cur_b64=$(jq -r '.clients[] | select(.clientId=="wallet-demo") | .attributes."jwt.credential.certificate" // ""' "$INSTALLATION_DIR/keycloak-realm.json")
-  if [[ "$new_b64" == "$cur_b64" ]]; then
-    ok "realm cert already matches keystore"
-    return
-  fi
+  step "Sync wallet-demo cert into $REALM_FILE"
+  local tmp
   tmp=$(mktemp)
-  jq --arg b64 "$new_b64" \
+  jq --arg b64 "$(cat certs/client-cert-b64.txt)" \
     '(.clients[] | select(.clientId=="wallet-demo") | .attributes."jwt.credential.certificate") = $b64' \
     "$INSTALLATION_DIR/keycloak-realm.json" > "$tmp"
+  if cmp -s "$tmp" "$REALM_FILE"; then
+    rm -f "$tmp"
+    ok "realm already matches the installation and the keystore"
+    return
+  fi
   # mktemp creates the file 0600; Keycloak (uid 1000 in its container) must read the mounted realm.
   chmod 0644 "$tmp"
-  mv "$tmp" "$INSTALLATION_DIR/keycloak-realm.json"
-  ok "patched keycloak-realm.json with new cert"
+  mv "$tmp" "$REALM_FILE"
+  ok "wrote $REALM_FILE"
   warn "Keycloak re-imports the realm on boot — restart keycloak-server if it was already up"
 }
 

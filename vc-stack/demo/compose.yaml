@@ -96,7 +96,14 @@ services:
       - KEYCLOAK_ADMIN=admin
       - KEYCLOAK_ADMIN_PASSWORD=admin
     volumes:
-      - ../../installations/${INSTALLATION}/keycloak-realm.json:/opt/keycloak/data/import/realm.json:ro
+      # The installation's realm with this machine's wallet-demo certificate, which bootstrap.sh writes. A missing
+      # file fails here instead of mounting an empty directory.
+      - type: bind
+        source: ../certs/keycloak-realm.json
+        target: /opt/keycloak/data/import/realm.json
+        read_only: true
+        bind:
+          create_host_path: false
     networks:
       - network
 
