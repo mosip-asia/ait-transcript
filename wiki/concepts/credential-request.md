@@ -18,7 +18,7 @@ For the endpoints and the full contracts see [Connecting a non-Inji OpenID4VCI w
 |---|---|---|
 | Access token | Keycloak, after the user logs in | Who is asking (`sub`) and what was granted (`scope`); Certify validates it |
 | `scope` | Asked for by the wallet at login, granted by Keycloak (`ait_transcript_vc_ldp` is an optional client scope of `wallet-demo`) | Which credential type; the Gateway picks the type from it |
-| `sub` | Keycloak mapper `sub-from-username` in `installations/ait/keycloak-realm.json`, so `sub` is the Keycloak username, for example `ait-2026-0001` | Whose record is read: the Gateway fetches the adapter's `/students/{sub}` |
+| `sub` | Keycloak mapper `sub-from-username` in `installations/ait/keycloak-realm.json`, so `sub` is the Keycloak username, for example `ait-2026-0001` | Whose record is read: the Gateway fetches the adapter's `/students/{sub}/...` paths |
 | Proof JWT | The wallet, signed with its own key, identified as `did:jwk` | The holder id placed in the credential; it says which wallet receives it, not which student the data is about |
 
 Identity is per degree: a student with two degrees has two Keycloak users and so two `sub` values (`ait-2026-0005` and `ait-2026-0005-phd` in the test realm).
@@ -61,16 +61,18 @@ sequenceDiagram
     K-->>W: access token (sub, scope)
     W->>C: credential request + token + proof JWT
     C->>G: POST /issuances (token claims minus accessTokenHash, bearer)
-    G->>A: GET /students/{sub} (shared bearer)
-    A-->>G: record + eligibility
+    G->>A: GET /students/{sub}/degrees, then /eligibility
+    A-->>G: degree + eligibility
     G->>G: run the checklist for the scope
+    G->>A: GET /students/{sub}/transcript (checks passed)
+    A-->>G: record
     G-->>C: claims (200) or refusal
     C-->>W: signed credential
 ```
 
 - Certify's data-provider plugin posts the token's claims to the Gateway's `POST /issuances`; the Gateway requires `sub` and `scope`. A token with no `sub` makes the plugin answer `invalid_access_token`.
 - The Gateway picks the credential type from the first served scope inside `scope`. No match is `unknown_scope` (400).
-- The Gateway fetches the record from the adapter with a shared bearer token between the two services. The adapter trusts the Gateway entirely and sees no wallet and no user token.
+- The Gateway fetches from the adapter on the private network, with no authentication in v0.1, and parses each answer with the credential type's Pydantic models: an answer that does not parse is `gateway_error` (502), never an empty claim. The adapter sees no wallet and no user token.
 - The checklist (for example `on_roster`, `winner`) can refuse at issuance with `checklist_failed` (403). Registrar approval is not part of the token: the demo app enforces it in its own UI only, by showing the claim link after approval.
 
 ## What this means for a real adapter

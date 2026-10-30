@@ -8,7 +8,7 @@ tags:
 ---
 # Wallet developer URLs
 
-For people building their own wallet, based on [inji/inji-wallet](https://github.com/inji/inji-wallet) v0.22.1, against the public demo. How the stack serves a phone and why is in [architecture/inji-mobile-wallet.md](../reference/inji-mobile-wallet.md).
+For people building their own wallet, based on [inji/inji-wallet](https://github.com/inji/inji-wallet) v0.22.1, against the public demo. How the stack serves a phone and why is in [reference/inji-mobile-wallet.md](../reference/inji-mobile-wallet.md).
 
 ## The one setting that matters
 

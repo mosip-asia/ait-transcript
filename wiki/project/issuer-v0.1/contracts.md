@@ -69,42 +69,7 @@ The jar is one generic artifact built from `gateway/plugin/` against `certify-in
 
 ### 2b. Gateway → data adapter (Jo and Boss)
 
-The API, as OpenAPI 3.1, is [`adapter/openapi.yaml`](../../../adapter/openapi.yaml): paths, fields, errors, and what the Gateway does with each answer. This section explains it.
-
-The proposal names `GET /students/:id/transcript` (§5.1(3)). A student can hold more than one degree, and the Checklist needs eligibility attributes, so v0.1 extends it (all **proposed**):
-
-- `GET /students/{id}/degrees` → list of `{ degreeId, level, degreeAwarded, dateGraduation }`.
-- `GET /students/{id}/transcript?degreeId={degreeId}` → one degree's full record.
-- `GET /students/{id}/eligibility?degreeId={degreeId}` → the attributes the Checklist reads: `holds[]`, `conferralStatus`, `balance` for the transcript; `teamId`, `winner` on the hackathon roster.
-
-Record fields, taken from the test data in `data/students.json`:
-
-| Group | Fields |
-|---|---|
-| Student | `fullName`, `dateOfBirth`, `country` |
-| Degree | `degreeId`, `level`, `registrationNo`, `previousDegree`, `yearAwarded`, `dateAdmitted`, `option`, `degreeAwarded`, `dateGraduation`, `faculty`, `academicProgram`, `areaOfSpecialization`, `notes`, `issueDate` |
-| Thesis | `thesisTitle`, `thesisGrade`, `thesisExamination`, `programCommittee` |
-| Credits | `courseworkCredits`, `thesisCredits`, `totalCredits` |
-| Courses | `courses[]`: `{ term, courses[]: { no, title, ... } }`; ordered arrays, numbers as strings |
-
-The hackathon installation's roster (`installations/hackathon/adapter/student_identity_data.csv`, one row per participant) serves the same three paths: `degrees` returns `{ degreeId }` only, and the record and the eligibility paths both serve the whole row.
-
-| Group | Fields |
-|---|---|
-| Eligibility | `teamId`, `winner` |
-| Developer Passport | `teamId`, `teamName`, `oidcClientId`, `authEndpoint`, `issuerEndpoint`, `verifierEndpoint` |
-| Achievement | `teamId`, `award` |
-
-Values the implementation fixed, which the real adapter must keep:
-
-- `conferralStatus` is `Conferred` or `Pending`.
-- `balance` is a decimal string such as `"1250.00"` (`"0.00"` when nothing is owed), never a number.
-- `teamId` is empty for a participant on the roster without a team.
-- `winner` is `true` for a member of a winning team (read case-insensitively); anything else, empty included, is not.
-- A field the credential type reads is present, not `null`, and typed as `openapi.yaml` gives it, or the Gateway answers `gateway_error`; it ignores every other field.
-- `degreeId` equals the row's `id`. v0.1 holds one degree per `sub`, so `degrees` returns one entry and a `degreeId` that differs from the `sub` finds no record.
-
-Read-only, fetched once per request, not stored by the Issuer (§3.2). Which fields may leave the SIS is OSA's decision; this list is the demo's, not an agreed one. Until the real adapter exists, Thas's CSV-backed mock implements this contract and its eligibility attributes are editable so the Checklist can be exercised.
+The Adapter is where an organisation's records enter the Issuer platform: the Gateway asks it for one student's degrees, eligibility attributes and record, runs the Checklist on the eligibility attributes and returns the record as claims. Read-only, fetched once per request, never stored by the Issuer (§3.2). The contract is [`adapter/openapi.yaml`](../../../adapter/openapi.yaml), OpenAPI 3.1, which a test holds the mock to: paths, fields, the values the real Adapter must keep, and what the Gateway does with each answer. Which fields may leave the SIS is OSA's decision. Until the real Adapter exists, Thas's CSV-backed mock implements it for both installations.
 
 #### The student key under campus sign-in
 
@@ -152,11 +117,4 @@ The Issuer platform promises a valid OpenID4VCI credential offer and nothing mor
 
 ## 6. Deployment configuration (infra team)
 
-The handover: the images Thas builds (Gateway, mock adapter, Portal), the plugin jar, the configuration of every stock image (environment variables, mounted files, per-installation settings), and the ingress allowlist. The full contract, with both installations' values, is [`configuration-contract.md`](configuration-contract.md). An installation is a self-contained stack described by one directory, `installations/<name>/`; Certify is listed once per instance, since a 0.14 instance serves one token issuer and one data-provider plugin and an installation may need more than one (2026-10-20). Any change goes to the infra team before it is applied.
-
-| Exposure | Endpoints |
-|---|---|
-| Public | Certify's OpenID4VCI endpoints, the Authorization Server, the Portal, the Verify UI, the `vdr` container's `/contexts/` path |
-| Internal only | Certify's management, ledger-search, status and credential-configuration APIs (unauthenticated in stock Certify), called by the Gateway and Portal; the Gateway, the adapter, Postgres |
-
-Signing-key custody is the infra team's; Certify supports PKCS12 or PKCS#11. One pod per Certify instance with `spring.cache.type=simple`, or Redis if infra scales it (2026-10-20).
+The handover to the infra team (images, plugin jar, the configuration of every stock image, the ingress allowlist, key custody) is [`configuration-contract.md`](configuration-contract.md). Any change to it goes to the infra team before it is applied.

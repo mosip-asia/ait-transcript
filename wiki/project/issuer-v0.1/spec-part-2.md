@@ -2,7 +2,7 @@
 
 Status: draft of 2026-10-26, written from the closed build decisions and the code on `feat/hackathon-chain`; not yet reviewed by the owner. Terms follow [`CONTEXT.md`](../../../CONTEXT.md). Ownership is in [`responsibilities.md`](responsibilities.md), the interfaces in [`contracts.md`](contracts.md), the departures from the proposal in [`deviations.md`](deviations.md), the deployment in [`configuration-contract.md`](configuration-contract.md). The first part of v0.1, the hackathon chain, is built on `feat/hackathon-chain`; this page builds on it and does not restate it.
 
-Part 2 is the rest of v0.1: campus sign-in for the AIT installation, the admin API, the mock VDR publisher with published status lists, the VC Lab publish step, the Portal's staff and student sides, the hard copy, and the end-to-end test that closes v0.1. All of it is ours under `responsibilities.md` section 2. The pilot's environment, users and data are out of this page's scope; the Portal's student side, the PDF template and the hard copy are what the pilot runs on.
+Part 2 is the rest of v0.1: campus sign-in for the AIT installation, the admin API, the mock VDR publisher with published status lists, the VC Lab publish step, the Portal's staff and student sides, the hard copy, and the end-to-end test that closes v0.1. All of it is Thas's under `responsibilities.md` section 2. The pilot's environment, users and data are out of this page's scope; the Portal's student side, the PDF template and the hard copy are what the pilot runs on.
 
 Milestones that bound it:
 
@@ -44,7 +44,7 @@ The AIT installation's students and staff sign in through the campus realm, whic
 19. As the Issuer owner, I want the hackathon rows' context URLs set to the deployed hosts by the same publish step, so that the deploy-time rewrite gap is closed.
 20. As the Issuer owner, I want the admin API in the Gateway and the Gateway's database access limited to what it reads and writes, so that it no longer connects as the superuser.
 21. As the Issuer owner, I want the Portal to store no credential and no token beyond the signed-in session, so that a Portal breach exposes no credential.
-22. As the Issuer owner, I want the Portal's Python PixelPass encoder proven against the reference decoder the Verify UI uses, so that a QR we print always scans.
+22. As the Issuer owner, I want the Portal's Python PixelPass encoder proven against the reference decoder the Verify UI uses, so that a QR the Portal prints always scans.
 23. As the Issuer owner, I want the largest transcript among the personas measured against the QR's capacity before the PDF is built around it, so that the second-highest risk in v0.1 is known early.
 24. As the Issuer owner, I want one smoke script to run the whole journey for every credential type in both installations, so that v0.1 is accepted by observation, not assertion.
 25. As a member of the infra team, I want the configuration contract updated in the same change as each new service, secret, mount or public path, so that the handover never lags the code.
@@ -55,14 +55,14 @@ The AIT installation's students and staff sign in through the campus realm, whic
 
 ### What already exists and is kept
 
-- The Gateway's `POST /issuances`, its checklist registry in `gateway/credential_types.py` and the `gateway.issuances` table (identifiers only). Part 2 adds columns and endpoints; it does not change the plugin's contract (section 2a).
+- The Gateway's `POST /issuances`, its checklist registry in `gateway/credential_types.py` (each type's Pydantic models of the Adapter's answers, so an answer that does not parse is a 502 `gateway_error`, and its checks) and the `gateway.issuances` table (identifiers only). Part 2 adds columns and endpoints; it does not change the plugin's contract (section 2a).
 - The scripted issuance `vc-stack/issue_and_verify.py`: a token from the realm's `smoke` client, an ES256 `did:jwk` proof, Certify's `/issuance/credential`. The Portal's hard copy makes the same call with the student's token and the Portal's key.
 - The `vdr` container (stock nginx, `vc-lab/contexts/` under `/contexts/`). It is replaced by the publisher below; its public read paths stay as they are.
 - `portal/certify_client.py`'s ledger search, status-list decode and revoke call. The revoke call stays in the Portal (section 3: revoke goes from the Portal to Certify's status API directly); the search moves behind the admin API.
 
 ### Campus sign-in (AIT installation)
 
-Decided 2026-10-28: the AIT installation's Authorization Server is the campus realm run by campus IT (`ait-dev` at `https://oauth-dev.ait-itserv.dpi.ait.ac.th/realms/ait-dev` for Dev, Keycloak over the AIT directory), as `contracts.md` section 1 already names campus IT as the provider. Certify trusts that one issuer directly (its single `issuer-uri` and `jwk-set-uri`); there is no brokering through a realm of ours and no user store of ours. Our realm `inji` stays the stand-in for local runs and CI, where the smoke's direct-access grant cannot run against directory accounts.
+Decided 2026-10-28: the AIT installation's Authorization Server is the campus realm run by campus IT (`ait-dev` at `https://oauth-dev.ait-itserv.dpi.ait.ac.th/realms/ait-dev` for Dev, Keycloak over the AIT directory), as `contracts.md` section 1 already names campus IT as the provider. Certify trusts that one issuer directly (its single `issuer-uri` and `jwk-set-uri`); there is no brokering through a realm of Thas's and no user store of Thas's. Thas's realm `inji` stays the stand-in for local runs and CI, where the smoke's direct-access grant cannot run against directory accounts.
 
 What the campus realm gives today, from the adapter team's collection and its discovery document: tokens signed RS256, `sub` an internal Keycloak id that consumers are asked not to store during the PoC, the AIT username (`st123456` form) in `preferred_username`, names and e-mail, a 5-minute access token and a 30-minute idle session; clients `demo-public` (PKCE) and `demo-rp` (client credentials); none of the Issuer's scopes or clients.
 
@@ -118,7 +118,7 @@ The `vdr` service becomes the mock publisher of `contracts.md` section 4 and the
 Behaviour:
 
 - `PUT {vdr}/{path}` with `Authorization: Bearer <publisher token>` writes the body to that path in a volume and answers 201 on create, 204 on replace. The accepted paths are exactly the four families of section 4: `/.well-known/did.json`, `/status/{listId}`, `/contexts/{name}/{version}.json`, `/templates/{credentialType}/{file}`. Anything else is 404; a missing or wrong token is 401; a body that is not JSON where JSON is required is 400.
-- `GET` on the same paths is served by nginx from the volume, publicly, with `Content-Type: application/json` (or `application/ld+json` for contexts, the type of the file for templates) and CORS open for `GET`, as verifiers in a browser need it. The `PUT` side is reachable only on the internal network: the public gateway forwards `GET` and `HEAD` and refuses other methods.
+- `GET` on the same paths is served by nginx from the volume, publicly, with `Content-Type: application/json` (or `application/ld+json` for contexts, the type of the file for templates) and CORS open for `GET`, as verifiers in a browser need it. The `PUT` side is reachable only on the internal network: the ingress in front of the Issuer (`certify-nginx`, which proxies `/contexts/` to `vdr`, and transcript-demo's `public-gateway`) forwards `GET` and `HEAD` and refuses other methods.
 - No personal data is accepted by construction: nothing on the Issuer publishes credentials or records.
 - The receiver keeps no state beyond the files; restarting it changes nothing. A `GET` of a path never published is 404.
 - `vc-lab/contexts/` stops being bind-mounted; the contexts reach the VDR through the publish step (`vc-lab/publish.py`), which this task introduces with contexts only and the VC Lab task extends. Until that step has run after a wipe, the contexts are absent, so `bootstrap.sh` runs it before its validation.
@@ -139,7 +139,7 @@ Certify keeps signing the Bitstring status list on its batch; the Gateway publis
 Behaviour:
 
 - A loop in the Gateway (started after startup, never blocking it) polls each status list Certify holds, every 10 seconds, and `PUT`s a list to the VDR when its signed body differs from the last one published. The list ids come from Certify's `status_list_credential` table through the Gateway's read access (the admin API's limited role gains `SELECT` on it; whichever of the two tasks lands second makes the grant). A failed `PUT` is retried on the next tick and logged.
-- The credential's `statusListCredential` is built by Certify from `mosip.certify.domain.url`, which also names the OpenID4VCI issuer. The task opens by reading Certify 0.14's `StatusListCredentialService` for a property that sets the status-list base independently. If one exists, it names `{vdr}/status/`. If not, the fallback keeps the URL Certify writes and has the public gateway serve `/v1/certify/credentials/status-list/{id}` from the VDR's published copy instead of from Certify, so verifiers still never reach Certify for status; `contracts.md` section 4's path becomes an alias in that case.
+- The credential's `statusListCredential` is built by Certify from `mosip.certify.domain.url`, which also names the OpenID4VCI issuer. The task opens by reading Certify 0.14's `StatusListCredentialService` for a property that sets the status-list base independently. If one exists, it names `{vdr}/status/`. If not, the fallback keeps the URL Certify writes and has the ingress serve `/v1/certify/credentials/status-list/{id}` from the VDR's published copy instead of from Certify, so verifiers still never reach Certify for status; `contracts.md` section 4's path becomes an alias in that case.
 - The smoke's `skipStatusChecks` goes: verification now includes the status check.
 
 Accepted when:
@@ -267,7 +267,7 @@ Browser sign-in itself (the Keycloak login page) is not automated in v0.1; the s
 - A Verify UI listing of the hackathon types, unless the owner decides it is wanted.
 - `did:web`: v0.1 keeps `did:key` (decided 2026-10-28).
 - The real VDR host and publisher (Jo), the real adapter (Jo and Boss), campus directory federation, deployment itself, a container registry choice.
-- Contract tests for the three external contracts, unless their ownership lands with us.
+- Contract tests for the three external contracts, unless their ownership lands with Thas.
 - A checklist file format or editor, a card rendering template, SD-JWT, selective disclosure.
 - Masking the student side's reasons, which is expected later.
 
@@ -281,7 +281,7 @@ Points the decisions left to this spec, settled here and open to change when the
 
 - **Student self-evaluation would change `contracts.md` section 3.** Section 3 makes evaluate staff-only and the hard-copy decision says the Portal does not evaluate before a hard copy. But the plugin path gives the wallet and the Portal only the error code (`checklist_failed`), never the checks, so the student side cannot show reasons without evaluating. Open as map ticket 15 (options: the student's token on evaluate for their own `sub`, a separate student endpoint keyed only by the token, a Portal service credential, or no reasons in v0.1; and whether to evaluate up front or after a refusal). Whatever is chosen, the gate stays at issuance and nothing is evaluated as a precondition.
 - **The `issuanceRef` join** adds one variable to the Gateway's 200 and one indexed mapping per installation. It changes no credential and no plugin code; it rests on the opening observation in the admin API task.
-- **Status-list URL**: either a Certify property or the public-gateway alias; the admin API task does not depend on which.
+- **Status-list URL**: either a Certify property or the ingress alias; the admin API task does not depend on which.
 - **`did:key` in v0.1** (decided 2026-10-28): `deviations.md` row 21 records it against the conformance profile's `did:web`.
 - **Staff tokens** (revised 2026-10-28 to need nothing beyond Keycloak's defaults on the campus realm): the role `registrar` in `realm_access.roles`, and the Portal's client as `azp`, in both installations; the hackathon organiser holds `registrar`.
 - **Which campus realm**: `ait` on the campus VM is NetBird-only over plain HTTP, which Certify on GCP and students' browsers cannot reach; `ait-dev` is public over HTTPS. Dev uses `ait-dev`; the pilot's realm is asked of campus IT.

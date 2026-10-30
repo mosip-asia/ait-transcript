@@ -37,13 +37,13 @@ sequenceDiagram
 
 ## Reissue gating
 
-Registrar can only start a new request cycle for a student if `certify_client.get_active_credential(registration_no)` returns `None` — no non-revoked VC on the ledger. This is a **registrar-initiated** one-step action (`create_request` + `approve_request` together, `POST /registrar/students/{id}/reissue`), not the student re-requesting — the requirement was phrased as something the registrar drives directly.
+Registrar can only start a new request cycle for a student if `create_request` ([portal/requests.py](../../portal/requests.py)) finds no non-revoked VC in `certify_client.list_credentials(registration_no)` — no non-revoked VC on the ledger. This is a **registrar-initiated** one-step action (`create_request` + `approve_request` together, `POST /registrar/students/{id}/reissue`), not the student re-requesting — the requirement was phrased as something the registrar drives directly.
 
 ## The VCDM 1.1 → 2.0 migration (the real fix)
 
 `credential_status_purpose = ARRAY['revocation']` was already set on the AIT Transcript credential config, and `mosip.certify.issuer.ledger-enabled=true` was already on — but no VC ever actually carried a `credentialStatus` claim, and `certify.status_list_credential`/`credential_status_transaction` were both empty. Confirmed by reading `inji-certify`'s actual source (`CertifyIssuanceServiceImpl.java`, `VCDM2Constants.java`), not just its config: Certify only calls `statusListCredentialService.addCredentialStatus(...)` when the credential request's `@context` contains `VCDM2Constants.URL = "https://www.w3.org/ns/credentials/v2"`. The AIT Transcript was VCDM 1.1 end-to-end (`https://www.w3.org/2018/credentials/v1`).
 
-Three changes, all in `vc-stack/certify_init.sql`:
+Three changes, all in the `credential_config` row in `installations/ait/certify_seed.sql`:
 
 | Change | Where | Detail |
 |---|---|---|

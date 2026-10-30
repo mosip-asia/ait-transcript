@@ -45,7 +45,7 @@ Whatever stack the wallet uses, it must:
 | 1 | **No usable OAuth client.** | The only client, `wallet-demo`, is confidential. Mimoto holds its key and authenticates for the wallet, so a wallet exchanging the code directly with Keycloak has no credentials. |
 | 2 | **Advertised token endpoint is not public.** | The discovery document gives `token_endpoint`, `jwks_uri` and `pushed_authorization_request_endpoint` as `http://keycloak.<host>:8080/...`. Keycloak builds these from the request Host; port 8080 is not exposed. |
 | 3 | **Issuer mismatch on one discovery path.** | `oauth-authorization-server` returns an issuer equal to the AS URL. `openid-configuration` still returns `http://keycloak:8080/realms/inji`, so a strict wallet that uses OIDC discovery rejects it. |
-| 4 | **Token audience.** | Certify is configured to accept tokens with audience `wallet-demo` (`MOSIP_CERTIFY_AUTHN_ALLOWED_AUDIENCES`, and an audience mapper on that client). A token from another client is expected to be rejected unless it carries that audience; not tested. |
+| 4 | **Token audience.** | Certify is configured to accept tokens with audience `wallet-demo` (`mosip.certify.authn.allowed-audiences` in `certify-installation.properties`, and an audience mapper on that client). A token from another client is expected to be rejected unless it carries that audience; not tested. |
 | 5 | **No nonce or offer.** | A wallet that insists on a nonce endpoint or starts from a credential offer cannot use this issuer. |
 | 6 | **Format support.** | See the wallet list above; this is on the wallet side. |
 

@@ -193,14 +193,14 @@ sequenceDiagram
   GH-->>Dev: Green or red
 ```
 
-1. Push your branch to GitHub (`mosip-asia/ait-transcript-demo`).
+1. Push your branch to GitHub (`mosip-asia/ait-transcript`).
 2. **Actions → Deploy → Run workflow**, choose the branch or tag.
 3. The workflow logs in to the VM as `deploy`, runs `deploy/remote-deploy.sh` (fetch that commit into `/opt/ait-transcript-demo`, copy the VM's `app.env` to `vc-stack/.env`, run `run-demo.sh`), then health-checks `/student/login` and Keycloak's `openid-configuration`. Green means both returned 200.
 4. Check the change on the [public URLs](#accessing-the-demo-on-gcp). Logs: Dozzle, or `docker logs <container>` over SSH.
 
 ## Accessing the demo locally
 
-Keycloak admin console: **`http://localhost:9080/admin/`** (admin / admin). Inji Web student login uses **`http://localhost:9080`** (no `/etc/hosts` required).
+Inji Web student login uses **`http://localhost:9080`** (no `/etc/hosts` required); the Keycloak admin console is at `/admin/` on that host.
 
 ### Local URLs
 
@@ -210,7 +210,7 @@ Keycloak admin console: **`http://localhost:9080/admin/`** (admin / admin). Inji
 | Registrar portal | http://localhost:4100/registrar/login |
 | Inji Web | http://localhost:4004 |
 | Inji Verify | http://localhost:4007 |
-| Keycloak admin | http://localhost:9080 (admin / admin) |
+| Keycloak admin | http://localhost:9080/admin/ (admin / admin) |
 
 ### Stakeholder walkthrough
 
@@ -241,31 +241,9 @@ After `./run-demo.sh` (no further terminal steps):
 
 ## Developing an Inji-based mobile wallet
 
-The GCP deployment issues the transcript to the Inji mobile wallet as well as to Inji Web. It works with Inji Wallet **v0.22.1**, confirmed end to end on a physical iPhone through TestFlight (iOS only; Android is untried). Developers building their own wallet on Inji Wallet need these three public hostnames and one app setting:
+The GCP deployment issues the transcript to the Inji mobile wallet as well as to Inji Web. It works with Inji Wallet **v0.22.1**, confirmed end to end on a physical iPhone through TestFlight (iOS only; Android is untried). The public hostnames, the one `MIMOTO_HOST` app setting, the issuer and credential values, the flow, what to watch for and the iOS build recipe are in [wiki/guides/wallet-developer-urls.md](./wiki/guides/wallet-developer-urls.md); why the phone must use the `api.` host and not `wallet.` is in [wiki/reference/inji-mobile-wallet.md](./wiki/reference/inji-mobile-wallet.md).
 
-| Need | Value |
-|---|---|
-| Wallet backend (Mimoto issuer list and token proxy, Certify metadata and credential endpoint) | `https://api.transcript-demo.ait-vc.dpi.ait.ac.th` |
-| Student login (Keycloak realm `inji`) | `https://keycloak.transcript-demo.ait-vc.dpi.ait.ac.th` |
-| Check a credential by QR in the browser | `https://verify.transcript-demo.ait-vc.dpi.ait.ac.th` |
-| App setting (`.env`) | `MIMOTO_HOST=https://api.transcript-demo.ait-vc.dpi.ait.ac.th` (no trailing slash, no `/v1/mimoto`) |
-
-| Wallet values | |
-|---|---|
-| Issuer / credential | `AITUniversity` / `ait-transcript` (scope `ait_transcript_vc_ldp`, format `ldp_vc`) |
-| OAuth client / redirect | `wallet-demo` / `io.mosip.residentapp.inji://oauthredirect` (register this URL scheme in the app) |
-| Test students | mock students in [data/students.json](./data/students.json); ask the maintainer for the test password |
-
-What a developer should know before starting:
-
-- **Use a physical iPhone.** Inji Wallet v0.22.1 does not run in the iOS Simulator. Building on current Xcode needs a few changes (iOS 15 minimum, two Podfile settings, an `expo-localization` patch) and, **for iOS 27, a `SceneDelegate`**: without it the app is killed at launch. **Start from [wallet/](./wallet/README.md):** `BUNDLE_ID=... TEAM_ID=... ./wallet/apply.sh ios <dir>` clones Inji Wallet v0.22.1 and applies all of these changes (the AIT hosts, signing, build fixes and `SceneDelegate`) from two small patches. The step-by-step recipe, with the code, is in [wiki/guides/wallet-developer-urls.md](./wiki/guides/wallet-developer-urls.md).
-- **Always use the `api.` host, not `wallet.`.** The phone gets its own issuer list and Certify metadata from `api.`; the same paths on `wallet.` return Docker-internal values that only Inji Web can use. Why: [wiki/reference/inji-mobile-wallet.md](./wiki/reference/inji-mobile-wallet.md).
-- **The login code goes to Mimoto, not Keycloak.** `wallet-demo` is a confidential client, so Inji Wallet posts the code to `.../v1/mimoto/get-token/AITUniversity` and Mimoto authenticates for it.
-- **Download then verify happens on the phone.** Credentials issued before 2026-10-15 carry an old context URL that a phone cannot load; use freshly issued ones (the registrar portal's reissue).
-- **Not enabled:** presenting a credential from the phone to Inji Verify (OpenID4VP). Verify by QR in the browser instead.
-- **Availability:** the VM runs Mon-Fri 08:30-18:30 Asia/Bangkok only.
-
-If the app only says the download failed, the request order in the platform logs shows where it stopped; see "Where a failed download stopped" in the guide above.
+**Start from [wallet/](./wallet/README.md):** `BUNDLE_ID=... TEAM_ID=... ./wallet/apply.sh ios <dir>` clones Inji Wallet v0.22.1 and applies the AIT hosts, signing, build fixes and `SceneDelegate` from two small patches. Use a physical iPhone: v0.22.1 does not run in the iOS Simulator.
 
 ### Wallets that are not Inji Wallet
 

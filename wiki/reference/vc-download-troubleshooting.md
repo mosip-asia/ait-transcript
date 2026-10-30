@@ -91,8 +91,8 @@ Certify's own app log (`docker logs vc-stack-certify-1`) shows **nothing** for t
 **Verify:**
 
 ```sh
-docker exec vc-stack-certify-1 env | grep -iE "issuer|authorization_url"
-# MOSIP_CERTIFY_AUTHN_ISSUER_URI and MOSIP_CERTIFY_AUTHORIZATION_URL should both be http://keycloak:8080/realms/inji
+docker exec vc-stack-certify-1 env | grep AUTH_SERVER_ISSUER
+# should be http://keycloak:8080/realms/inji; Certify's issuer-uri and authorization.url both read it
 ```
 
 Recreate `certify` (and `keycloak-server` if `.env` changed) after editing: `docker compose up -d certify keycloak-server`.
@@ -149,12 +149,12 @@ Certify's app log pinpoints it further: `org.json.JSONException: Expected a ',' 
 **Verify:**
 
 ```sh
-python3 data/generate_csv.py && python3 data/test_generate_csv.py && python3 data/test_ait_courses.py
+python3 gateway/tests/test_credential_types.py && python3 gateway/tests/test_issuances.py
 ```
 
-Then reproduce Certify's substitution locally against the regenerated CSV (swap in the real `vc_template` from `vc-stack/certify_init.sql`, base64-decoded) and confirm `json.loads()` succeeds on the rendered document — this is how the bug was originally isolated to line 32 without needing a live claim attempt for every iteration.
+Then reproduce Certify's substitution locally against the regenerated CSV (swap in the real `vc_template` from `installations/ait/certify_seed.sql`, base64-decoded) and confirm `json.loads()` succeeds on the rendered document — this is how the bug was originally isolated to line 32 without needing a live claim attempt for every iteration.
 
-**After a CSV fix, the running `certify` container must be restarted (not just have the bind-mounted file changed underneath it) if it already served requests since last start** — `MockCSVDataProviderPlugin` did not visibly pick up the on-disk change until `docker compose restart certify`, even though the file inside the container was already correct. If a CSV/template fix doesn't seem to take effect, restart `certify` before assuming the fix is wrong.
+**After a template fix, restart `certify`** (and `mimoto-service`, which caches Certify's metadata) before assuming the fix is wrong. The CSV needs no restart: the mock Adapter reads it on every request.
 
 ## #5: Deployed proxy config never took effect
 
