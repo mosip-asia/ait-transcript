@@ -74,4 +74,4 @@ After 1 to 3, test with one chosen wallet and fix what it reports. Tokens issued
 
 ## Why it is shaped like this
 
-Keycloak's issuer is pinned to the Docker-internal `http://keycloak:8080` because Mimoto's JWT `aud` and Certify's `issuer-uri` must equal the token's `iss`. Public hostnames therefore need rewritten views of the discovery documents; see [architecture/inji-mobile-wallet.md](../architecture/inji-mobile-wallet.md) for the details and the Inji-specific findings.
+Keycloak's issuer is pinned to the Docker-internal `http://keycloak:8080` because Mimoto's JWT `aud` and Certify's `issuer-uri` must equal the token's `iss`. Public hostnames therefore need rewritten views of the discovery documents; see [reference/inji-mobile-wallet.md](../reference/inji-mobile-wallet.md) for the details and the Inji-specific findings.

@@ -33,7 +33,7 @@ Source: [`responsibilities.md`](responsibilities.md). Rows 4, 8 and 10 above are
 
 ## Changes on 2026-10-20
 
-Source: [`responsibilities.md`](responsibilities.md) section 5 and the research note [`certify-preauth-flow.md`](../../research/certify-preauth-flow.md). Added after the team's acceptance; not yet put to the team.
+Source: [`responsibilities.md`](responsibilities.md) section 5 and the research note [`certify-preauth-flow.md`](../../reference/certify-preauth-flow.md). Added after the team's acceptance; not yet put to the team.
 
 | # | Proposal says | v0.1 does | Why | Revisit |
 |---|---|---|---|---|

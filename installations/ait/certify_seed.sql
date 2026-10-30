@@ -3,7 +3,7 @@
 -- a name that sorts after vc-stack/certify_init.sql, which creates the table.
 \c inji_certify postgres
 
--- AIT Transcript credential (PRD §7). did_url placeholder — bootstrap.sh did_refresh overwrites.
+-- AIT Transcript credential. did_url placeholder — bootstrap.sh did_refresh overwrites.
 INSERT INTO certify.credential_config (
     credential_config_key_id, config_id, status, vc_template, doctype, sd_jwt_vct, context,
     credential_type, credential_format, did_url, key_manager_app_id, key_manager_ref_id,

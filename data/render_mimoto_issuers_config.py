@@ -14,7 +14,7 @@ own issuer list or Certify's metadata as-is: both carry Docker-internal URLs
 (host.docker.internal, keycloak:8080) that Mimoto needs and Inji Web ignores,
 but a phone cannot resolve. Inji Web and Mimoto never go through the gateway
 for these two paths, so the gateway serves the phone its own copies and
-Mimoto's file is left alone (wiki/architecture/inji-mobile-wallet.md). Only an
+Mimoto's file is left alone (wiki/reference/inji-mobile-wallet.md). Only an
 installation that carries public-gateway-mobile.conf.template gets them; for any
 other the tracked files in vc-stack/config/ are left as they are.
 """

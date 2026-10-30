@@ -1,6 +1,6 @@
 # Issuer platform v0.1 — configuration contract to infra
 
-Status: draft of 2026-10-21, regrouped by deployment 2026-10-30, for the handover due 2026-11-20. Terms follow [`CONTEXT.md`](../../../CONTEXT.md). This is the deployment configuration of [`contracts.md`](contracts.md) section 6, written to the list in [`spec-hackathon-chain.md`](spec-hackathon-chain.md) → Configuration contract to infra. It describes both installations; their values are the directories [`installations/ait/`](../../../installations/ait/README.md) and [`installations/hackathon/`](../../../installations/hackathon/README.md), and everything else it names lives in `vc-stack/`. Any later change to this page or to either directory goes to the infra team before it is applied.
+Status: draft of 2026-10-21, regrouped by deployment 2026-10-30, for the handover due 2026-11-20. Terms follow [`CONTEXT.md`](../../../CONTEXT.md). This is the deployment configuration of [`contracts.md`](contracts.md) section 6. It describes both installations; their values are the directories [`installations/ait/`](../../../installations/ait/README.md) and [`installations/hackathon/`](../../../installations/hackathon/README.md), and everything else it names lives in `vc-stack/`. Any later change to this page or to either directory goes to the infra team before it is applied.
 
 Not yet handed to the infra team (record the date here when it happens, YYYY-MM-DD), with both `installations/<name>/` directories.
 

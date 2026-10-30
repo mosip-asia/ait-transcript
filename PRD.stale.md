@@ -1,10 +1,12 @@
 ---
-title: PRD — AIT Transcript VC Journey Demo
+title: PRD (stale) — AIT Transcript VC Journey Demo
 description: Product requirements for a local, Docker-only demo of AIT transcript Verifiable Credential issuance, wallet storage, and verification.
-status: draft
+status: stale
 ---
 
-# AIT Transcript VC Journey — Demo PRD
+# AIT Transcript VC Journey — Demo PRD (stale)
+
+> **Stale since 2026-10-31.** This is the requirements page of the original demo. It no longer describes the repo: the Gateway now refuses at issuance on each credential type's checklist, the stack issues the hackathon credentials too, and it deploys to GCP. What the Issuer must do is in [`responsibilities.md`](wiki/project/issuer-v0.1/responsibilities.md) and [`spec-part-2.md`](wiki/project/issuer-v0.1/spec-part-2.md).
 
 ## 1. Purpose
 

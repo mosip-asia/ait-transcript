@@ -77,4 +77,4 @@ A bare `"credentialStatus": ${credentialStatus}` (matching the unquoted-embed pa
 
 - [Local stack](../architecture/vc-stack.md) — network topology `demo-app` joined
 - [Transcript credential design](./transcript-credential.md) — the vc_template these changes live in
-- [VC download troubleshooting](../guides/vc-download-troubleshooting.md) — same "read the actual source/bytecode, don't guess from config" method used to find the VCDM2 requirement
+- [VC download troubleshooting](../reference/vc-download-troubleshooting.md) — same "read the actual source/bytecode, don't guess from config" method used to find the VCDM2 requirement

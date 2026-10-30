@@ -71,7 +71,7 @@ def test_public_snippet_swaps_only_authorization_servers() -> None:
         """sub_filter '"authorization_servers":["http://keycloak:8080/realms/inji"]' """
         """'"authorization_servers":["https://keycloak.demo.example/realms/inji"]';"""
     ) in snippet
-    # Variable proxy_pass must carry no URI part (wiki/guides/vc-download-troubleshooting.md #3).
+    # Variable proxy_pass must carry no URI part (wiki/reference/vc-download-troubleshooting.md #3).
     assert "proxy_pass http://$certify_nginx_upstream;" in snippet
 
 

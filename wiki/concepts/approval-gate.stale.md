@@ -1,5 +1,5 @@
 ---
-title: Approval Gate
+title: Approval Gate (stale)
 description: Why registrar approval is enforced in the demo app UI only, not at Certify/Keycloak.
 type: concept
 tags:
@@ -7,11 +7,13 @@ tags:
   - concept
   - approval
 ---
-# Approval Gate
+# Approval Gate (stale)
+
+> **Stale since 2026-10-31.** The demo app still shows the claim link only after approval, but the reasons below describe Certify's CSV data provider, which the Gateway replaced. The Gateway refuses at issuance on each credential type's checklist, not on approval ([Credential request](./credential-request.md)), and part 2 removes the request queue ([`spec-part-2.md`](../project/issuer-v0.1/spec-part-2.md)).
 
 ## The decision
 
-Registrar approval of a transcript VC request is enforced **only in the demo app's own UI/state machine** (SQLite `pending` → `approved`/`rejected`). It is **not** enforced at the Inji Certify / Keycloak layer. See [PRD.md §6.3](../../PRD.md) for the full rationale.
+Registrar approval of a transcript VC request is enforced **only in the demo app's own UI/state machine** (SQLite `pending` → `approved`/`rejected`). It is **not** enforced at the Inji Certify / Keycloak layer. See [PRD.stale.md §6.3](../../PRD.stale.md) for the full rationale.
 
 ## Why
 
@@ -29,6 +31,6 @@ If real enforcement is ever needed: on approval, write the student's row into `i
 
 ## Related
 
-- [PRD.md](../../PRD.md)
+- [PRD (stale)](../../PRD.stale.md)
 - [Transcript credential design](./transcript-credential.md)
 - `inji/wiki/guides/credential-lab-how-it-works.md` (Apply Job pattern this would mirror)

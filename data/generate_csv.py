@@ -1,6 +1,6 @@
 """Generate installations/ait/adapter/student_identity_data.csv from data/students.json.
 
-data/students.json is the single source of truth (see PRD.md §7-8, AGENTS.md).
+data/students.json is the single source of truth (see wiki/concepts/transcript-credential.md).
 Run: python3 data/generate_csv.py
 """
 
@@ -18,7 +18,7 @@ REPO_ROOT = Path(__file__).parent.parent
 STUDENTS_JSON = Path(__file__).parent / "students.json"
 OUT_CSV = REPO_ROOT / "installations" / "ait" / "adapter" / "student_identity_data.csv"
 
-# Locked claim list — PRD.md §7. Order here becomes the CSV column order and matches the
+# Locked claim list. Order here becomes the CSV column order and matches the
 # credentialSubject of the template in installations/ait/certify_seed.sql.
 CLAIM_COLUMNS = [
     "fullName",

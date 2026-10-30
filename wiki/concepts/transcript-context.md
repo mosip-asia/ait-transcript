@@ -13,7 +13,7 @@ tags:
 
 The transcript credential's JSON-LD context is versioned and served from the static mock VDR. Version 1 is `vc-lab/contexts/transcript/v1.json`. The `vdr` container (stock nginx) serves `vc-lab/contexts/` read-only under `/contexts/`, and the public gateway routes `/contexts/` to it, so the context is at `{gateway}/contexts/transcript/v1.json`.
 
-It replaces `vc-stack/config/academic-transcript-context.json`, which scoped every claim term to the credential type, so the issuer signature covered none of the claims ([signing coverage](../research/signing-coverage.md)). The fix is option 1a of the [hackathon chain spec](../project/issuer-v0.1/spec-hackathon-chain.md) ("Context fix"), and why both processors handle it is in [JSON literals in Certify and Verify](../research/certify-json-literal.md).
+It replaces `vc-stack/config/academic-transcript-context.json`, which scoped every claim term to the credential type, so the issuer signature covered none of the claims: a type-scoped term is dropped before canonicalisation, and nothing signs its value. Both processors (Titanium JSON-LD 1.6.0 in Certify, 1.3.2 in Verify) handle the `@json` literal below.
 
 ## The URL
 
@@ -25,7 +25,7 @@ It replaces `vc-stack/config/academic-transcript-context.json`, which scoped eve
 
 - **Every claim term sits at the top level of the context.** A top-level term survives the revert of a type-scoped context, so it is still defined at `credentialSubject` and its value reaches canonicalisation and the signature.
 - **No datatype on anything.** Every claim is an untyped string, dates included; the `xsd:date` typings of the old context are gone. Numbers are strings too, in the three credit totals and inside `courses` (`lec`, `lab`, `credits`, `gpa`, `cumGpa`), which `data/ait_courses.py` enforces.
-- **`courses` is the one exception: it is typed `@json`.** The whole course record is signed as one `rdf:JSON` literal (its JCS form), so a change to any grade, title or GPA inside it changes the literal and fails verification. The ten inner keys need no term definitions.
+- **`courses` is the one exception: it is typed `@json`.** The whole course record is signed as one `rdf:JSON` literal (its JCS form), so a change to any grade, title or GPA inside it changes the literal and fails verification. The ten inner keys need no term definitions. Keep the values conservative: ASCII keys, numbers with at most seven fraction digits, and no control characters. Both ends' JCS code differs from RFC 8785 at the edges, so an upgrade of one side's Titanium could change how exotic values serialise.
 - **No inner `id` and `type` mappings.** The old context redefined `id` and `type` inside its type-scoped block; with the terms lifted, they come from the VCDM 2.0 base context, which protects them.
 - **No presentation claims.** The pre-rendered HTML course table is gone from the credential; `courseList` stays, as the one-line-per-course summary a wallet card shows.
 - The vocabulary IRI stays the placeholder `https://ait.example/transcript#` until the context moves onto the real VDR host.
@@ -43,7 +43,7 @@ A JSON-LD 1.1 processor: Titanium (Certify and Inji Verify), jsonld.js and other
 
 ## How it is checked
 
-`vc-stack/smoke.sh` runs the Compose check of the research note's section 4: it asserts the JSON-LD library versions in the Certify and Verify images against the research note's table (failing on a mismatch), checks the gateway serves `vc-lab/contexts/transcript/v1.json` at the URL the issuer metadata names, issues one transcript, and has `vc-stack/issue_and_verify.py` verify it (`SUCCESS`) and three tampered copies (the holder id, `fullName`, one grade inside `courses`), each of which must fail with `ERR_SIGNATURE_VERIFICATION_FAILED`. It then fails on any `Cannot load context` or `Datatype … is not an absolute IRI nor @json` line in the Certify or Verify logs. This check has passed in CI (run 39539975939 at commit 506969a, 2026-10-21), so the behaviour above is observed.
+`vc-stack/smoke.sh` checks it: it asserts the JSON-LD library versions in the Certify and Verify images (and that neither carries jsonld-java), checks the gateway serves `vc-lab/contexts/transcript/v1.json` at the URL the issuer metadata names, issues one transcript, and has `vc-stack/issue_and_verify.py` verify it (`SUCCESS`) and three tampered copies (the holder id, `fullName`, one grade inside `courses`), each of which must fail with `ERR_SIGNATURE_VERIFICATION_FAILED`. It then fails on any `Cannot load context` or `Datatype … is not an absolute IRI nor @json` line in the Certify or Verify logs. This check has passed in CI (run 39539975939 at commit 506969a, 2026-10-21), so the behaviour above is observed.
 
 ## Related
 

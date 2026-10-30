@@ -59,7 +59,7 @@ The browser can't resolve `keycloak` (that's Docker-network-internal DNS), so th
 
 `keycloak-nginx.conf`'s catch-all `location /` only ran `sub_filter` on `application/json` bodies — the JSON well-known document got its `authorization_endpoint` rewritten to `localhost:9080` correctly, but HTML responses (the login page, required-actions pages) passed through completely unrewritten.
 
-**Fix ([vc-stack/keycloak-nginx.conf](../../vc-stack/keycloak-nginx.conf)):** split the JSON well-known route into its own `location` block (keeps the narrow, JSON-only `authorization_endpoint` rewrite), then add a broad `sub_filter 'http://keycloak:8080' 'http://localhost:9080';` with `sub_filter_types text/html;` to the catch-all. `token_endpoint` in the JSON path is deliberately **not** touched by the broad rule — Mimoto's JWT `aud` needs it to stay `keycloak:8080` (see #2).
+**Fix ([vc-stack/keycloak-nginx.conf.template](../../vc-stack/keycloak-nginx.conf.template)):** split the JSON well-known route into its own `location` block (keeps the narrow, JSON-only `authorization_endpoint` rewrite), then add a broad `sub_filter 'http://keycloak:8080' 'http://localhost:9080';` with `sub_filter_types text/html;` to the catch-all. `token_endpoint` in the JSON path is deliberately **not** touched by the broad rule — Mimoto's JWT `aud` needs it to stay `keycloak:8080` (see #2).
 
 **Verify:**
 
@@ -86,7 +86,7 @@ Certify's own app log (`docker logs vc-stack-certify-1`) shows **nothing** for t
 
 **Root cause:** `MOSIP_CERTIFY_AUTHN_ISSUER_URI` was templated from `KEYCLOAK_PUBLIC_BASE_URL` (`${KEYCLOAK_PUBLIC_BASE_URL:-http://localhost:9080}/realms/inji`), but the JWT's real `iss` claim is `http://keycloak:8080/realms/inji` (Keycloak's `--hostname-url`, same value `MOSIP_CERTIFY_AUTHORIZATION_URL` already correctly used). Neither `http://localhost:9080/realms/inji` nor the malformed `.env` value `http://keycloak:9080/realms/inji` (a hybrid of internal hostname + public port that matches neither Docker DNS nor the host) ever matched — every JWT failed issuer validation.
 
-**Fix (Certify's issuer URI, now `mosip.certify.authn.issuer-uri=${AUTH_SERVER_ISSUER}` in `installations/<name>/certify-installation.properties`):** the issuer URI used `${KEYCLOAK_DOCKER_AUTH_SERVER:-http://keycloak:8080}/realms/inji` — the same variable the authorization URL already used. Also fixed [vc-stack/.env](../../vc-stack/.env)'s `KEYCLOAK_PUBLIC_BASE_URL` from the malformed `http://keycloak:9080` to `http://localhost:9080` (it still feeds `--hostname-admin-url` for the admin console, which needs the real public URL).
+**Fix (Certify's issuer URI, now `mosip.certify.authn.issuer-uri=${AUTH_SERVER_ISSUER}` in `installations/<name>/certify-installation.properties`):** the issuer URI used `${KEYCLOAK_DOCKER_AUTH_SERVER:-http://keycloak:8080}/realms/inji` — the same variable the authorization URL already used. Also fixed `vc-stack/.env`'s `KEYCLOAK_PUBLIC_BASE_URL` from the malformed `http://keycloak:9080` to `http://localhost:9080` (it still feeds `--hostname-admin-url` for the admin console, which needs the real public URL).
 
 **Verify:**
 

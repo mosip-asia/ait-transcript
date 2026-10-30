@@ -71,7 +71,7 @@ sequenceDiagram
 - Certify's data-provider plugin posts the token's claims to the Gateway's `POST /issuances`; the Gateway requires `sub` and `scope`. A token with no `sub` makes the plugin answer `invalid_access_token`.
 - The Gateway picks the credential type from the first served scope inside `scope`. No match is `unknown_scope` (400).
 - The Gateway fetches the record from the adapter with a shared bearer token between the two services. The adapter trusts the Gateway entirely and sees no wallet and no user token.
-- The checklist (for example `on_roster`, `winner`) can refuse at issuance with `checklist_failed` (403). Registrar approval is not part of the token and is enforced in the demo app only; see [Approval gate](./approval-gate.md).
+- The checklist (for example `on_roster`, `winner`) can refuse at issuance with `checklist_failed` (403). Registrar approval is not part of the token: the demo app enforces it in its own UI only, by showing the claim link after approval.
 
 ## What this means for a real adapter
 

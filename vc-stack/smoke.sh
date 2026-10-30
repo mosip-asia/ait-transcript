@@ -46,8 +46,8 @@ auth_srv=$(echo "$issuer_json" | jq -r '.authorization_servers[0] // empty')
   || fail "Certify authorization_servers must be AUTH_SERVER_ISSUER, $AUTH_SERVER_ISSUER (got: ${auth_srv:-<empty>})"
 ok "Certify OID4VCI authorization_servers name the configured issuer $AUTH_SERVER_ISSUER"
 
-# The Compose check of wiki/research/certify-json-literal.md section 4 runs below: step 2 here, steps 3 to 5
-# after issuance, step 1 (library versions) printed for the record.
+# The context check of wiki/concepts/transcript-context.md ("How it is checked"): the contexts here, issuance and the
+# tampered copies below, then the log warnings and the JSON-LD library versions.
 check_contexts http://localhost:9098 "the public gateway"
 
 csv_file="$INSTALLATION_DIR/adapter/student_identity_data.csv"
@@ -200,7 +200,8 @@ context_warnings=$(grep -E 'Cannot load context|is not an absolute IRI nor @json
 [[ -z "$context_warnings" ]] || fail "JSON-LD context warnings in the certify or verify-service log: $context_warnings"
 ok "no context-loading or datatype warnings in the certify and verify-service logs"
 
-# Step 1: the JSON-LD libraries each image carries must be the ones the research note's section 4 expects.
+# The JSON-LD libraries each image carries: the versions @json was checked against, and no jsonld-java (JSON-LD 1.0,
+# which rejects "@type": "@json").
 jsonld_libs() {
   docker compose exec -T "$1" unzip -l "/home/inji/$2.jar" 2>/dev/null | tr -d '\r' \
     | grep -oE 'BOOT-INF/lib/(jsonld|titanium|rdf-urdna|ld-signatures)[^/]*\.jar$' \

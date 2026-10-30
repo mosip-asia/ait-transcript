@@ -1,6 +1,6 @@
 # Can the hard-copy pre-authorized flow and the REST plugin share one Certify?
 
-Research note, recorded 2026-10-20. Written against `mosip/inji-certify` tag `v0.14.0` (commit `e54539a`, released 2026-03-25; the repository now lives at `github.com/inji/inji-certify`), read from a shallow clone, with the same repository's next release `v1.0.0-alpha.1` (2026-07-31) and its `develop` branch read over raw GitHub for the three files that decide the answer. Nothing was built or run. `digital-credential-plugins` `v0.6.0` contains nothing about pre-authorized codes. Ticket: `.scratch/issuer-v0.1/issues/12`. Prior notes this builds on: [`certify-data-provider-plugin.md`](certify-data-provider-plugin.md) and the plugin contract in `contracts.md` section 2a (ticket 04).
+Research note, recorded 2026-10-20. Written against `mosip/inji-certify` tag `v0.14.0` (commit `e54539a`, released 2026-03-25; the repository now lives at `github.com/inji/inji-certify`), read from a shallow clone, with the same repository's next release `v1.0.0-alpha.1` (2026-07-31) and its `develop` branch read over raw GitHub for the three files that decide the answer. Nothing was built or run. `digital-credential-plugins` `v0.6.0` contains nothing about pre-authorized codes. Ticket: `.scratch/issuer-v0.1/issues/12`. It builds on the plugin contract in `contracts.md` section 2a (ticket 04).
 
 ## Short answer
 
@@ -84,4 +84,4 @@ Later releases: the tag list as of 2026-10-20 is `v0.14.0` then `v1.0.0-alpha.1`
 - GitHub API `repos/inji/inji-certify/tags` and `/releases` (2026-10-20): tags `v1.0.0-alpha.1`, `v0.14.0`, `v0.13.1`, `v0.13.0`, `v0.12.2`, …; releases `v1.0.0-alpha.1` 2026-07-31, `v0.14.0` 2026-03-25, `v0.13.1` 2025-12-05. `https://github.com/mosip/inji-certify/releases/tag/v0.15.0` and `v0.16.0` return 404.
 - docs.inji.io: `inji-certify/releases/version-0.14.0`, `inji-certify/releases/version-1.0.0-alpha.1`, `inji-certify/overview/features/vc-issuance-with-pre-authorised-code-and-credential-offer` (Limitations, Supported Issuance Modes), `inji-certify/releases` (index).
 - `mosip/digital-credential-plugins` tag `v0.6.0`: no file matches `pre-auth`, `preauth` or `tx_code`.
-- Project: `CONTEXT.md`, `wiki/project/issuer-v0.1/responsibilities.md` section 5, `wiki/research/certify-data-provider-plugin.md`, `.scratch/issuer-v0.1/issues/04-plugin-config-and-gateway-endpoint.md`, `.scratch/issuer-v0.1/issues/12-*.md`.
+- Project: `CONTEXT.md`, `wiki/project/issuer-v0.1/responsibilities.md` section 5, `.scratch/issuer-v0.1/issues/04-plugin-config-and-gateway-endpoint.md`, `.scratch/issuer-v0.1/issues/12-*.md`.

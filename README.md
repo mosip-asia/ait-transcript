@@ -144,7 +144,7 @@ A smoke test needs the stack up (see [Deploy locally](#deploy-locally)) with the
 - **Issuer-only** checks that Certify loaded the Gateway plugin and lists exactly the Installation's credential types with the Gateway's claims, that certify-nginx serves their contexts from the VDR, and that the Gateway answers every persona of `installations/<name>/smoke.json`: 200 for the eligible, 403 `checklist_failed` for the refused, 404 `no_record` for the unknown, and 502 `gateway_error` with the Adapter stopped. It issues no credential, because there is no Authorization Server.
 - **Full stack** runs the Gateway checks directly and through Certify, and adds Mimoto, Keycloak and Inji Web configuration checks, a bootstrap re-run, `issue_and_verify.py` (issue each type with the Keycloak `smoke` client, verify it, then verify tampered copies and expect `ERR_SIGNATURE_VERIFICATION_FAILED`), and `test_inji_web_vc_readiness.py --live`. It runs only against the stand-in Keycloak, not a campus realm.
 
-The browser OAuth login and the PDF download are still manual (PRD §9).
+The browser OAuth login and the PDF download are still manual.
 
 CI runs the host tests, then the full-stack smoke and the Issuer-only smoke once per Installation, each on a fresh runner (`.github/workflows/test.yml`).
 
@@ -259,7 +259,7 @@ The GCP deployment issues the transcript to the Inji mobile wallet as well as to
 What a developer should know before starting:
 
 - **Use a physical iPhone.** Inji Wallet v0.22.1 does not run in the iOS Simulator. Building on current Xcode needs a few changes (iOS 15 minimum, two Podfile settings, an `expo-localization` patch) and, **for iOS 27, a `SceneDelegate`**: without it the app is killed at launch. **Start from [wallet/](./wallet/README.md):** `BUNDLE_ID=... TEAM_ID=... ./wallet/apply.sh ios <dir>` clones Inji Wallet v0.22.1 and applies all of these changes (the AIT hosts, signing, build fixes and `SceneDelegate`) from two small patches. The step-by-step recipe, with the code, is in [wiki/guides/wallet-developer-urls.md](./wiki/guides/wallet-developer-urls.md).
-- **Always use the `api.` host, not `wallet.`.** The phone gets its own issuer list and Certify metadata from `api.`; the same paths on `wallet.` return Docker-internal values that only Inji Web can use. Why: [wiki/architecture/inji-mobile-wallet.md](./wiki/architecture/inji-mobile-wallet.md).
+- **Always use the `api.` host, not `wallet.`.** The phone gets its own issuer list and Certify metadata from `api.`; the same paths on `wallet.` return Docker-internal values that only Inji Web can use. Why: [wiki/reference/inji-mobile-wallet.md](./wiki/reference/inji-mobile-wallet.md).
 - **The login code goes to Mimoto, not Keycloak.** `wallet-demo` is a confidential client, so Inji Wallet posts the code to `.../v1/mimoto/get-token/AITUniversity` and Mimoto authenticates for it.
 - **Download then verify happens on the phone.** Credentials issued before 2026-10-15 carry an old context URL that a phone cannot load; use freshly issued ones (the registrar portal's reissue).
 - **Not enabled:** presenting a credential from the phone to Inji Verify (OpenID4VP). Verify by QR in the browser instead.
@@ -278,4 +278,4 @@ A generic OpenID4VCI wallet cannot connect to the platform yet: the only OAuth c
 - [wallet/README.md](./wallet/README.md) — the per-platform patches (`common/`, `ios/`) and one-command script that turn Inji Wallet v0.22.1 into the AIT-connected wallet
 - [wiki/guides/wallet-developer-urls.md](./wiki/guides/wallet-developer-urls.md) — URLs, flow and iOS build recipe for Inji-based wallets
 - [wiki/guides/other-openid4vci-wallets.md](./wiki/guides/other-openid4vci-wallets.md) — connecting a non-Inji OpenID4VCI wallet
-- [wiki/architecture/inji-mobile-wallet.md](./wiki/architecture/inji-mobile-wallet.md) — why the phone gets its own views of the issuer list and metadata
+- [wiki/reference/inji-mobile-wallet.md](./wiki/reference/inji-mobile-wallet.md) — why the phone gets its own views of the issuer list and metadata

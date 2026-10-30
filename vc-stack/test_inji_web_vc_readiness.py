@@ -6,7 +6,7 @@ Live checks (--live, stack must be up): Mimoto issuers/configuration APIs, that 
 serves none of Mimoto's config files, and that credentials/download is reachable via the Inji Web
 proxy (not blocked with 403).
 
-Full browser OAuth + PDF is still manual (PRD §9); this guards the misconfigurations that
+Full browser OAuth + PDF is still manual; this guards the misconfigurations that
 caused empty issuers, Keycloak not loading, and "session is not valid" on download.
 
 Checks the installation INSTALLATION names (default ait), as smoke.sh runs it.
