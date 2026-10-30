@@ -29,7 +29,7 @@ Two servers run the stack, each a Compose file that includes some of the four fo
 | Server | Compose file | Deployments | What it is |
 |---|---|---|---|
 | transcript-demo | `vc-stack/compose.yaml` | Issuer, Verify, Mock Adapter, Demo | The demo server: the whole stack, with the stand-in Keycloak, for showing the journey end to end. Host `*.transcript-demo.ait-vc.dpi.ait.ac.th` (the infra team's), which was the Dev environment before the split |
-| issuer-dev | `vc-stack/issuer-dev.yaml` | Issuer, Mock Adapter | The dev server, for integrating real components with the Issuer. It runs against infra's Keycloak (`AUTH_SERVER_*` set to it, [Authorization Server](#authorization-server)), and drops the Mock Adapter once infra's Adapter serves credential data: the include of `mock-adapter/` leaves `issuer-dev.yaml` and `GATEWAY_ADAPTER_URL` in `gateway.env` names infra's Adapter |
+| issuer-dev | `vc-stack/issuer-dev.yaml` | Issuer, Mock Adapter | The dev server, for integrating real components with the Issuer. It runs against infra's Keycloak (`AUTH_SERVER_*` set to it, [Authorization Server](#authorization-server)), and drops the Mock Adapter once infra's Adapter serves credential data: the include of `mock-adapter/` leaves `issuer-dev.yaml` and `GATEWAY_ADAPTER_URL` in `vc-stack/.env` names infra's Adapter |
 
 issuer-dev runs `docker compose --env-file vc-stack/.env -f vc-stack/issuer-dev.yaml up -d --build`; `./vc-stack/issuer-smoke.sh` checks it (Certify with the Gateway plugin, the issuer metadata, the contexts, every persona through the Gateway, and `gateway_error` with the Adapter down). It has no Authorization Server of its own, so it issues no credential; the full-stack `smoke.sh` does.
 
@@ -46,7 +46,7 @@ The Issuer is the deployment of Certify and what it needs to sign: Postgres, Cer
 **Needs from the other deployments:**
 
 - **The Authorization Server**: the five `AUTH_SERVER_*` settings ([Authorization Server](#authorization-server)). The stand-in is Keycloak in Demo; issuer-dev uses infra's Keycloak.
-- **The Adapter**: `GATEWAY_ADAPTER_URL` in the installation's `gateway.env`, `http://adapter:8000` for the Mock Adapter; infra's Adapter URL once it serves credential data. With no Adapter answer, the Issuer fails closed with `gateway_error`.
+- **The Adapter**: `GATEWAY_ADAPTER_URL`, set per environment in `vc-stack/.env`: infra's Adapter URL once it serves credential data. The installation's `gateway.env` defaults it to `http://adapter:8000`, the Mock Adapter. With no Adapter answer, the Issuer fails closed with `gateway_error`.
 - **The Gateway token** is the Issuer's own: `GATEWAY_AUTH_TOKEN` and the plugin's `mosip.certify.gateway.auth-token` are both in the Issuer, and no other deployment holds it.
 - **URLs**: `CERTIFY_PUBLIC_BASE_URL`, the hostname of the ingress in front of the Issuer, which also serves `/contexts/` from `vdr`. Nothing from Verify.
 
@@ -66,12 +66,13 @@ Where the images come from: CI publishes no image. The `Plugin` workflow publish
 
 ### Compose variables
 
-Compose substitutes these from `vc-stack/.env` (written by `bootstrap.sh` with the local defaults, copied from the VM's `app.env` by the `Deploy` workflow), in the Compose file and in the installation's `authorization-server.env`. The `KEYCLOAK_*` ones only build the stand-in values of the `AUTH_SERVER_*` settings; an environment that sets those five needs none of them.
+Compose substitutes these from `vc-stack/.env` (written by `bootstrap.sh` with the local defaults, copied from the VM's `app.env` by the `Deploy` workflow), in the Compose file and in the installation's `authorization-server.env` and `gateway.env`. The `KEYCLOAK_*` ones only build the stand-in values of the `AUTH_SERVER_*` settings; an environment that sets those five needs none of them.
 
 | Variable | Used by | Local default | A deployment sets |
 |---|---|---|---|
 | `INSTALLATION` | every per-installation mount and env file | none, required | `ait` or `hackathon` |
 | `CERTIFY_PUBLIC_BASE_URL` | `certify` (domain URL, allowed audience) | `http://certify-nginx` | Certify's public base URL: the ingress's hostname (ask 1, [URLs](#urls-in-credentials-or-fetched-by-verifiers)) |
+| `GATEWAY_ADAPTER_URL` | `gateway`, through `gateway.env` | `http://adapter:8000`, the Mock Adapter | infra's Adapter URL, once it serves credential data |
 | `AUTH_SERVER_ISSUER` | `certify`, through `authorization-server.env` | the stand-in realm's ([Authorization Server](#authorization-server)) | the environment's Authorization Server, when it is not the stand-in (ask 1) |
 | `AUTH_SERVER_JWKS_URL` | `certify`, through `authorization-server.env` | the stand-in realm's | the environment's Authorization Server, when it is not the stand-in |
 | `AUTH_SERVER_TOKEN_ENDPOINT` | through `authorization-server.env`; not read by Certify | the stand-in realm's | the environment's Authorization Server, when it is not the stand-in |
@@ -142,11 +143,11 @@ Runs as `root` with `host.docker.internal` mapped to the host (the local context
 | env | `download_hsm_client` | | shared | `false`; a PKCS#11 deployment changes it (ask 2) |
 | env | `mosip_certify_domain_url` | | environment | From `CERTIFY_PUBLIC_BASE_URL`: the credential issuer and the host of every status-list URL |
 | env_file | `installations/<name>/authorization-server.env` | | installation | The Authorization Server's five settings ([Authorization Server](#authorization-server)), each overridable in `vc-stack/.env` |
-| env | `AUTH_SERVER_ISSUER` | | installation | The properties' authorization URL and issuer URI |
-| env | `AUTH_SERVER_JWKS_URL` | | installation | The properties' JWK set URI |
-| env | `AUTH_SERVER_TOKEN_ENDPOINT` | | installation | Not read by Certify |
-| env | `AUTH_SERVER_PUBLIC_URL` | | installation | Not read by Certify |
-| env | `AUTH_SERVER_WALLET_CLIENT_ID` | | installation | The first of the properties' allowed audiences |
+| env | `AUTH_SERVER_ISSUER` | | environment | The properties' authorization URL and issuer URI |
+| env | `AUTH_SERVER_JWKS_URL` | | environment | The properties' JWK set URI |
+| env | `AUTH_SERVER_TOKEN_ENDPOINT` | | environment | Not read by Certify |
+| env | `AUTH_SERVER_PUBLIC_URL` | | environment | Not read by Certify |
+| env | `AUTH_SERVER_WALLET_CLIENT_ID` | | environment | The first of the properties' allowed audiences |
 | mount | `/home/mosip/config/certify-default.properties` | `vc-stack/config/certify-default.properties` | shared | Base settings: database, keystore (type, path, password), cache, status list |
 | mount | `/home/mosip/config/certify-installation.properties` | `installations/<name>/certify-installation.properties` | installation | The per-instance properties: the Authorization Server keys read from the settings (authorization URL, issuer URI, JWK set URI, and the allowed audiences: the wallet client, the in-network credential endpoints and `<CERTIFY_PUBLIC_BASE_URL>/v1/certify/issuance/credential`), the plugin's six keys including the Gateway token, the issuer display, `did-url`, the indexed mappings. `bootstrap.sh` rewrites its `did-url` line after a fresh keystore |
 | mount | `/home/inji/CERTIFY_PKCS12` | `vc-stack/data/CERTIFY_PKCS12` | shared | The keystore directory; Certify creates `local.p12`, the signing key, on first start (git-ignored; ask 2) |
@@ -172,7 +173,7 @@ No host port; reached as `http://gateway:8000`. Restarts until Postgres accepts 
 |---|---|---|---|---|
 | env_file | `installations/<name>/gateway.env` | | installation | The Gateway's four settings below |
 | env | `GATEWAY_ENABLED_SCOPES` | | installation | Space-separated scopes the Gateway serves |
-| env | `GATEWAY_ADAPTER_URL` | | installation | `http://adapter:8000`, the Mock Adapter; infra's Adapter URL when the Mock Adapter is dropped (`contracts.md` section 2b) |
+| env | `GATEWAY_ADAPTER_URL` | | environment | `http://adapter:8000`, the Mock Adapter, unless `vc-stack/.env` sets it; infra's Adapter URL when the Mock Adapter is dropped (`contracts.md` section 2b) |
 | env | `GATEWAY_AUTH_TOKEN` | | installation | Secret: equals the plugin's `mosip.certify.gateway.auth-token` |
 | env | `GATEWAY_DATABASE_URL` | | installation | Secret: Certify's Postgres, database `inji_certify` |
 
@@ -475,11 +476,11 @@ The Portal. Its image already contains `portal/` and `data/`; the source mounts 
 | env | `CERTIFY_PUBLIC_BASE_URL` | | environment | Read only by the issuer-list render |
 | env | `INSTALLATION` | | installation | Which directory the render writes into |
 | env_file | `installations/<name>/authorization-server.env` | | installation | The Authorization Server's five settings ([Authorization Server](#authorization-server)), each overridable in `vc-stack/.env` |
-| env | `AUTH_SERVER_ISSUER` | | installation | The issuer-list render (phone metadata) |
-| env | `AUTH_SERVER_JWKS_URL` | | installation | Not read |
-| env | `AUTH_SERVER_TOKEN_ENDPOINT` | | installation | The issuer-list render, and the smoke's token request (`vc-stack/issue_and_verify.py` runs in this image) |
-| env | `AUTH_SERVER_PUBLIC_URL` | | installation | The sign-out link, and the issuer-list render (phone metadata) |
-| env | `AUTH_SERVER_WALLET_CLIENT_ID` | | installation | The sign-out link, and the issuer-list render |
+| env | `AUTH_SERVER_ISSUER` | | environment | The issuer-list render (phone metadata) |
+| env | `AUTH_SERVER_JWKS_URL` | | environment | Not read |
+| env | `AUTH_SERVER_TOKEN_ENDPOINT` | | environment | The issuer-list render, and the smoke's token request (`vc-stack/issue_and_verify.py` runs in this image) |
+| env | `AUTH_SERVER_PUBLIC_URL` | | environment | The sign-out link, and the issuer-list render (phone metadata) |
+| env | `AUTH_SERVER_WALLET_CLIENT_ID` | | environment | The sign-out link, and the issuer-list render |
 | mount | `/demo/portal` | `portal` | shared | Development only |
 | mount | `/demo/data` | `data` | shared | Development only |
 | mount | `/demo/.demo-state` | `.demo-state` | shared | The request database; persistent |
@@ -571,7 +572,7 @@ Every host port of the Compose files, with the deployment that publishes it. Pub
 
 - Deployments: each folder has exactly one section, which names it in its `**Deploy:**` line and its `compose.yaml`, and has a `**Needs from the other deployments:**` line.
 - Services: a section's Services table names the services of its folder, and each Image cell equals the service's `image`, or `built from <Dockerfile path>`.
-- Per service: a section's rows (service, Kind, Name, Scope, and Source for a mount) equal its folder's: the name of every `environment` entry; every `env_file` path, and the variable names in it, read from every installation's `gateway.env` and `authorization-server.env` (each must name the same variables in every installation); every volume's container target and its source as a repository path, `<name>` for the installation; and every `ports` entry as written. Scope is derived from the Compose value or source: `installation` when it contains `${INSTALLATION}`, `environment` for any other `${…}`, else `shared`.
+- Per service: a section's rows (service, Kind, Name, Scope, and Source for a mount) equal its folder's: the name of every `environment` entry; every `env_file` path, and the variable names in it, read from every installation's `gateway.env` and `authorization-server.env` (each must name the same variables in every installation); every volume's container target and its source as a repository path, `<name>` for the installation; and every `ports` entry as written. Scope is derived from the Compose value or source: `installation` when it contains `${INSTALLATION}`, `environment` for any other `${…}`, else `shared`. A variable an env file sets is `environment` when its value there is a `${…}` that `vc-stack/.env` can override, else `installation`, and it must be the same in every installation.
 - Compose variables: a section's Variable column equals the `${…}` names its folder's Compose file and env files interpolate.
 - [Servers](#servers): each server's Compose file exists, and the folders it includes are the deployments its row names.
 - [Ingress allowlist](#ingress-allowlist): the host ports equal Compose's published host ports, each with its service and the deployment that defines it, and each Exposure is `public` or `internal`.

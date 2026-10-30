@@ -19,7 +19,7 @@ info:
     In v0.1 the adapter runs on the private network, reachable by the Gateway only, with no authentication.
 servers:
   - url: http://adapter:8000
-    description: Thas's mock in the Compose stack (`GATEWAY_ADAPTER_URL` in `installations/<name>/gateway.env`)
+    description: Thas's mock in the Compose stack (`GATEWAY_ADAPTER_URL`, defaulted in `installations/<name>/gateway.env`, set per environment in `vc-stack/.env`)
 paths:
   /students/{id}/degrees:
     get:
