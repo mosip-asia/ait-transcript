@@ -1,6 +1,17 @@
 name: vc-stack
 
 services:
+  # Mimoto's own Postgres; no host port.
+  demo-database:
+    image: 'postgres:15'
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+    volumes:
+      - ../mimoto_init.sql:/docker-entrypoint-initdb.d/mimoto_init.sql
+    networks:
+      - network
+
   mimoto-service:
     container_name: 'mimoto-service'
     image: injistack/mimoto:0.21.0
@@ -17,7 +28,7 @@ services:
       - SPRING_CLOUD_BOOTSTRAP_LOCATION=/home/mosip/mimoto-bootstrap.properties
       - oidc_p12_password=xy4gh6swa2i
       - WALLET_BINDING_PARTNER_API_KEY=dummywalletbindingpartnerapikey
-      - SPRING_DATASOURCE_URL=jdbc:postgresql://database:5432/inji_mimoto
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://demo-database:5432/inji_mimoto
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=postgres
       - GOOGLE_OAUTH_CLIENT_ID=clientId
@@ -41,7 +52,7 @@ services:
       - ../config/mimoto-trusted-verifiers.json:/home/mosip/mimoto-trusted-verifiers.json
       - ../certs/oidckeystore.p12:/home/mosip/certs/oidckeystore.p12
     depends_on:
-      - database
+      - demo-database
       - certify-nginx
     restart: unless-stopped
 

@@ -186,6 +186,15 @@ def test_both_installations_are_found() -> None:
     assert {"ait", "hackathon"} <= set(NAMES), NAMES
 
 
+def test_every_folder_but_demo_runs_alone() -> None:
+    """Every service a folder's services depend on is in that folder, its database included; demo/ needs the Issuer."""
+    for service, (folder, spec) in services().items():
+        if folder == "vc-stack/demo":
+            continue
+        for needed in spec.get("depends_on", []):
+            assert services()[needed][0] == folder, f"{service} in {folder} depends on {needed} in {services()[needed][0]}"
+
+
 def test_the_service_set_is_the_compose_file_with_its_images() -> None:
     found = services()
     rows = [row for table in tables(section("Service set and images")) for row in table]
