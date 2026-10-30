@@ -51,9 +51,16 @@ ok()   { printf "  %s✓%s %s\n" "$GRN" "$RST" "$*"; }
 warn() { printf "  %s!%s %s\n" "$YLW" "$RST" "$*"; }
 die()  { printf "  %sx%s %s\n" "$RED" "$RST" "$*" >&2; exit "${2:-1}"; }
 skip() { printf "  %s·%s %s\n" "$DIM" "$RST" "$*"; }
-# sed_in_place SCRIPT FILE: GNU sed takes -i with an optional attached suffix, BSD sed (macOS) requires one, so -i.bak is
-# the only in-place form both accept; the backup is removed at once (--wipe clears any a failed run left).
-sed_in_place() { sed -i.bak "$1" "$2" && rm -f "$2.bak"; }
+# sed_in_place SCRIPT FILE: writes the result back into FILE itself, never sed -i, which replaces it with a new file.
+# Docker Desktop's bind mount of a single WSL file keeps pointing at the replaced one, so a container restarted after
+# the edit (certify after the did:key refresh) fails to start.
+sed_in_place() {
+  local tmp rc
+  tmp=$(mktemp)
+  sed "$1" "$2" > "$tmp" && cat "$tmp" > "$2"; rc=$?
+  rm -f "$tmp"
+  return "$rc"
+}
 
 # JSON-LD context URL baked into every transcript VC (the AIT installation's; context_refresh.sql moves only that row). Local runs keep the Docker-only name (nothing but
 # containers reads it). Both go through the public gateway's /contexts/ route to the vdr container. A public
