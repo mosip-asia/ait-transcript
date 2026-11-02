@@ -64,8 +64,8 @@ def build_rows(students: list[dict]) -> list[dict]:
     can claim a distinct transcript VC per degree (see PLAN.md Phase 7).
 
     Values are written verbatim (the csv module quotes a newline or a `"`); `courses`
-    and `holds` are JSON text. Escaping for Certify's quoted template is the Gateway's
-    alone (gateway/credential_types.py)."""
+    and `holds` are JSON text. Escaping for Certify's quoted template is the Data-provider
+    plugin's (plugin/)."""
     rows = []
     for student in students:
         for degree in student["degrees"]:

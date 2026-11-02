@@ -47,7 +47,8 @@ The Issuer is the deployment of Certify and what it needs to sign: Postgres, Cer
 **Needs from the other deployments:**
 
 - **The Authorization Server**: the five `AUTH_SERVER_*` settings ([Authorization Server](#authorization-server)). The stand-in is Keycloak in Demo; issuer-dev uses infra's Keycloak.
-- **The Gateway** ([Gateway](#gateway)), by name on the shared Docker network: `http://gateway:8000`, the URL in the installation's Certify properties. With no Gateway answer, the Issuer fails closed with `gateway_error`.
+- **The Adapter**: `CERTIFY_ADAPTER_URL`, where the plugin lists and fetches records (`/records`); unset, the Mock Adapter, `http://adapter:8000` ([Mock Adapter](#mock-adapter)). With no Adapter answer, the Issuer fails with `adapter_error`.
+- **The Gateway** ([Gateway](#gateway)), by name on the shared Docker network: `http://gateway:8000`, the URL in the installation's Certify properties. The plugin asks its `POST /evaluations` before it fetches a record; with no Gateway answer, the Issuer fails closed with `gateway_error`.
 - **The Gateway token**: the plugin's `mosip.certify.gateway.auth-token` (in the Issuer) equals the Gateway's `GATEWAY_AUTH_TOKEN`, and no other deployment holds it.
 - **URLs**: `CERTIFY_PUBLIC_BASE_URL`, the hostname of the ingress in front of the Issuer, which also serves `/contexts/` (through `certify-nginx` to `vdr`). Nothing from Verify.
 
@@ -73,6 +74,7 @@ Compose substitutes these from `vc-stack/.env` (written by `bootstrap.sh` with t
 | `INSTALLATION` | every per-installation mount and env file | none, required | `ait` or `hackathon` |
 | `CERTIFY_PUBLIC_BASE_URL` | `certify` (domain URL, allowed audience) | `http://certify-nginx` | Certify's public base URL: the ingress's hostname (ask 1, [URLs](#urls-in-credentials-or-fetched-by-verifiers)) |
 | `CERTIFY_DID` | `certify` (the properties' `did-url`: a credential's issuer, `did.json`'s id) | the seed's placeholder `did:key`, until `bootstrap.sh --did-refresh` writes the live one | nothing: `--did-refresh` writes it after every `compose up` |
+| `CERTIFY_ADAPTER_URL` | `certify` (the properties' `mosip.certify.adapter.url`, where the plugin reads records), passed only when set | unset: the properties fall back to `http://adapter:8000`, the Mock Adapter | the Adapter the plugin reads records from, once it serves `/records` (issuer-dev sets it in `app.env`) |
 | `AUTH_SERVER_ISSUER` | `certify`, through `authorization-server.env` | the stand-in realm's ([Authorization Server](#authorization-server)) | the environment's Authorization Server, when it is not the stand-in (ask 1) |
 | `AUTH_SERVER_JWKS_URL` | `certify`, through `authorization-server.env` | the stand-in realm's | the environment's Authorization Server, when it is not the stand-in |
 | `AUTH_SERVER_TOKEN_ENDPOINT` | through `authorization-server.env`; not read by Certify | the stand-in realm's | the environment's Authorization Server, when it is not the stand-in |
@@ -100,7 +102,7 @@ The Issuer reads only the issuer, the JWKS URL and the wallet client; the other 
 
 ### Plugin jar
 
-- **One generic artifact**, `issuer-data-provider-plugin.jar`, built from `plugin/` against `io.inji.certify:certify-integration-api:0.14.0` (Java 21, every dependency `provided`, so the jar carries one class). The same jar serves every installation; the six keys of `contracts.md` section 2a in the installation's Certify properties configure it.
+- **One generic artifact**, `issuer-data-provider-plugin.jar`, built from `plugin/` against `io.inji.certify:certify-integration-api:0.14.0` (Java 21, every dependency `provided`, so the jar carries one class). The same jar serves every installation; nine keys in the installation's Certify properties configure it: the plugin selection and scan package, `mosip.certify.adapter.url` (from `CERTIFY_ADAPTER_URL`) and its two timeouts, and the Gateway's URL, token and two timeouts.
 - **How infra receives it** (proposed default): the `Plugin` workflow's artifact of the tagged commit. The workflow runs on every push to a branch other than `main`, on pull requests and by hand; for a tag, run it by hand on the tag (Actions → Plugin → Run workflow). The artifact is named `issuer-data-provider-plugin-<commit sha>` and holds the jar; it expires with the repository's artifact retention, so infra keeps its own copy. The same jar can be built from the commit: `docker run --rm -v "$PWD/plugin:/src" -w /src maven:3.9-eclipse-temurin-21 mvn -q package` writes `plugin/target/issuer-data-provider-plugin.jar`.
 - **Mount**: a single file, read-only, at `/home/inji/additional_jars/issuer-data-provider-plugin.jar`, never the directory, which would hide the four jars bundled in the image. Compose refuses to start Certify when the file is missing. A changed jar needs Certify recreated and its nginx restarted. (The spec wrote `/home/mosip/additional_jars/`; the image's path is `/home/inji/`.)
 
@@ -144,6 +146,7 @@ Runs as `root` with `host.docker.internal` mapped to the host (the local context
 | env | `download_hsm_client` | | shared | `false`; a PKCS#11 deployment changes it (ask 2) |
 | env | `mosip_certify_domain_url` | | environment | From `CERTIFY_PUBLIC_BASE_URL`: the credential issuer and the host of every status-list URL |
 | env | `CERTIFY_DID` | | environment | The properties' `did-url`, Certify's DID (a credential's issuer, `did.json`'s id): the live `did:key`, which `bootstrap.sh --did-refresh` writes to `vc-stack/.env`; the seed's placeholder until then |
+| env | `CERTIFY_ADAPTER_URL` | | environment | The properties' `mosip.certify.adapter.url`, passed only when `vc-stack/.env` sets it; unset, the properties fall back to the Mock Adapter |
 | env_file | `installations/<name>/authorization-server.env` | | installation | The Authorization Server's five settings ([Authorization Server](#authorization-server)), each overridable in `vc-stack/.env` |
 | env | `AUTH_SERVER_ISSUER` | | environment | The properties' authorization URL and issuer URI |
 | env | `AUTH_SERVER_JWKS_URL` | | environment | The properties' JWK set URI |
@@ -151,7 +154,7 @@ Runs as `root` with `host.docker.internal` mapped to the host (the local context
 | env | `AUTH_SERVER_PUBLIC_URL` | | environment | Not read by Certify |
 | env | `AUTH_SERVER_WALLET_CLIENT_ID` | | environment | The first of the properties' allowed audiences |
 | mount | `/home/mosip/config/certify-default.properties` | `vc-stack/config/certify-default.properties` | shared | Base settings: database, keystore (type, path, password), cache, status list |
-| mount | `/home/mosip/config/certify-installation.properties` | `installations/<name>/certify-installation.properties` | installation | The per-instance properties: the Authorization Server keys read from the settings (authorization URL, issuer URI, JWK set URI, and the allowed audiences: the wallet client, the in-network credential endpoints and `<CERTIFY_PUBLIC_BASE_URL>/v1/certify/issuance/credential`), the plugin's six keys including the Gateway token, the issuer display, `did-url`, the indexed mappings. `bootstrap.sh` rewrites its `did-url` line after a fresh keystore |
+| mount | `/home/mosip/config/certify-installation.properties` | `installations/<name>/certify-installation.properties` | installation | The per-instance properties: the Authorization Server keys read from the settings (authorization URL, issuer URI, JWK set URI, and the allowed audiences: the wallet client, the in-network credential endpoints and `<CERTIFY_PUBLIC_BASE_URL>/v1/certify/issuance/credential`), the plugin's nine keys including the Gateway token, the issuer display, `did-url`, the indexed mappings (the plugin's trace keys `tokenSub` and `tokenClientId` among them). `bootstrap.sh` rewrites its `did-url` line after a fresh keystore |
 | mount | `/home/inji/CERTIFY_PKCS12` | `vc-stack/data/CERTIFY_PKCS12` | shared | The keystore directory; Certify creates `local.p12`, the signing key, on first start (git-ignored; ask 2) |
 | mount | `/home/mosip/config/vp_request_config.json` | `vc-stack/config/vp_request_config.json` | shared | Stock Certify file |
 | mount | `/home/inji/additional_jars/issuer-data-provider-plugin.jar` | `vc-stack/plugins/issuer-data-provider-plugin.jar` | shared | The plugin jar, a single read-only file ([Plugin jar](#plugin-jar)) |

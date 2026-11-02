@@ -3,7 +3,8 @@
 #   docker compose --env-file vc-stack/.env -f vc-stack/issuer-dev.yaml up -d --build
 #   ./vc-stack/bootstrap.sh --did-refresh
 #   ./vc-stack/issuer-smoke.sh
-# It waits for Certify and the Gateway, then checks that Certify loads the Gateway plugin, signs as its live did:key
+# It waits for Certify and the Gateway, then checks that Certify loads the Data-provider plugin configured by its nine
+# keys (the Adapter's and the Gateway's), signs as its live did:key
 # (which --did-refresh writes), serves the issuer metadata
 # for the installation's credential types, that certify-nginx serves their contexts from the VDR, and that the Gateway
 # answers every persona of installations/$INSTALLATION/smoke.json on POST /issuances and POST /evaluations (200
