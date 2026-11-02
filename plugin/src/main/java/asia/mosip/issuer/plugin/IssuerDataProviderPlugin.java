@@ -41,7 +41,10 @@ public class IssuerDataProviderPlugin implements DataProviderPlugin {
     static final String NO_RECORD = "no_record";
     static final String ADAPTER_ERROR = "adapter_error";
     static final String GATEWAY_ERROR = "gateway_error";
-    /** Keys a record must not carry: Certify's own, and the trace keys the plugin adds. */
+    /**
+     * Keys a record must not carry: Certify's reserved keys, and the trace keys the plugin adds. adapter/openapi.yaml's
+     * {@code RecordKey} excludes the same set; adapter/test_adapter.py holds the two equal.
+     */
     static final Set<String> FORBIDDEN_KEYS = Set.of("id", "_holderId", "_issuer", "validFrom", "validUntil",
             "credentialStatus", "tokenSub", "tokenClientId");
 
@@ -200,7 +203,7 @@ public class IssuerDataProviderPlugin implements DataProviderPlugin {
                 JSONObject::new);
         for (String key : record.keySet()) {
             if (FORBIDDEN_KEYS.contains(key)) {
-                log.warn("the Adapter's record carries the reserved key {}", key);
+                log.warn("the Adapter's record carries the forbidden key {}", key);
                 throw new DataProviderExchangeException(ADAPTER_ERROR);
             }
         }

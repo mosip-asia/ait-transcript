@@ -24,6 +24,7 @@ from __future__ import annotations
 import csv
 import json
 import os
+import re
 import sys
 import tempfile
 from pathlib import Path
@@ -160,8 +161,9 @@ def test_mock_adapter_on_the_hackathon_roster() -> None:
 
 
 OPENAPI = Path(__file__).parent / "openapi.yaml"
+PLUGIN = Path(__file__).parent.parent / "plugin/src/main/java/asia/mosip/issuer/plugin/IssuerDataProviderPlugin.java"
 # Certify's reserved keys and the plugin's trace keys: no record may carry one (spec, "Shaping the data map").
-RESERVED_KEYS = {"id", "_holderId", "_issuer", "validFrom", "validUntil", "credentialStatus", "tokenSub", "tokenClientId"}
+FORBIDDEN_KEYS = {"id", "_holderId", "_issuer", "validFrom", "validUntil", "credentialStatus", "tokenSub", "tokenClientId"}
 
 
 def load_contract() -> dict:
@@ -245,7 +247,6 @@ def check_contract(get, sub: str, scope: str) -> None:
 def template_claims() -> dict[str, set[str]]:
     """Each Installation's Certify templates, by scope: the names they substitute, less the ones Certify sets."""
     import base64
-    import re
 
     found = {}
     for seed in (Path(__file__).parent.parent / "installations").glob("*/certify_seed.sql"):
@@ -271,7 +272,7 @@ def test_every_record_schema_lists_exactly_the_claims_its_template_substitutes()
         for name, prop in schema["properties"].items():
             want = "array" if name == "courses" else "string"
             assert resolve(prop, contract).get("type") == want, (scope, name)
-        assert set(resolve(schema["propertyNames"], contract)["not"]["enum"]) == RESERVED_KEYS, scope
+        assert set(resolve(schema["propertyNames"], contract)["not"]["enum"]) == FORBIDDEN_KEYS, scope
     assert "courseList" in claims["ait_transcript_vc_ldp"]  # served by the Adapter now, no longer derived
 
 
@@ -364,6 +365,21 @@ def test_every_field_a_gateway_model_requires_is_required_in_openapi_yaml() -> N
     assert drift({"type": "object", "required": ["x"]}, {"type": "object"}, {}, {}, "m") != []
     assert drift({"type": "string"}, {"$ref": "#/components/schemas/Term"}, {}, components, "m") != []
     assert drift({"type": "string", "minLength": 1}, {"type": "string"}, {}, {}, "m") != []
+
+
+def java_string_set(source: str, name: str) -> set[str]:
+    """The strings of the Java constant `name = Set.of("a", "b", ...)` in `source`."""
+    (body,) = re.findall(rf"\b{name}\s*=\s*Set\.of\(([^)]*)\)", source)
+    return set(re.findall(r'"([^"]*)"', body))
+
+
+def test_the_plugin_refuses_exactly_the_keys_openapi_yaml_forbids() -> None:
+    """The Data-provider plugin's FORBIDDEN_KEYS are the keys openapi.yaml's RecordKey excludes. The plugin's build
+    mounts only plugin/, so its JUnit tests cannot read the contract; this host test holds the two equal."""
+    contract = set(load_contract()["components"]["schemas"]["RecordKey"]["not"]["enum"])
+    assert java_string_set(PLUGIN.read_text(encoding="utf-8"), "FORBIDDEN_KEYS") == contract
+    # The parse reads a set split over lines, as the plugin writes it, so a key the plugin misses fails the test.
+    assert java_string_set('FORBIDDEN_KEYS = Set.of("id",\n        "_issuer")', "FORBIDDEN_KEYS") == {"id", "_issuer"}
 
 
 def getter(base: str):
