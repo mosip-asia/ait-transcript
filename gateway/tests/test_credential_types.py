@@ -13,8 +13,9 @@ import tempfile
 from pathlib import Path
 
 from pydantic import ValidationError
-from test_issuances import (ROSTER, FakeStore, assert_only_failing, claim_names, escaped,  # puts gateway/ and data/ on sys.path
-                            host_gateway, mock_adapter, post_with, stringify)
+from test_evaluations import (ROSTER, FakeStore, assert_only_failing,  # puts gateway/ and data/ on sys.path
+                              host_gateway, mock_adapter)
+from test_issuances import claim_names, escaped, post_with, stringify
 
 import credential_types as ct  # noqa: E402
 import generate_csv as gc  # noqa: E402

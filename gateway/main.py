@@ -1,10 +1,16 @@
-"""The Gateway: `POST /issuances` (contracts.md section 2a), the checklist runner behind Certify's data-provider plugin.
+"""The Gateway: the Approval gate's checklist runner, behind the shared bearer secret.
 
-The plugin posts the access-token claims; the Gateway picks the credential type by `scope`, fetches the record and
-the eligibility attributes from the data adapter (section 2b), parsing each answer into the type's model, evaluates
-the type's checks and answers the claim set (200), the checklist result (403), `no_record` (404) or `unknown_scope`
-(400). An answer that does not parse is 502 `gateway_error`; a check that raises is a bug, so a 500. A 200 writes
-one issuance row.
+`POST /evaluations` is the read-only Checklist evaluation: given `{sub, scope, recordId}` it picks the credential type
+by `scope`, reads `GET /records/{recordId}/eligibility?scope` from the adapter (adapter/openapi.yaml), parsing it into
+the type's eligibility model, evaluates every check in order and answers `{credentialType, checks}`: 200 when every
+check passes, else 403 with `error: checklist_failed`. It writes nothing.
+
+`POST /issuances` (contracts.md section 2a) is the old API, kept until the plugin calls /evaluations: the plugin posts
+the access-token claims, and the Gateway also fetches the record from the `/students` paths, answers the claim set
+and writes one issuance row per 200.
+
+Both answer `unknown_scope` (400), `no_record` (404), and 502 `gateway_error` for an adapter that is unreachable,
+answers another status or answers data that does not parse; a check that raises is a bug, so a 500.
 Startup touches only the database, never the adapter, so Certify, the adapter and the Gateway start in any order.
 
 Settings come from the environment, which Compose fills from installations/<name>/gateway.env.
@@ -17,14 +23,14 @@ import hmac
 import os
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
-from typing import TypeVar
+from typing import Annotated, TypeVar
 from urllib.parse import quote
 
 import httpx
 import psycopg
-from fastapi import Body, Depends, FastAPI, Header, HTTPException
+from fastapi import Body, Depends, FastAPI, Header, HTTPException, Request
 from fastapi.responses import JSONResponse
-from pydantic import TypeAdapter, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, StrictStr, TypeAdapter, ValidationError
 
 import credential_types as ct
 from store import Store
@@ -55,6 +61,24 @@ class Refusal(Exception):
     def __init__(self, status: int, error: str, **body) -> None:
         self.status = status
         self.body = {"error": error, **body}
+
+
+class Evaluation(BaseModel):
+    """The body of POST /evaluations, and nothing else: `sub` travels in the body to stay out of the access logs."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    sub: Annotated[StrictStr, Field(min_length=1)]
+    scope: Annotated[StrictStr, Field(min_length=1)]  # the token's scope claim: space-separated scopes
+    recordId: Annotated[StrictStr, Field(min_length=1)]
+
+
+async def evaluation_body(request: Request) -> Evaluation:
+    """The request parsed at the seam: anything but exactly the three non-empty strings is invalid_request."""
+    try:
+        return Evaluation.model_validate_json(await request.body())
+    except ValidationError as exc:
+        raise Refusal(400, "invalid_request") from exc
 
 
 def create_app(settings: Settings, adapter: httpx.Client | None = None, store: Store | None = None) -> FastAPI:
@@ -96,15 +120,30 @@ def create_app(settings: Settings, adapter: httpx.Client | None = None, store: S
         except ValidationError as exc:
             raise Refusal(502, "gateway_error") from exc
 
-    @app.post("/issuances", dependencies=[Depends(authenticate)])
-    def issuances(claims: dict = Body(...)) -> dict:
-        sub, scope = claims.get("sub"), claims.get("scope")
-        if not isinstance(sub, str) or not sub:
-            raise Refusal(400, "invalid_access_token")
+    def credential_type(scope: object) -> ct.CredentialType:
+        """The enabled type of the first space-separated scope that names one, else unknown_scope."""
         scopes = scope.split() if isinstance(scope, str) else []
         ctype = next((enabled[s] for s in scopes if s in enabled), None)
         if ctype is None:
             raise Refusal(400, "unknown_scope")
+        return ctype
+
+    @app.post("/evaluations", dependencies=[Depends(authenticate)])
+    def evaluations(request: Evaluation = Depends(evaluation_body)) -> dict:
+        ctype = credential_type(request.scope)
+        eligibility = fetch(f"/records/{quote(request.recordId, safe='')}/eligibility", ctype.eligibility,
+                            scope=request.scope)
+        result = {"credentialType": ctype.credential_type, "checks": ct.evaluate(ctype, eligibility)}
+        if not all(c["passed"] for c in result["checks"]):
+            raise Refusal(403, "checklist_failed", **result)
+        return result
+
+    @app.post("/issuances", dependencies=[Depends(authenticate)])
+    def issuances(claims: dict = Body(...)) -> dict:
+        sub = claims.get("sub")
+        if not isinstance(sub, str) or not sub:
+            raise Refusal(400, "invalid_access_token")
+        ctype = credential_type(claims.get("scope"))
 
         student = f"/students/{quote(sub, safe='')}"
         degrees = fetch(f"{student}/degrees", list[ct.Degree])

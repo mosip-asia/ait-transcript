@@ -53,6 +53,7 @@ jobs:
             adapter/test_adapter.py \
             sis-bridge/test_bridge.py \
             gateway/tests/test_credential_types.py \
+            gateway/tests/test_evaluations.py \
             gateway/tests/test_issuances.py
           do
             echo "::group::$t"
