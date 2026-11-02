@@ -1,12 +1,13 @@
-"""TEMPORARY SIS bridge (ticket 08 of the issuer reshape; ticket 11 deletes sis-bridge/ and vc-stack/sis-bridge/).
+"""TEMPORARY SIS bridge: sis-bridge/ and vc-stack/sis-bridge/ are deleted once the SIS Adapter serves /records itself
+(ticket 11).
 
 Serves the Adapter contract's record paths (adapter/openapi.yaml) in front of the SIS Adapter's current route,
-`GET /api/v1/credentials/transcript/{student_id}`, until the SIS Adapter serves `/records` itself. Every mapping rule
-is in sis_mapping.py. Its one setting is the SIS base URL (SIS_BASE_URL).
+`GET /api/v1/credentials/transcript/{student_id}`. Every mapping rule is in sis_mapping.py. Its one setting is the SIS
+base URL (SIS_BASE_URL).
 
 - `GET /records?sub&scope`: `[{ recordId: sub }]` when the SIS answers 200 for `sub`, a 404 when it answers 404.
 - `GET /records/{recordId}?scope`: the SIS's answer mapped to the transcript record, a 404 when the SIS answers 404.
-- No eligibility path: the Gateway keeps reading the CSV mock's (wayfinder ticket 09).
+- No eligibility path: the Gateway keeps reading the CSV mock's.
 - Anything else (no answer, another status, a body that is not the known transcript) is a 502, which the contract makes
   the plugin refuse with `adapter_error`; it is never a 404 ("no such student") and never an empty record.
 
@@ -32,7 +33,7 @@ def create_app(sis_base_url: str) -> FastAPI:
     app = FastAPI(title="Temporary SIS bridge")
 
     def ask(student_id: str) -> httpx.Response:
-        """The SIS's 200 for the student; its 404 is ours, and anything else is a 502."""
+        """The SIS's 200 for the student; its 404 passes through as the bridge's 404, and anything else is a 502."""
         try:
             answer = sis.get(SIS_ROUTE.format(quote(student_id, safe="")))
         except httpx.HTTPError:
