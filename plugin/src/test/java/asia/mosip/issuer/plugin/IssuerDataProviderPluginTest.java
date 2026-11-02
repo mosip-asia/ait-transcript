@@ -143,7 +143,6 @@ class IssuerDataProviderPluginTest {
                 {"fullName": "Somchai \\"Tom\\" Jaidée",
                  "programCommittee": "Prof. A (Chair)\\nDr. B",
                  "courses": [{"term": "2025/1", "courses": [{"no": "CS601", "grade": "A"}]}],
-                 "committee": {"chair": "Dr. A"},
                  "totalCredits": "48",
                  "credits": 48,
                  "conferred": true}"""));
@@ -171,7 +170,6 @@ class IssuerDataProviderPluginTest {
         // Objects and arrays reach the template as their JSON text (key order inside it is not significant).
         assertEquals(List.of(Map.of("term", "2025/1", "courses", List.of(Map.of("no", "CS601", "grade", "A")))),
                 new JSONArray((String) got.remove("courses")).toList());
-        assertEquals(Map.of("chair", "Dr. A"), new JSONObject((String) got.remove("committee")).toMap());
         assertEquals(expected, got);
     }
 
@@ -320,6 +318,23 @@ class IssuerDataProviderPluginTest {
     void aRecordCarryingAReservedOrTraceKeyIsAdapterError(String key) throws Exception {
         IssuerDataProviderPlugin plugin = plugin();
         adapterReplies.put(RECORD_PATH, Reply.of(200, new JSONObject(Map.of("fullName", "Somchai Jaidee", key, "x")).toString()));
+
+        assertEquals("adapter_error", refused(plugin, CLAIMS).getErrorCode());
+    }
+
+    /** `courses` is the one object or array the contract allows at the top of a record; every other claim is a string. */
+    @ParameterizedTest(name = "the record carries {0}")
+    @CsvSource(delimiter = '|', textBlock = """
+            an object                  | {"fullName": "Somchai Jaidee", "committee": {"chair": "Dr. A"}}
+            an array                   | {"fullName": "Somchai Jaidee", "tags": ["a", "b"]}
+            courses as a string        | {"fullName": "Somchai Jaidee", "courses": "CS601"}
+            courses as an object       | {"fullName": "Somchai Jaidee", "courses": {"term": "2025/1"}}
+            courses as null            | {"fullName": "Somchai Jaidee", "courses": null}
+            """)
+    void aRecordWithAnObjectOrArrayOtherThanCoursesOrCoursesThatIsNotAnArrayIsAdapterError(String name, String body)
+            throws Exception {
+        IssuerDataProviderPlugin plugin = plugin();
+        adapterReplies.put(RECORD_PATH, Reply.of(200, body));
 
         assertEquals("adapter_error", refused(plugin, CLAIMS).getErrorCode());
     }
