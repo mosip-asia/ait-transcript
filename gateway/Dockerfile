@@ -1,4 +1,4 @@
-# The Gateway: POST /issuances (contracts.md section 2a), the checklist runner behind Certify's data-provider plugin.
+# The Gateway: POST /evaluations and the old POST /issuances (contracts.md section 2a), the Approval gate's checklist runner.
 FROM python:3.12-slim-bookworm
 
 WORKDIR /gateway
