@@ -291,6 +291,20 @@ def test_the_contract_mode_passes_against_the_mock() -> None:
             check_contract(get, "hack-2026-0001", scope)
 
 
+def test_the_contract_mode_accepts_an_empty_list_for_an_unknown_sub() -> None:
+    """The contract (openapi.yaml, `GET /records`) says an empty list means the same as a 404."""
+    with tempfile.TemporaryDirectory() as td:
+        csv_path = Path(td) / "student_identity_data.csv"
+        gc.write_csv(gc.build_rows(gc.load_students()["students"]), csv_path)
+        mock = host_get(csv_path)
+
+        def get(path: str):
+            status, body = mock(path)
+            return (200, []) if path.startswith("/records?") and status == 404 else (status, body)
+
+        check_contract(get, "ait-2026-0001", "ait_transcript_vc_ldp")
+
+
 def test_the_contract_mode_fails_an_adapter_that_breaks_the_contract() -> None:
     """Each break, served by an otherwise correct Adapter (the mock), fails the contract mode."""
     with tempfile.TemporaryDirectory() as td:
