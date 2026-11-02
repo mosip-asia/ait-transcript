@@ -1,30 +1,128 @@
 openapi: 3.1.0
 info:
   title: Issuer data adapter
-  version: 0.1.0
+  version: 0.2.0
   description: |
-    The API the Gateway calls to read one student's record, contract 2b in
-    `wiki/project/issuer-v0.1/contracts.md`. Jo and Boss build the real adapter for the AIT installation.
-    Thas's mock in `adapter/main.py` serves it from a CSV for both installations.
+    The Adapter contract: the API any Adapter serves to the Issuer, read-only, generic across credential types.
+    Jo and Boss build the SIS Adapter for the AIT installation. Thas's mock in `adapter/main.py` serves it from a
+    CSV for both installations. `python3 adapter/test_adapter.py --contract URL SUB SCOPE` checks any Adapter
+    against this file.
 
-    The API is read-only. The Gateway makes three calls per credential request, in this order: `degrees`, then
-    `eligibility`, then `transcript`, the last only when every check passed. It fetches the record once per
-    request and stores none of it.
+    Three paths, each with the access token's `scope`:
 
-    The Gateway waits 3 seconds per call. A `404` means "no record" and the wallet gets `no_record`. Any other
-    status, a timeout, a refused connection, or a field the credential type reads that is missing, `null` or not
-    as this file types it, makes the Gateway refuse the credential with `gateway_error`. It ignores every field
-    the credential type does not read. It never issues an empty claim.
+    - `GET /records?sub&scope`: the student's records, `[ { recordId, ...summary } ]`. The Issuer takes the first
+      entry's `recordId` without choosing.
+    - `GET /records/{recordId}?scope`: the record, under the Issuer's claim names and in the shape the scope's
+      record schema gives. The Data-provider plugin escapes it for Certify, so serve the values as stored.
+    - `GET /records/{recordId}/eligibility?scope`: what the Checklist reads, in the scope's eligibility schema.
 
-    In v0.1 the adapter runs on the private network, reachable by the Gateway only, with no authentication.
+    A record schema per scope lists exactly the claims its Certify template substitutes. A record may carry more
+    fields; the Issuer passes them on unrendered. Every claim is a string, numbers included, except `courses`. A
+    record never carries one of Certify's reserved keys (`id`, `_holderId`, `_issuer`, `validFrom`, `validUntil`,
+    `credentialStatus`) or the plugin's trace keys (`tokenSub`, `tokenClientId`): `RecordKey` names them, and the
+    Issuer refuses a record holding one.
+
+    A `404` means no such student or record, and its body is not read. Any other status, a timeout, a refused
+    connection, or an answer that is not as this file types it makes the Issuer refuse the credential: the
+    Data-provider plugin with `adapter_error`, the Gateway with `gateway_error`. It never issues an empty claim.
+    The Adapter keeps `sub` out of its storage and access logs. There is no secret on either hop: the network is
+    the boundary.
+
+    The `/students` paths are the old contract (contracts.md section 2b), which the Gateway still calls: `degrees`,
+    then `eligibility`, then `transcript`. They go once every caller reads `/records`.
 servers:
   - url: http://adapter:8000
     description: Thas's mock in the Compose stack (`GATEWAY_ADAPTER_URL`, defaulted in `installations/<name>/gateway.env`, set per environment in `vc-stack/.env`)
 paths:
+  /records:
+    get:
+      operationId: listRecords
+      summary: The student's records
+      description: |
+        One entry per record the student holds, the first one used. An empty list means the same as `404`. The
+        summary fields are optional; the mock serves the degree columns where its CSV has them.
+      parameters:
+        - $ref: '#/components/parameters/Sub'
+        - $ref: '#/components/parameters/Scope'
+      responses:
+        '200':
+          description: The records, the first one used
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/RecordSummary'
+              examples:
+                transcript:
+                  value:
+                    - recordId: ait-2026-0001
+                      level: Masters
+                      degreeAwarded: Master of Engineering
+                      dateGraduation: '2026-08-31'
+                hackathon:
+                  value:
+                    - recordId: hack-2026-0001
+        '404':
+          $ref: '#/components/responses/NoRecord'
+  /records/{recordId}:
+    get:
+      operationId: getRecord
+      summary: The record, under the Issuer's claim names
+      parameters:
+        - $ref: '#/components/parameters/RecordId'
+        - $ref: '#/components/parameters/Scope'
+      responses:
+        '200':
+          description: The record in the scope's record schema (its `x-scope`)
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/TranscriptRecord'
+                  - $ref: '#/components/schemas/PassportRecord'
+                  - $ref: '#/components/schemas/AchievementRecord'
+        '404':
+          $ref: '#/components/responses/NoRecord'
+  /records/{recordId}/eligibility:
+    get:
+      operationId: getRecordEligibility
+      summary: The attributes the Checklist reads
+      description: |
+        The transcript's checks are `no_holds` (`holds` is empty), `conferred` (`conferralStatus` is `Conferred`)
+        and `zero_balance` (`balance` equals 0). The Developer Passport's is `on_roster` (`teamId` is not blank);
+        the Achievement's are `on_roster` and `winner`. A `null` in a field the credential type reads is
+        `gateway_error`.
+      parameters:
+        - $ref: '#/components/parameters/RecordId'
+        - $ref: '#/components/parameters/Scope'
+      responses:
+        '200':
+          description: The eligibility attributes in the scope's eligibility schema (its `x-scope`)
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/TranscriptEligibility'
+                  - $ref: '#/components/schemas/PassportEligibility'
+                  - $ref: '#/components/schemas/AchievementEligibility'
+              examples:
+                eligible:
+                  value:
+                    holds: []
+                    conferralStatus: Conferred
+                    balance: '0.00'
+                refused:
+                  value:
+                    holds: [Library fine]
+                    conferralStatus: Pending
+                    balance: '1250.00'
+        '404':
+          $ref: '#/components/responses/NoRecord'
   /students/{id}/degrees:
     get:
       operationId: listDegrees
-      summary: The student's degrees
+      summary: The student's degrees (old contract)
       description: |
         The Gateway takes the first entry and passes its `degreeId` unchanged to the next two calls. In v0.1
         return one entry per `id`, because how the Gateway would choose between two degrees is still open. An empty list
@@ -55,11 +153,10 @@ paths:
   /students/{id}/eligibility:
     get:
       operationId: getEligibility
-      summary: The attributes the Checklist reads
+      summary: The attributes the Checklist reads (old contract)
       description: |
-        The transcript's checks are `no_holds` (`holds` is empty), `conferred` (`conferralStatus` is `Conferred`)
-        and `zero_balance` (`balance` equals 0). The hackathon's are `on_roster` (`teamId` is not blank) and, for
-        the Achievement, `winner`. A `null` in a field the credential type reads is `gateway_error`.
+        The checks of `/records/{recordId}/eligibility`. A `null` in a field the credential type reads is
+        `gateway_error`.
       parameters:
         - $ref: '#/components/parameters/StudentId'
         - $ref: '#/components/parameters/DegreeId'
@@ -72,23 +169,12 @@ paths:
                 oneOf:
                   - $ref: '#/components/schemas/TranscriptEligibility'
                   - $ref: '#/components/schemas/RosterRow'
-              examples:
-                eligible:
-                  value:
-                    holds: []
-                    conferralStatus: Conferred
-                    balance: '0.00'
-                refused:
-                  value:
-                    holds: [Library fine]
-                    conferralStatus: Pending
-                    balance: '1250.00'
         '404':
           $ref: '#/components/responses/NoRecord'
   /students/{id}/transcript:
     get:
-      operationId: getRecord
-      summary: The degree's full record
+      operationId: getTranscript
+      summary: The degree's full record (old contract)
       description: |
         Every field the credential's template needs, by name. The Gateway escapes the values for Certify, so serve
         them as stored. Don't serve `courseList`. The Gateway derives it from `courses`.
@@ -102,23 +188,22 @@ paths:
             application/json:
               schema:
                 oneOf:
-                  - $ref: '#/components/schemas/TranscriptRecord'
+                  - $ref: '#/components/schemas/LegacyTranscriptRecord'
                   - $ref: '#/components/schemas/RosterRow'
         '404':
           $ref: '#/components/responses/NoRecord'
 components:
   parameters:
-    StudentId:
-      name: id
-      in: path
+    Sub:
+      name: sub
+      in: query
       required: true
       description: |
-        The access token's `sub`, URL-encoded, otherwise unchanged. The Gateway reads no other claim.
-        On the stand-in realms `sub` is the row id, one per degree (`ait-2026-0001`). Under campus sign-in it is
-        either the AIT username, lowercase, which is the registration number (`st123456`), or campus's
-        Keycloak user id, which the adapter resolves to the username. See "The student key under campus
-        sign-in" in contracts.md section 2b. Campus asks that its user id not be stored during the PoC, so keep
-        `id` out of storage and access logs.
+        The access token's `sub`, unchanged. On the stand-in realms it is the row id, one per degree
+        (`ait-2026-0001`). Under campus sign-in it is either the AIT username, lowercase, which is the registration
+        number (`st123456`), or campus's Keycloak user id, which the Adapter resolves to the username. See "The
+        student key under campus sign-in" in contracts.md section 2b. Campus asks that its user id not be stored
+        during the PoC, so keep `sub` out of storage and access logs.
       schema:
         type: string
         minLength: 1
@@ -126,7 +211,39 @@ components:
         standIn:
           value: ait-2026-0001
         campusUsername:
-          value: st125001
+          value: st123456
+    Scope:
+      name: scope
+      in: query
+      required: true
+      description: |
+        The access token's `scope` claim, unchanged: it names the credential type, among other space-separated
+        scopes. The answer follows the schema whose `x-scope` it names. The mock serves the same row for every
+        scope of its installation.
+      schema:
+        type: string
+        minLength: 1
+      examples:
+        transcript:
+          value: ait_transcript_vc_ldp
+        passport:
+          value: developer_passport_vc_ldp
+    RecordId:
+      name: recordId
+      in: path
+      required: true
+      description: A `recordId` from `GET /records`, passed back unchanged. One the Adapter does not hold is `404`.
+      schema:
+        type: string
+        minLength: 1
+    StudentId:
+      name: id
+      in: path
+      required: true
+      description: The access token's `sub` (old contract), as `Sub` describes it, URL-encoded.
+      schema:
+        type: string
+        minLength: 1
     DegreeId:
       name: degreeId
       in: query
@@ -137,16 +254,17 @@ components:
         minLength: 1
   responses:
     NoRecord:
-      description: No student for this `id`, or no such degree. The Gateway answers `no_record`.
+      description: |
+        No such student or record. The body is not read. The plugin answers `no_record`, and so does the Gateway.
   schemas:
-    Degree:
+    RecordSummary:
       type: object
-      required: [degreeId]
+      required: [recordId]
       properties:
-        degreeId:
+        recordId:
           type: string
           minLength: 1
-          description: The adapter chooses the format. The mock uses the row id.
+          description: The Adapter chooses the format. The mock uses the row id.
         level:
           type: string
           examples: [Masters, PhD]
@@ -155,8 +273,107 @@ components:
         dateGraduation:
           type: string
           format: date
+    RecordKey:
+      type: string
+      description: |
+        A key a record may carry: anything but Certify's reserved keys, which Certify sets itself, and the
+        Data-provider plugin's trace keys, which it adds to every record.
+      not:
+        enum: [id, _holderId, _issuer, validFrom, validUntil, credentialStatus, tokenSub, tokenClientId]
+    TranscriptRecord:
+      type: object
+      x-scope: ait_transcript_vc_ldp
+      description: |
+        The AIT transcript: the claims the ait-transcript template substitutes, every one required and none `null`.
+        Strings throughout, numbers included; only `courses` is structured. Which fields may leave the student
+        information system is OSA's decision; this list is the demo's. The mock also serves `level`.
+      propertyNames:
+        $ref: '#/components/schemas/RecordKey'
+      required:
+        - fullName
+        - dateOfBirth
+        - country
+        - registrationNo
+        - previousDegree
+        - yearAwarded
+        - dateAdmitted
+        - option
+        - degreeAwarded
+        - dateGraduation
+        - faculty
+        - academicProgram
+        - areaOfSpecialization
+        - notes
+        - issueDate
+        - courses
+        - courseList
+        - thesisTitle
+        - thesisGrade
+        - programCommittee
+        - courseworkCredits
+        - thesisCredits
+        - totalCredits
+        - thesisExamination
+      properties:
+        fullName: {type: string}
+        dateOfBirth: {type: string, format: date}
+        country: {type: string}
+        registrationNo: {type: string, examples: [st125001]}
+        previousDegree: {type: string}
+        yearAwarded: {type: string, examples: ['2023']}
+        dateAdmitted: {type: string, format: date}
+        option: {type: string, examples: [Thesis]}
+        degreeAwarded: {type: string}
+        dateGraduation: {type: string, format: date}
+        faculty: {type: string}
+        academicProgram: {type: string}
+        areaOfSpecialization: {type: string}
+        notes: {type: string, description: '`-` when there are none'}
+        issueDate: {type: string, format: date}
+        courses:
+          type: array
+          description: Terms in order, each with its courses in order.
+          items:
+            $ref: '#/components/schemas/Term'
+        courseList:
+          type: string
+          description: |
+            The wallet card's summary of `courses`, a plain string: one line per course, `title — grade`, the
+            title alone when there is no grade.
+        thesisTitle: {type: string}
+        thesisGrade: {type: string}
+        programCommittee: {type: string}
+        courseworkCredits: {type: string, examples: ['27.0']}
+        thesisCredits: {type: string}
+        totalCredits: {type: string}
+        thesisExamination: {type: string, examples: [Passed]}
+    PassportRecord:
+      type: object
+      x-scope: developer_passport_vc_ldp
+      description: The Developer Passport, the claims its template substitutes. The mock serves the whole roster row.
+      propertyNames:
+        $ref: '#/components/schemas/RecordKey'
+      required: [teamId, teamName, oidcClientId, authEndpoint, issuerEndpoint, verifierEndpoint]
+      properties:
+        teamId: {type: string}
+        teamName: {type: string}
+        oidcClientId: {type: string}
+        authEndpoint: {type: string}
+        issuerEndpoint: {type: string}
+        verifierEndpoint: {type: string}
+    AchievementRecord:
+      type: object
+      x-scope: achievement_certificate_vc_ldp
+      description: The Achievement, the claims its template substitutes. The mock serves the whole roster row.
+      propertyNames:
+        $ref: '#/components/schemas/RecordKey'
+      required: [teamId, award]
+      properties:
+        teamId: {type: string}
+        award: {type: string}
     TranscriptEligibility:
       type: object
+      x-scope: ait_transcript_vc_ldp
       required: [holds, conferralStatus, balance]
       properties:
         holds:
@@ -171,12 +388,64 @@ components:
           type: string
           pattern: '^-?[0-9]+(\.[0-9]+)?$'
           description: The amount owed as a decimal string, never a number. `"0.00"` when nothing is owed.
-    TranscriptRecord:
+    PassportEligibility:
+      type: object
+      x-scope: developer_passport_vc_ldp
+      description: |
+        `teamId` is empty for a participant without a team. The mock serves the whole roster row.
+      required: [teamId]
+      properties:
+        teamId: {type: string}
+    AchievementEligibility:
+      type: object
+      x-scope: achievement_certificate_vc_ldp
+      description: |
+        `teamId` as for the Developer Passport; `winner` is `true` for a member of a winning team, read
+        case-insensitively, and anything else is not. The mock serves the whole roster row.
+      required: [teamId, winner]
+      properties:
+        teamId: {type: string}
+        winner: {type: string}
+    Term:
+      type: object
+      required: [term, courses]
+      properties:
+        term: {type: string, examples: [August Semester 2024]}
+        courses:
+          type: array
+          items:
+            $ref: '#/components/schemas/Course'
+    Course:
+      type: object
+      required: ['no', title, credits, grade]
+      properties:
+        'no': {type: string, examples: [CS601]}
+        title: {type: string}
+        lab: {type: string, description: Lab hours}
+        lec: {type: string, description: Lecture hours}
+        credits: {type: string}
+        grade: {type: string}
+    Degree:
+      type: object
+      description: An entry of the old `degrees` path.
+      required: [degreeId]
+      properties:
+        degreeId:
+          type: string
+          minLength: 1
+          description: The adapter chooses the format. The mock uses the row id.
+        level:
+          type: string
+          examples: [Masters, PhD]
+        degreeAwarded:
+          type: string
+        dateGraduation:
+          type: string
+          format: date
+    LegacyTranscriptRecord:
       type: object
       description: |
-        The fields of the AIT transcript, every one required and none `null`. Strings throughout, numbers
-        included; only `courses` is structured. Which fields may leave the student information system is OSA's
-        decision; this list is the demo's.
+        The old `transcript` path's record: `TranscriptRecord` without `courseList`, which the Gateway derives.
       required:
         - fullName
         - dateOfBirth
@@ -233,29 +502,10 @@ components:
         level:
           type: string
           description: Served by the mock and ignored by the Gateway.
-    Term:
-      type: object
-      required: [term, courses]
-      properties:
-        term: {type: string, examples: [August Semester 2024]}
-        courses:
-          type: array
-          items:
-            $ref: '#/components/schemas/Course'
-    Course:
-      type: object
-      required: ['no', title, credits, grade]
-      properties:
-        'no': {type: string, examples: [CS601]}
-        title: {type: string}
-        lab: {type: string, description: Lab hours}
-        lec: {type: string, description: Lecture hours}
-        credits: {type: string}
-        grade: {type: string}
     RosterRow:
       type: object
       description: |
-        The hackathon installation's roster row, served by Thas's mock only, the whole row on both paths.
+        The hackathon installation's roster row on the old paths, served by Thas's mock only, the whole row on both.
         `teamId` is empty for a participant without a team; `winner` is `true` for a member of a winning team,
         read case-insensitively, and anything else is not. Each credential type reads only some columns: a
         `null` in a field the credential type reads is `gateway_error`, and other columns are ignored.

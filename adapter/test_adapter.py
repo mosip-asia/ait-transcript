@@ -174,6 +174,69 @@ def test_mock_adapter_on_the_hackathon_roster() -> None:
         assert get("/students/hack-2026-0003/eligibility")[1]["teamId"] == ""
 
 
+OPENAPI = Path(__file__).parent / "openapi.yaml"
+# Certify's reserved keys and the plugin's trace keys: no record may carry one (spec, "Shaping the data map").
+RESERVED_KEYS = {"id", "_holderId", "_issuer", "validFrom", "validUntil", "credentialStatus", "tokenSub", "tokenClientId"}
+
+
+def load_contract() -> dict:
+    import yaml
+
+    return yaml.safe_load(OPENAPI.read_text(encoding="utf-8"))
+
+
+def resolve(schema: dict, contract: dict) -> dict:
+    while "$ref" in schema:
+        schema = contract["components"]["schemas"][schema["$ref"].rsplit("/", 1)[1]]
+    return schema
+
+
+def answer_schemas(contract: dict, path: str) -> list[dict]:
+    """The schemas the contract gives for a 200 at `path`, resolved."""
+    schema = contract["paths"][path]["get"]["responses"]["200"]["content"]["application/json"]["schema"]
+    return [resolve(s, contract) for s in schema.get("oneOf", [schema])]
+
+
+def scope_schema(contract: dict, path: str, scope: str) -> dict:
+    """The schema the contract names at `path` for the token scope `scope` (space-separated scopes), by `x-scope`."""
+    (schema,) = [s for s in answer_schemas(contract, path) if s.get("x-scope") in scope.split()] or [None]
+    assert schema is not None, f"openapi.yaml names no schema for scope {scope} at {path}"
+    return schema
+
+
+def template_claims() -> dict[str, set[str]]:
+    """Each Installation's Certify templates, by scope: the names they substitute, less the ones Certify sets."""
+    import base64
+    import re
+
+    found = {}
+    for seed in (Path(__file__).parent.parent / "installations").glob("*/certify_seed.sql"):
+        for row in seed.read_text(encoding="utf-8").split("INSERT INTO certify.credential_config")[1:]:
+            (scope,) = re.findall(r"'([a-z_]+_vc_ldp)'", row)
+            (template,) = re.findall(r"'(ewo[A-Za-z0-9+/=]+)'", row)
+            names = set(re.findall(r"\$\{([^}]+)\}", base64.b64decode(template).decode()))
+            found[scope] = {n for n in names if n not in {"_issuer", "_holderId", "validFrom", "validUntil"}
+                            and not n.startswith("credentialStatus.")}
+    return found
+
+
+def test_every_record_schema_lists_exactly_the_claims_its_template_substitutes() -> None:
+    """GET /records/{recordId} names one record schema per scope, and each lists exactly the claims its Certify
+    template substitutes, every one required, a string but `courses`, and no reserved or trace key."""
+    contract = load_contract()
+    claims = template_claims()
+    assert set(claims) == {"ait_transcript_vc_ldp", "developer_passport_vc_ldp", "achievement_certificate_vc_ldp"}
+    assert {s.get("x-scope") for s in answer_schemas(contract, "/records/{recordId}")} == set(claims)
+    for scope, names in claims.items():
+        schema = scope_schema(contract, "/records/{recordId}", scope)
+        assert set(schema["required"]) == set(schema["properties"]) == names, (scope, names ^ set(schema["properties"]))
+        for name, prop in schema["properties"].items():
+            want = "array" if name == "courses" else "string"
+            assert resolve(prop, contract).get("type") == want, (scope, name)
+        assert set(resolve(schema["propertyNames"], contract)["not"]["enum"]) == RESERVED_KEYS, scope
+    assert "courseList" in claims["ait_transcript_vc_ldp"]  # served by the Adapter now, no longer derived
+
+
 def drift(schema: dict, spec: dict, defs: dict, components: dict, where: str) -> list[str]:
     """What a model's input schema `schema` asks of the wire that openapi.yaml's `spec` does not promise: a field the
     model requires and the YAML does not, or another type, enum, pattern or minLength, compared down through arrays
@@ -219,6 +282,11 @@ def test_every_field_a_gateway_model_requires_is_required_in_openapi_yaml() -> N
         pair for t in ct.REGISTRY.values() for pair in ((t.eligibility, "eligibility"), (t.record, "transcript"))]
     for model, path in checked:
         assert [] in drifts(model, path), drifts(model, path)
+    # On /records, each type's eligibility model against its own scope's eligibility schema.
+    for t in ct.REGISTRY.values():
+        schema = TypeAdapter(t.eligibility).json_schema(mode="validation")
+        answer = scope_schema(spec, "/records/{recordId}/eligibility", t.scope)
+        assert drift(schema, answer, schema.get("$defs", {}), components, f"{t.scope} eligibility") == []
     # The comparison can fail: a field the YAML does not require, a wire type it does not give, and a minimum length
     # it does not state.
     assert drift({"type": "object", "required": ["x"]}, {"type": "object"}, {}, {}, "m") != []
