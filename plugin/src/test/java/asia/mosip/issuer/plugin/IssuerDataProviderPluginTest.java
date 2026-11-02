@@ -167,7 +167,7 @@ class IssuerDataProviderPluginTest {
         expected.put("tokenSub", SUB);
         expected.put("tokenClientId", "smoke");
         Map<String, Object> got = new HashMap<>(data.toMap());
-        // Objects and arrays reach the template as their JSON text (key order inside it is not significant).
+        // courses reaches the template as its JSON text (key order inside it is not significant).
         assertEquals(List.of(Map.of("term", "2025/1", "courses", List.of(Map.of("no", "CS601", "grade", "A")))),
                 new JSONArray((String) got.remove("courses")).toList());
         assertEquals(expected, got);

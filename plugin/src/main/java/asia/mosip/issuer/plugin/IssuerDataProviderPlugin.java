@@ -41,6 +41,8 @@ public class IssuerDataProviderPlugin implements DataProviderPlugin {
     static final String NO_RECORD = "no_record";
     static final String ADAPTER_ERROR = "adapter_error";
     static final String GATEWAY_ERROR = "gateway_error";
+    /** The one claim a record serves as an array (the contract's terms of courses), which Certify's template takes unquoted. */
+    private static final String COURSES = "courses";
     /**
      * Keys a record must not carry: Certify's reserved keys, and the trace keys the plugin adds. adapter/openapi.yaml's
      * {@code RecordKey} excludes the same set; adapter/test_adapter.py holds the two equal.
@@ -230,16 +232,22 @@ public class IssuerDataProviderPlugin implements DataProviderPlugin {
 
     /**
      * The record for Certify's template, which substitutes every claim into a quoted slot ({@code "${fullName}"})
-     * except objects and arrays ({@code ${courses}}): every top-level string escaped, every object or array as its
-     * JSON text, any other value as it is.
+     * except {@code courses} ({@code ${courses}}): every top-level string escaped, {@code courses} as its JSON text,
+     * any other value as it is. The contract allows no other object or array at the top, and a {@code courses} that is
+     * not an array would reach the unquoted slot as something else, so both are {@code adapter_error}.
      */
-    private static JSONObject shape(JSONObject record) {
+    private static JSONObject shape(JSONObject record) throws DataProviderExchangeException {
         JSONObject data = new JSONObject();
         for (String key : record.keySet()) {
             Object value = record.get(key);
+            boolean structured = value instanceof JSONObject || value instanceof JSONArray;
+            if (COURSES.equals(key) ? !(value instanceof JSONArray) : structured) {
+                log.warn("the Adapter's record has a {} for {}", value.getClass().getSimpleName(), key);
+                throw new DataProviderExchangeException(ADAPTER_ERROR);
+            }
             if (value instanceof String text) {
                 data.put(key, escapeForQuotedTemplate(text));
-            } else if (value instanceof JSONObject || value instanceof JSONArray) {
+            } else if (structured) {
                 data.put(key, value.toString());
             } else {
                 data.put(key, value);
