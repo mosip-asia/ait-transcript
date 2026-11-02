@@ -126,9 +126,10 @@ The Issuer has no public service of its own. An ingress in front of it, `public-
 | env | `POSTGRES_PASSWORD` | | shared | Secret, committed test-only ([Fixtures to replace](#fixtures-to-replace)) |
 | mount | `/docker-entrypoint-initdb.d/certify_init.sql` | `vc-stack/certify_init.sql` | shared | Certify's schema; runs on an empty data directory only |
 | mount | `/docker-entrypoint-initdb.d/certify_seed.sql` | `installations/<name>/certify_seed.sql` | installation | The `credential_config` rows (templates, contexts, scopes); runs after `certify_init.sql`, on an empty data directory only |
+| mount | `/var/lib/postgresql/data` | `issuer-db` | shared | The named volume holding Certify's data, its signing key included (`certify.key_alias`, `certify.key_store`) |
 | port | `6440:5432` | | shared | Internal |
 
-Compose mounts no data volume, so Postgres keeps its data in the image's anonymous volume; a deployment gives it persistent storage. Verify and Demo bring their own Postgres.
+The data lives in the named volume `issuer-db` (Docker names it `vc-stack_issuer-db`), so a redeploy, or a `down` then `up`, keeps Certify's signing key and its `did:key`. `bootstrap.sh --wipe` and the Deploy workflow's `wipe` remove it and renew both, and a changed `certify_seed.sql` still needs that wipe, since the seed runs on an empty data directory only. The key is in two places that move together or not at all: this volume's `key_alias` and `key_store` rows, and the master-key keystore under `vc-stack/data/CERTIFY_PKCS12/`. Verify and Demo bring their own Postgres.
 
 ### `certify`
 

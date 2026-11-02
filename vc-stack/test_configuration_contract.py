@@ -94,7 +94,8 @@ def compose_rows() -> set[tuple[str, str, str, str, str, str]]:
                 source, target = volume["source"], volume["target"]
             else:  # short form; ${INSTALLATION:?message} carries a colon of its own
                 source, target = re.sub(r"\$\{INSTALLATION[^}]*\}", "${INSTALLATION}", volume).split(":")[:2]
-            rows.add((folder, service, "mount", target, repo_path(source, folder), scope_of(source)))
+            named = "/" not in source  # a named volume keeps its name; a bind mount's path is made a repository path
+            rows.add((folder, service, "mount", target, source if named else repo_path(source, folder), scope_of(source)))
         for port in spec.get("ports", []):
             rows.add((folder, service, "port", str(port), "", "shared"))
     return rows
