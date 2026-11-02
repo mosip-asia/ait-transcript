@@ -393,8 +393,22 @@ EOF
 }
 
 # -------- bring stack up --------
+# The no-Gateway form has no gateway service, so an `up` after a gate-on run leaves that run's gateway container
+# running, and the gate-off smoke fails on it. Removed by label, not by `up --remove-orphans`, which would also remove
+# every other container of the project that no stack file names (the temporary sis-bridge runs that way).
+drop_stale_gateway() {
+  docker compose config --services | grep -qx gateway && return 0
+  local project stale
+  project=$(docker compose config --format json | jq -r .name)
+  stale=$(docker ps -aq --filter "label=com.docker.compose.project=$project" --filter "label=com.docker.compose.service=gateway")
+  [[ -z "$stale" ]] && return 0
+  docker rm -f $stale >/dev/null
+  ok "removed the gateway container a gate-on run left behind"
+}
+
 compose_up() {
   step "docker compose up -d (mode=$MODE)"
+  drop_stale_gateway
   if [[ "$MODE" == "a" ]]; then
     docker compose up -d database certify certify-nginx mimoto-service inji-web verify-service verify-ui
     # mimoto-service brought up its config server, public-gateway, and vdr behind it; keycloak-* stay down.
