@@ -56,7 +56,7 @@ The Issuer is the deployment of Certify and what it needs to sign: Postgres, Cer
 
 | Compose service | Component | Image | Deployed |
 |---|---|---|---|
-| `database` | Postgres: Certify's database and the Gateway's `gateway` schema in it | `postgres:15` | yes |
+| `database` | Postgres: Certify's database | `postgres:15` | yes |
 | `certify` | Inji Certify, with the Gateway data-provider plugin | `injistack/inji-certify-with-plugins:0.14.0` | yes |
 | `certify-nginx` | Certify's nginx | `nginx:stable` | yes |
 | `vdr` | The static mock VDR (JSON-LD contexts) | `nginx:stable` | yes |
@@ -190,7 +190,7 @@ Every committed value below is a local or CI fixture; a deployment replaces each
 
 | Fixture | Where it is read | Committed value |
 |---|---|---|
-| Postgres superuser password | `database` (`POSTGRES_PASSWORD`), Certify (`spring.datasource.password` in `certify-default.properties`), the Gateway's URL | `postgres` |
+| Postgres superuser password | `database` (`POSTGRES_PASSWORD`), Certify (`spring.datasource.password` in `certify-default.properties`) | `postgres` |
 | Certify's keystore password | Certify, `mosip.kernel.keymanager.hsm.keystore-pass` in `certify-default.properties`, for the keystore in `vc-stack/data/CERTIFY_PKCS12/` (ask 2) | `local` |
 | Certify's Redis password | Certify, `spring.data.redis.password` in `certify-default.properties`, read only if the deployment scales Certify with Redis (`spring.cache.type=redis`); the committed `spring.cache.type=simple` never connects, and Compose runs no Redis | `redis` |
 | The `credential_config` seed | `installations/<name>/certify_seed.sql`: its context URLs are the local `http://host.docker.internal:9098/contexts/<type>/v1.json` and its issuer id a `did:key` that `bootstrap.sh` refreshes ([URLs](#urls-in-credentials-or-fetched-by-verifiers)) | Local URLs |
@@ -201,11 +201,10 @@ Every committed value below is a local or CI fixture; a deployment replaces each
 
 **Deploy:** `vc-stack/gateway/` (`vc-stack/gateway/compose.yaml`; the full stack and `vc-stack/issuer-dev.yaml` both include it beside the Issuer).
 
-The Gateway is the checklist runner behind Certify's data-provider plugin (`contracts.md` section 2a). It is its own folder so a stack without it leaves the folder out. Its `depends_on` still names the Issuer's `database`, so the folder does not run alone yet: it needs the Issuer's Postgres beside it, and the folder file alone fails on the missing service.
+The Gateway is the checklist runner behind Certify's data-provider plugin (`contracts.md` section 2a). It is its own folder so a stack without it leaves the folder out. Every service it depends on is in the folder, so it runs alone.
 
 **Needs from the other deployments:**
 
-- **The Issuer's Postgres**: `database` ([Issuer](#issuer)). The Gateway creates its `gateway` schema in Certify's database on start and restarts until it accepts connections.
 - **The Adapter**: `GATEWAY_ADAPTER_URL`, set per environment in `vc-stack/.env`: infra's Adapter URL once it serves credential data. The installation's `gateway.env` defaults it to `http://adapter:8000`, the Mock Adapter. With no Adapter answer, the Gateway answers `502 gateway_error`.
 - **The Gateway token** is shared with the Issuer: `GATEWAY_AUTH_TOKEN` equals the plugin's `mosip.certify.gateway.auth-token`, which Certify holds. Nothing else holds it.
 - **The Authorization Server and URLs**: neither.
@@ -227,22 +226,20 @@ Compose substitutes these from `vc-stack/.env`, in the Compose file and in the i
 
 ### `gateway`
 
-No host port; reached as `http://gateway:8000`. Restarts until Postgres accepts connections, then creates its `gateway` schema in Certify's database.
+No host port; reached as `http://gateway:8000`. Its startup touches nothing external.
 
 | Kind | Name | Source | Scope | Notes |
 |---|---|---|---|---|
-| env_file | `installations/<name>/gateway.env` | | installation | The Gateway's four settings below |
+| env_file | `installations/<name>/gateway.env` | | installation | The Gateway's three settings below |
 | env | `GATEWAY_ENABLED_SCOPES` | | installation | Space-separated scopes the Gateway serves |
 | env | `GATEWAY_ADAPTER_URL` | | environment | `http://adapter:8000`, the Mock Adapter, unless `vc-stack/.env` sets it; infra's Adapter URL when the Mock Adapter is dropped (`contracts.md` section 2b) |
 | env | `GATEWAY_AUTH_TOKEN` | | installation | Secret: equals the plugin's `mosip.certify.gateway.auth-token` |
-| env | `GATEWAY_DATABASE_URL` | | installation | Secret: Certify's Postgres, database `inji_certify` |
 
 ### Fixtures to replace
 
 | Fixture | Where it is read | Committed value |
 |---|---|---|
 | The Gateway's shared bearer token | The Gateway, `GATEWAY_AUTH_TOKEN` in `gateway.env`; Certify's plugin, `mosip.certify.gateway.auth-token` in `certify-installation.properties`. Both must be equal; one per installation | `dev-only-<name>-gateway-token` |
-| The Gateway's database URL | The Gateway, `GATEWAY_DATABASE_URL` in `gateway.env`, for its `gateway` schema in Certify's Postgres | The `postgres` superuser; a dedicated role limited to the `gateway` schema is recorded debt |
 
 ## Verify
 
@@ -597,7 +594,7 @@ Every host port of the Compose files, with the deployment that publishes it. Pub
 
 ## Start order and readiness
 
-1. Postgres first, one per deployment that needs one (`database`, `verify-database`, `demo-database`). Their init scripts and the installation's seed run on an empty data directory only, so a changed seed needs a fresh database. Certify and the Gateway need the Issuer's; the Gateway restarts until it connects.
+1. Postgres first, one per deployment that needs one (`database`, `verify-database`, `demo-database`). Their init scripts and the installation's seed run on an empty data directory only, so a changed seed needs a fresh database. Certify needs the Issuer's.
 2. Keycloak (`keycloak-server`, then its nginx, in Demo) before Certify validates tokens: Certify fetches the server's keys from `AUTH_SERVER_JWKS_URL`. On issuer-dev, infra's Keycloak is already up.
 3. Certify, then `certify-nginx`; the adapter and the Gateway in any order (neither the Gateway nor the plugin calls anything at startup); `vdr` before `public-gateway`. Demo starts after the Issuer and Verify: `public-gateway` depends on `certify-nginx`, `verify-service` and `vdr`, and Mimoto on `certify-nginx` and its config server, `public-gateway`, which starts first because it resolves every upstream per request (step 4).
 4. `certify-nginx`, `keycloak` and `public-gateway` name their upstreams through variables with `resolver 127.0.0.11 valid=10s`, so they re-resolve per request (cached ten seconds) and follow a recreated upstream without a restart. `127.0.0.11` is Docker's embedded DNS and exists only under Docker; elsewhere that line names the platform's resolver. What does not re-resolve is restarted by `bootstrap.sh`: `verify-ui`'s stock proxy to `verify-service`, and the harness's Mimoto (it loads Certify's metadata at start) and Inji Web (`vc-stack/nginx.conf` names `mimoto-service` directly). In Mode B, its default and the Keycloak mode this chain runs, it restarts `keycloak`, `certify-nginx`, `mimoto-service`, `inji-web`, `public-gateway` and `verify-ui` after every bring-up; Mode A (`--mode=a`, the eSignet mock) restarts only `mimoto-service`, `inji-web` and `verify-ui`. A deployment without `bootstrap.sh` restarts `verify-ui` after recreating `verify-service`.
@@ -614,6 +611,6 @@ Every host port of the Compose files, with the deployment that publishes it. Pub
 - Compose variables: a section's Variable column equals the `${…}` names its folder's Compose file and env files interpolate.
 - [Servers](#servers): each server's Compose file exists, and the folders it includes are the deployments its row names.
 - [Ingress allowlist](#ingress-allowlist): the host ports equal Compose's published host ports, each with its service and the deployment that defines it, and each Exposure is `public` or `internal`.
-- Mimoto's config server: both config-server URIs of `mimoto-bootstrap.properties` name a Demo service that mounts the configuration, and the Issuer mounts none of Mimoto's files. No folder but Demo depends on a service outside its own folder, except the Gateway, which names the Issuer's `database` only.
+- Mimoto's config server: both config-server URIs of `mimoto-bootstrap.properties` name a Demo service that mounts the configuration, and the Issuer mounts none of Mimoto's files. No folder but Demo depends on a service outside its own folder.
 
 It does not check values (environment values, Compose defaults, "A deployment sets", the Notes column), command flags such as Keycloak's, mount options, the allowlist's paths or whether a port's exposure is right, any URL (the URL tables, the context URLs, the nginx routes, [Ingress the Issuer needs](#ingress-the-issuer-needs)), the Fixtures to replace tables, the [Per-installation settings](#per-installation-settings), or the start order and scaling text. Last run 2026-11-02: pass. The fixtures, URLs and per-installation settings were checked by hand against `installations/ait/`, `installations/hackathon/` and `vc-stack/config/` on 2026-10-21, and the Issuer's, Demo's and Servers' text against the folder files, `public-gateway-nginx.conf`, `certify-nginx.conf` and `issuer-dev.yaml` on 2026-10-30.

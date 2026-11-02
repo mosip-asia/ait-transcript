@@ -6,8 +6,9 @@
 # It waits for Certify and the Gateway, then checks that Certify loads the Data-provider plugin configured by its nine
 # keys (the Adapter's and the Gateway's), signs as its live did:key
 # (which --did-refresh writes), serves the issuer metadata
-# for the installation's credential types, that certify-nginx serves their contexts from the VDR, and that the Gateway
-# answers every persona of installations/$INSTALLATION/smoke.json on POST /issuances and POST /evaluations (200
+# for the installation's credential types with the claims of the Adapter contract's record schemas, that certify-nginx
+# serves their contexts from the VDR, and that the Gateway
+# answers every persona of installations/$INSTALLATION/smoke.json on POST /evaluations (200
 # eligible, 403 checklist_failed refused, 404 no_record unknown) and 502 gateway_error with the Adapter down. There is no Authorization Server, so no credential
 # is issued: the full-stack smoke.sh does that. The contexts are checked by path, whatever host the seed names; before
 # Certify can sign on issuer-dev, bootstrap.sh --did-refresh moves the AIT row to CERTIFY_PUBLIC_BASE_URL.

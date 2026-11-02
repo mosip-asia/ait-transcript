@@ -1,19 +1,18 @@
 """Tests for the Gateway's POST /evaluations, the read-only Checklist evaluation, with the mock adapter beside it.
 
 Run: python3 gateway/tests/test_evaluations.py                         on the host, no Docker: the Gateway and the
-                                                                       mock adapter in-process, the issuance store
-                                                                       faked; every installation's personas on its CSV
-                                                                       (generated for ait, the committed roster for
-                                                                       hackathon)
+                                                                       mock adapter in-process; every installation's
+                                                                       personas on its CSV (generated for ait, the
+                                                                       committed roster for hackathon)
      python3 gateway/tests/test_evaluations.py URL FIXTURES            against the running containers (issuer-checks.sh),
-                                                                       inside the gateway image: the token and the
-                                                                       database URL come from the service's environment,
-                                                                       FIXTURES is the installation's smoke.json
+                                                                       inside the gateway image: the token comes from
+                                                                       the service's environment, FIXTURES is the
+                                                                       installation's smoke.json
      python3 gateway/tests/test_evaluations.py adapter-down URL FIXTURES   the same, with the adapter stopped: 502
 Host mode needs gateway/requirements.txt and portal/requirements.txt.
 
 A persona is both the `sub` and the `recordId` of its request: the mock adapter's recordId is the CSV row's id, which
-is the sign-in identity. The helpers above the tests are shared with test_issuances.py and test_credential_types.py.
+is the sign-in identity. test_credential_types.py imports the helpers above the tests.
 """
 
 from __future__ import annotations
@@ -97,30 +96,17 @@ def mock_adapter(csv_path: Path | None = None):
         yield TestClient(module.app), csv_path, rows
 
 
-class FakeStore:
-    def __init__(self) -> None:
-        self.schema_ready = False
-        self.rows: list[tuple] = []
-
-    def ensure_schema(self) -> None:
-        self.schema_ready = True
-
-    def record(self, sub: str, credential_type: str, scope: str, client_id: str | None) -> None:
-        self.rows.append((sub, credential_type, scope, client_id))
-
-
-def gateway_app(adapter, store: FakeStore, enabled_scopes: tuple[str, ...] = (SCOPE,)):
+def gateway_app(adapter, enabled_scopes: tuple[str, ...] = (SCOPE,)):
     import main
 
-    settings = main.Settings(enabled_scopes=enabled_scopes, adapter_url="http://adapter:8000",
-                             auth_token=TOKEN, database_url="postgresql://unused")
-    return main.create_app(settings, adapter=adapter, store=store)
+    settings = main.Settings(enabled_scopes=enabled_scopes, adapter_url="http://adapter:8000", auth_token=TOKEN)
+    return main.create_app(settings, adapter=adapter)
 
 
-def host_gateway(adapter, store: FakeStore, enabled_scopes: tuple[str, ...] = (SCOPE,)):
+def host_gateway(adapter, enabled_scopes: tuple[str, ...] = (SCOPE,)):
     from fastapi.testclient import TestClient
 
-    return TestClient(gateway_app(adapter, store, enabled_scopes))
+    return TestClient(gateway_app(adapter, enabled_scopes))
 
 
 # --- POST /evaluations ----------------------------------------------------------------------------------------
@@ -187,14 +173,13 @@ def check_refused_requests(evaluate, token: str, fixture: dict) -> None:
 
 
 def test_a_request_that_is_not_authorized_or_not_well_formed_is_refused() -> None:
-    store = FakeStore()
-    with mock_adapter() as (adapter, _, _), host_gateway(adapter, store) as client:
+    with mock_adapter() as (adapter, _, _), host_gateway(adapter) as client:
         for fixture in read_fixtures(INSTALLATIONS / "ait" / "smoke.json"):
             check_refused_requests(evaluate_with(client), TOKEN, fixture)
 
 
 def test_a_scope_the_installation_does_not_enable_is_unknown() -> None:
-    with mock_adapter() as (adapter, _, _), host_gateway(adapter, FakeStore(), enabled_scopes=()) as client:
+    with mock_adapter() as (adapter, _, _), host_gateway(adapter, enabled_scopes=()) as client:
         assert evaluate_with(client)(evaluation(ELIGIBLE), TOKEN) == (400, {"error": "unknown_scope"})
 
 
@@ -205,8 +190,8 @@ def adapter_answering(handler):
 
 
 def test_starts_while_the_adapter_is_down_and_answers_gateway_error() -> None:
-    """The app starts (its lifespan runs) with no adapter, and an adapter that is down or answers another status than
-    200 or 404 is a 502 gateway_error."""
+    """The app starts with no adapter, and an adapter that is down or answers another status than 200 or 404 is a
+    502 gateway_error."""
     import httpx
 
     def refuse(request: httpx.Request) -> httpx.Response:
@@ -222,9 +207,28 @@ def test_starts_while_the_adapter_is_down_and_answers_gateway_error() -> None:
         return httpx.Response(503, json={"error": "no_record"})
 
     for handler in (refuse, slow, broken, unavailable):
-        with host_gateway(adapter_answering(handler), FakeStore()) as client:
+        with host_gateway(adapter_answering(handler)) as client:
             answer = evaluate_with(client)(evaluation(ELIGIBLE), TOKEN)
         assert answer == (502, {"error": "gateway_error"}), (handler.__name__, answer)
+
+
+def test_starts_from_its_three_settings_and_touches_nothing_external() -> None:
+    """The Gateway as Compose starts it, from the environment holding gateway.env's three settings and no database:
+    it starts with nothing listening at its adapter URL and answers 502 gateway_error."""
+    import main
+    from fastapi.testclient import TestClient
+
+    settings = {"GATEWAY_ENABLED_SCOPES": SCOPE, "GATEWAY_ADAPTER_URL": "http://127.0.0.1:9", "GATEWAY_AUTH_TOKEN": TOKEN}
+    saved = {k: os.environ.pop(k, None) for k in settings}
+    os.environ.update(settings)
+    try:
+        with TestClient(main.from_env()) as client:
+            assert evaluate_with(client)(evaluation(ELIGIBLE), TOKEN) == (502, {"error": "gateway_error"})
+    finally:
+        for k, v in saved.items():
+            os.environ.pop(k, None)
+            if v is not None:
+                os.environ[k] = v
 
 
 def eligibility_answer(answer):
@@ -248,7 +252,7 @@ GOOD = {"holds": [], "conferralStatus": "Conferred", "balance": "0"}
 def test_it_reads_only_the_eligibility_path_with_the_scope_claim_unchanged() -> None:
     adapter, seen = eligibility_answer(GOOD)
     scope = f"openid {SCOPE}"
-    with host_gateway(adapter, FakeStore()) as client:
+    with host_gateway(adapter) as client:
         status, _ = evaluate_with(client)({"sub": "s 1", "scope": scope, "recordId": "rec/1 2"}, TOKEN)
     assert status == 200
     assert [(r.method, r.url.raw_path.decode().split("?")[0], dict(r.url.params)) for r in seen] == [
@@ -264,7 +268,7 @@ def test_malformed_eligibility_is_a_gateway_error_not_a_crash() -> None:
              ([GOOD], "eligibility is a list"),
              ("not json", "eligibility is not JSON")]
     for answer, label in cases:
-        with host_gateway(eligibility_answer(answer)[0], FakeStore()) as client:
+        with host_gateway(eligibility_answer(answer)[0]) as client:
             result = evaluate_with(client)(evaluation(ELIGIBLE), TOKEN)
         assert result == (502, {"error": "gateway_error"}), (label, result)
 
@@ -278,7 +282,7 @@ def test_a_check_that_raises_is_a_bug_answered_500_without_a_body() -> None:
     broken = dataclasses.replace(ct.REGISTRY[SCOPE], checks=(ct.Check("broken", lambda e: 1 / 0),))
     registry, ct.REGISTRY = ct.REGISTRY, {**ct.REGISTRY, SCOPE: broken}
     try:
-        app = gateway_app(eligibility_answer(GOOD)[0], FakeStore())
+        app = gateway_app(eligibility_answer(GOOD)[0])
     finally:
         ct.REGISTRY = registry
     with TestClient(app, raise_server_exceptions=False) as client:
@@ -286,33 +290,21 @@ def test_a_check_that_raises_is_a_bug_answered_500_without_a_body() -> None:
     assert r.status_code == 500 and "json" not in r.headers["content-type"], (r.status_code, r.headers, r.text)
 
 
-def test_every_persona_of_every_installation_is_evaluated_and_nothing_is_written() -> None:
+def test_every_persona_of_every_installation_is_evaluated() -> None:
     for installation, csv_path in HOST_CSV.items():
-        store = FakeStore()
-        with mock_adapter(csv_path) as (adapter, _, _), \
-                host_gateway(adapter, store, enabled_scopes(installation)) as client:
+        with mock_adapter(csv_path) as (adapter, _, _), host_gateway(adapter, enabled_scopes(installation)) as client:
             for fixture in read_fixtures(INSTALLATIONS / installation / "smoke.json"):
                 check_personas(evaluate_with(client), TOKEN, fixture)
-        assert store.rows == [], (installation, "an evaluation wrote an issuance row", store.rows)
-
-
-def issuance_rows() -> int:
-    """The gateway.issuances row count, which an evaluation leaves as it is; goes with POST /issuances' store."""
-    import psycopg
-
-    with psycopg.connect(os.environ["GATEWAY_DATABASE_URL"]) as conn:
-        return conn.execute("SELECT count(*) FROM gateway.issuances").fetchone()[0]
 
 
 def run_live(url: str, fixtures: list[dict]) -> None:
     import httpx
 
-    token, before = os.environ["GATEWAY_AUTH_TOKEN"], issuance_rows()
+    token = os.environ["GATEWAY_AUTH_TOKEN"]
     with httpx.Client(base_url=url, timeout=10) as client:
         for fixture in fixtures:
             check_refused_requests(evaluate_with(client), token, fixture)
             check_personas(evaluate_with(client), token, fixture)
-    assert issuance_rows() == before, "an evaluation wrote an issuance row"
 
 
 def run_live_adapter_down(url: str, fixtures: list[dict]) -> None:

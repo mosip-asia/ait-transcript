@@ -8,8 +8,6 @@ every scope: `scope` is required, as the contract says, and otherwise ignored.
 It is column-driven, so the same image serves every installation's CSV. On the AIT transcript CSV the record
 path serves every column but `id` and the eligibility columns, and the eligibility path those columns; a CSV without
 them (the hackathon roster) is served whole on both paths.
-
-The `/students` paths are the old contract (contracts.md section 2b), kept until every caller reads `/records`.
 """
 
 from __future__ import annotations
@@ -29,15 +27,13 @@ JSON_COLUMNS = {"courses", "holds"}
 ELIGIBILITY_COLUMNS = {"holds", "conferralStatus", "balance"}
 # Not in the record: the identity and the eligibility attributes.
 NOT_IN_RECORD = {"id", *ELIGIBILITY_COLUMNS}
-# The old transcript path also leaves out the generator's courseList, which the Gateway derives.
-NOT_IN_TRANSCRIPT = {*NOT_IN_RECORD, "courseList"}
 DEGREE_COLUMNS = ("level", "degreeAwarded", "dateGraduation")
 
 
-def find_row(sub: str, degree_id: str | None = None) -> dict:
+def find_row(row_id: str) -> dict:
     with open(os.environ.get("ADAPTER_CSV", "/data/student_identity_data.csv"), newline="", encoding="utf-8") as f:
-        row = next((r for r in csv.DictReader(f) if r["id"] == sub), None)
-    if row is None or degree_id not in (None, sub):  # degreeId is the row's id
+        row = next((r for r in csv.DictReader(f) if r["id"] == row_id), None)
+    if row is None:
         raise HTTPException(404, "no such student or record")
     return {k: json.loads(v) if k in JSON_COLUMNS and v is not None else v for k, v in row.items()}
 
@@ -65,20 +61,3 @@ def record(recordId: str, scope: str) -> dict:
 @app.get("/records/{recordId}/eligibility")
 def record_eligibility(recordId: str, scope: str) -> dict:
     return eligibility_of(find_row(recordId))
-
-
-@app.get("/students/{sub}/degrees")
-def degrees(sub: str) -> list[dict]:
-    row = find_row(sub)
-    return [{"degreeId": row["id"], **summary(row)}]
-
-
-@app.get("/students/{sub}/transcript")
-def transcript(sub: str, degreeId: str | None = None) -> dict:
-    row = find_row(sub, degreeId)
-    return {"degreeId": row["id"], **{k: v for k, v in row.items() if k not in NOT_IN_TRANSCRIPT}}
-
-
-@app.get("/students/{sub}/eligibility")
-def eligibility(sub: str, degreeId: str | None = None) -> dict:
-    return eligibility_of(find_row(sub, degreeId))
