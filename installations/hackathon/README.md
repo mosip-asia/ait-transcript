@@ -14,7 +14,7 @@ How the infra team deploys this directory (the service set, every variable and m
 | `mimoto-issuers-config.json.template` | `data/render_mimoto_issuers_config.py` | Mimoto's issuer list (wallet test harness), with `${INJI_WEB_URL}` left to fill |
 | `mimoto-issuers-config.json` | Mimoto, Inji Web | Rendered by `run-demo.sh` from the template, then patched by `bootstrap.sh`. Git-ignored |
 | `adapter/student_identity_data.csv` | The mock adapter (`adapter/`, mounted read-only at `/data`) | The roster, committed and edited by hand: one row per participant, keyed by `id` (the Keycloak username). The adapter reads it on every request, no restart of anything |
-| `smoke.json` | `vc-stack/smoke.sh`, `vc-stack/issuer-smoke.sh`, `gateway/tests/test_issuances.py`, `vc-stack/test_inji_web_vc_readiness.py` | The installation's test fixtures, below |
+| `smoke.json` | `vc-stack/smoke.sh`, `vc-stack/issuer-smoke.sh`, `gateway/tests/test_evaluations.py`, `gateway/tests/test_issuances.py`, `vc-stack/test_inji_web_vc_readiness.py` | The installation's test fixtures, below |
 
 The installation's own values:
 

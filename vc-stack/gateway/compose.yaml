@@ -1,8 +1,8 @@
 name: vc-stack
 
 services:
-  # The Gateway (contracts.md section 2a): POST /issuances, the checklist runner behind Certify's data-provider
-  # plugin. Settings (enabled scopes, adapter URL, bearer token, database URL) come from the installation's
+  # The Gateway: POST /evaluations, the read-only Checklist evaluation, and the old POST /issuances (contracts.md
+  # section 2a), the checklist runner behind Certify's data-provider plugin. Settings (enabled scopes, adapter URL, bearer token, database URL) come from the installation's
   # gateway.env. Reached as http://gateway:8000; no host port. It does not wait for the adapter; it creates its
   # gateway schema in the Issuer's Postgres (database, in issuer/) on start and restarts until that database accepts
   # connections. This folder is not run alone: it belongs beside issuer/, which the full stack and issuer-dev include.

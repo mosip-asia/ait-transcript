@@ -86,15 +86,24 @@ t = ct.REGISTRY[sys.argv[1]]; print('\n'.join([*t.record.model_fields, *t.derive
     || fail "Gateway (gateway/tests/test_issuances.py)"
   ok "Gateway: 200 eligible, 403 checklist_failed with the failing checks, 404 no_record unknown, 400, 401, one issuance row per 200"
 
-  # 6. An Adapter failure during a request is a Gateway error (502), not a crash. The Adapter is started again whether
-  # or not the check passes, and answers again before the next step, so the stack is left as it was.
+  # 6. POST /evaluations answers every persona the same way (the live mode of gateway/tests/test_evaluations.py) and
+  # writes no issuance row.
+  docker compose run --rm --no-deps -T -v "$REPO_ROOT/gateway/tests:/gateway/tests:ro" -v "$FIXTURES:/smoke.json:ro" \
+    gateway python tests/test_evaluations.py http://gateway:8000 /smoke.json \
+    || fail "Gateway evaluations (gateway/tests/test_evaluations.py)"
+  ok "Gateway evaluations: 200 eligible, 403 checklist_failed with the failing checks, 404 no_record unknown, 400, 401, no issuance row"
+
+  # 7. An Adapter failure during a request is a Gateway error (502), not a crash, on both endpoints. The Adapter is
+  # started again whether or not the checks pass, and answers again before the next step, so the stack is left as it was.
   docker compose stop adapter >/dev/null || fail "cannot stop the adapter"
   adapter_down_rc=0
   docker compose run --rm --no-deps -T -v "$REPO_ROOT/gateway/tests:/gateway/tests:ro" -v "$FIXTURES:/smoke.json:ro" \
     gateway python tests/test_issuances.py adapter-down http://gateway:8000 /smoke.json || adapter_down_rc=$?
+  docker compose run --rm --no-deps -T -v "$REPO_ROOT/gateway/tests:/gateway/tests:ro" -v "$FIXTURES:/smoke.json:ro" \
+    gateway python tests/test_evaluations.py adapter-down http://gateway:8000 /smoke.json || adapter_down_rc=$?
   docker compose start adapter >/dev/null || fail "cannot restart the adapter"
   eligible=$(jq -r '.[0].eligible | if type == "array" then .[0] else . end' "$FIXTURES")
   retry 30 in_network "http://adapter:8000/students/$eligible/eligibility" || fail "adapter did not answer again after restart"
-  [[ "$adapter_down_rc" == 0 ]] || fail "Gateway with the adapter down must answer 502 gateway_error (gateway/tests/test_issuances.py adapter-down)"
-  ok "Gateway: adapter down is a 502 gateway_error, and the adapter is back"
+  [[ "$adapter_down_rc" == 0 ]] || fail "Gateway with the adapter down must answer 502 gateway_error (test_issuances.py and test_evaluations.py adapter-down)"
+  ok "Gateway: adapter down is a 502 gateway_error on /issuances and /evaluations, and the adapter is back"
 }

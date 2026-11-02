@@ -125,6 +125,7 @@ INSTALLATION=ait python3 data/render_mimoto_issuers_config.py
 | Module | Command | What a pass shows |
 |---|---|---|
 | Gateway | `python3 gateway/tests/test_credential_types.py` | each credential type's checklist and claim mapping |
+| Gateway | `python3 gateway/tests/test_evaluations.py` | `POST /evaluations` against the mock Adapter in-process, for every type in every Installation's `smoke.json`: 200, 403 with exactly the failing checks, 404 for the unknown persona, 400, 401, 502 for an Adapter down or bad eligibility, 500 for a check that raises, and no issuance row |
 | Gateway | `python3 gateway/tests/test_issuances.py` | `POST /issuances` against the mock Adapter in-process, for every type in every Installation's `smoke.json`: 200, 403 per failing check, 404 for the unknown persona, 502 for bad Adapter data |
 | Adapter | `python3 adapter/test_adapter.py` | the mock Adapter on the generated CSV and on the hackathon roster, and `adapter/openapi.yaml` requiring every field a Gateway model requires |
 | Plugin | `docker run --rm -v "$PWD/plugin:/src" -w /src maven:3.9-eclipse-temurin-21 mvn -q package` | needs Docker; prints nothing, exits 0, and leaves `plugin/target/issuer-data-provider-plugin.jar` |

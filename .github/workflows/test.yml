@@ -52,6 +52,7 @@ jobs:
             data/test_render_mimoto_issuers_config.py \
             adapter/test_adapter.py \
             gateway/tests/test_credential_types.py \
+            gateway/tests/test_evaluations.py \
             gateway/tests/test_issuances.py
           do
             echo "::group::$t"

@@ -9,33 +9,22 @@ Run: python3 gateway/tests/test_issuances.py                     on the host, no
                                                                  come from the service's environment, CSV is the
                                                                  adapter's file, FIXTURES the installation's smoke.json
 Host mode needs gateway/requirements.txt and portal/requirements.txt.
+The old API, kept until the plugin calls POST /evaluations; the shared helpers live in test_evaluations.py.
 """
 
 from __future__ import annotations
 
 import csv
-import importlib.util
 import json
 import os
 import sys
-import tempfile
-from contextlib import contextmanager
 from pathlib import Path
 
-GATEWAY_DIR = Path(__file__).resolve().parents[1]
-# The Gateway's modules (the image has them too); data/'s generator in host mode only.
-sys.path.insert(0, str(GATEWAY_DIR))
-sys.path.insert(0, str(GATEWAY_DIR.parent / "data"))
+from test_evaluations import (ELIGIBLE, HOST_CSV, INSTALLATIONS, SCOPE,  # puts gateway/ and data/ on sys.path
+                              FakeStore, assert_only_failing, eligible_personas, enabled_scopes, host_gateway,
+                              mock_adapter, read_fixtures)
 
 import credential_types as ct  # noqa: E402
-
-INSTALLATIONS = GATEWAY_DIR.parent / "installations"
-ROSTER = INSTALLATIONS / "hackathon" / "adapter" / "student_identity_data.csv"
-# The host-mode CSV per installation: None is the one generated from data/students.json.
-HOST_CSV = {"ait": None, "hackathon": ROSTER}
-# The edge cases below run on the AIT installation.
-SCOPE = "ait_transcript_vc_ldp"
-ELIGIBLE = "ait-2026-0001"
 
 
 def stringify(claims: dict) -> dict:
@@ -53,53 +42,6 @@ def escaped(row: dict, names) -> dict:
 def claim_names(ctype: ct.CredentialType) -> list[str]:
     """The claims a type answers: its record model's fields, then the claims it derives."""
     return [*ctype.record.model_fields, *ctype.derived]
-
-
-def assert_only_failing(checks: list[dict], failing: str | list[str], ctype: ct.CredentialType) -> None:
-    """The checks of a 403 body exactly: every check of the type in order, the failing one(s) failed with a reason,
-    every other check of the type passed without one."""
-    failing = [failing] if isinstance(failing, str) else failing
-    names = [check.name for check in ctype.checks]
-    assert set(failing) <= set(names), (failing, names)
-    assert [c["check"] for c in checks] == names, checks
-    assert [c["check"] for c in checks if c["passed"] is False] == [n for n in names if n in failing], checks
-    assert [c for c in checks if c["passed"] is not False] == [{"check": n, "passed": True} for n in names if n not in failing], checks
-    assert all(isinstance(c.get("reason"), str) and c["reason"] for c in checks if c["passed"] is False), checks
-
-
-def read_fixtures(path: Path) -> list[dict]:
-    """An installation's smoke.json: one entry per credential type, each with the scope, the eligible persona (or a
-    list of them), the unknown persona the adapter has no record of, and each refused persona's failing check (one
-    name, or a list when several fail together)."""
-    return json.loads(path.read_text(encoding="utf-8"))
-
-
-def eligible_personas(fixture: dict) -> list[str]:
-    eligible = fixture["eligible"]
-    return [eligible] if isinstance(eligible, str) else eligible
-
-
-@contextmanager
-def mock_adapter(csv_path: Path | None = None):
-    """The mock adapter's app in-process on csv_path, else on a CSV generated from data/students.json:
-    (client, csv_path, rows)."""
-    import generate_csv as gc
-    from fastapi.testclient import TestClient
-
-    with tempfile.TemporaryDirectory() as td:
-        if csv_path is None:
-            rows = gc.build_rows(gc.load_students()["students"])
-            csv_path = Path(td) / "student_identity_data.csv"
-            gc.write_csv(rows, csv_path)
-        else:
-            with open(csv_path, newline="", encoding="utf-8") as f:
-                rows = list(csv.DictReader(f))
-        os.environ["ADAPTER_CSV"] = str(csv_path)
-        # Loaded by path: the adapter's module is also called main.
-        spec = importlib.util.spec_from_file_location("adapter_main", GATEWAY_DIR.parent / "adapter" / "main.py")
-        module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(module)
-        yield TestClient(module.app), csv_path, rows
 
 
 def check_gateway(post, rows, token: str, csv_path: Path, fixtures: dict) -> None:
@@ -142,33 +84,6 @@ def post_with(client):
         r = client.post("/issuances", json=body, headers={"Authorization": f"Bearer {token}"} if token else {})
         return r.status_code, r.json()
     return post
-
-
-class FakeStore:
-    def __init__(self) -> None:
-        self.schema_ready = False
-        self.rows: list[tuple] = []
-
-    def ensure_schema(self) -> None:
-        self.schema_ready = True
-
-    def record(self, sub: str, credential_type: str, scope: str, client_id: str | None) -> None:
-        self.rows.append((sub, credential_type, scope, client_id))
-
-
-def host_gateway(adapter, store: FakeStore, enabled_scopes: tuple[str, ...] = (SCOPE,)):
-    import main
-    from fastapi.testclient import TestClient
-
-    settings = main.Settings(enabled_scopes=enabled_scopes, adapter_url="http://adapter:8000",
-                             auth_token="test-token", database_url="postgresql://unused")
-    return TestClient(main.create_app(settings, adapter=adapter, store=store))
-
-
-def enabled_scopes(installation: str) -> tuple[str, ...]:
-    """GATEWAY_ENABLED_SCOPES from the installation's gateway.env."""
-    lines = (INSTALLATIONS / installation / "gateway.env").read_text(encoding="utf-8").splitlines()
-    return tuple(next(line for line in lines if line.startswith("GATEWAY_ENABLED_SCOPES=")).split("=", 1)[1].split())
 
 
 def test_issuances_with_the_mock_adapter_for_every_installation() -> None:
