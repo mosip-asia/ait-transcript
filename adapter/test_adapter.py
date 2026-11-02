@@ -192,15 +192,17 @@ def scope_schema(contract: dict, path: str, scope: str) -> dict:
     return schema
 
 
-TYPES = {"string": str, "array": list, "object": dict, "boolean": bool}
+TYPES = {"string": str, "array": list, "object": dict, "boolean": bool, "number": (int, float)}
 
 
 def violations(value, schema: dict, contract: dict, where: str) -> list[str]:
-    """How `value` breaks `schema`, for the keywords openapi.yaml uses on answers: type, required, properties, items,
-    propertyNames, enum, not and minLength. A field the schema does not name is not checked."""
+    """How `value` breaks `schema`, for the keywords openapi.yaml uses on answers: type (one name or a list of them),
+    required, properties, additionalProperties, items, propertyNames, enum, not and minLength."""
     schema = resolve(schema, contract)
-    if "type" in schema and not isinstance(value, TYPES[schema["type"]]):
-        return [f"{where}: {value!r} is not a {schema['type']}"]
+    types = schema.get("type", [])
+    types = [types] if isinstance(types, str) else types
+    if types and not any(isinstance(value, TYPES[t]) for t in types):
+        return [f"{where}: {value!r} is not a {' or '.join(types)}"]
     found = []
     if "enum" in schema and value not in schema["enum"]:
         found.append(f"{where}: {value!r} is not one of {schema['enum']}")
@@ -218,14 +220,16 @@ def violations(value, schema: dict, contract: dict, where: str) -> list[str]:
                 found += violations(key, schema["propertyNames"], contract, f"{where} key")
             if key in schema.get("properties", {}):
                 found += violations(item, schema["properties"][key], contract, f"{where}.{key}")
+            elif "additionalProperties" in schema:
+                found += violations(item, schema["additionalProperties"], contract, f"{where}.{key}")
     return found
 
 
 def check_contract(get, sub: str, scope: str) -> None:
     """The contract mode: any Adapter, through `get(path)` -> (status, body), against openapi.yaml for one known
     `sub` and one token `scope`. The list is a non-empty list of record summaries; its first entry's record follows
-    the scope's record schema, so it holds every claim and no reserved or trace key; an unknown sub is a 404 or an
-    empty list."""
+    the scope's record schema, so it holds every claim, no reserved or trace key, no extra field but a scalar, and a
+    `courses` that is an array; an unknown sub is a 404 or an empty list."""
     from urllib.parse import quote
 
     contract = load_contract()
@@ -239,6 +243,8 @@ def check_contract(get, sub: str, scope: str) -> None:
     status, record = get(f"/records/{q(entries[0]['recordId'])}?scope={q(scope)}")
     assert status == 200, f"GET /records/{entries[0]['recordId']}: {status} {record!r}"
     problems = violations(record, scope_schema(contract, "/records/{recordId}", scope), contract, "record")
+    if "courses" in record and not isinstance(record["courses"], list):  # the plugin's unquoted slot, in any scope
+        problems.append(f"record.courses: {record['courses']!r} is not an array")
     assert not problems, f"GET /records/{entries[0]['recordId']}: {problems}"
 
     unknown = "no-such-student-" + os.urandom(4).hex()
@@ -330,7 +336,7 @@ def test_the_contract_mode_fails_an_adapter_that_breaks_the_contract() -> None:
             "a null claim": broken(record, lambda s, b: (s, {**b, "notes": None})),
             "an extra field that is an array of objects": broken(record, lambda s, b: (s, {
                 **b, "advisors": [{"name": "Dr. A"}]})),
-            "an extra field that is an object": broken(record, lambda s, b: (s, {**b, "committee": {"chair": "Dr. A"}})),
+            "an extra field that is an object": broken(record, lambda s, b: (s, {**b, "committee": {"chair": "A"}})),
             "courses that is not an array": broken(record, lambda s, b: (s, {**b, "courses": "CS601"})),
             "a course without a grade": broken(record, lambda s, b: (s, {**b, "courses": [
                 {"term": "T", "courses": [{"no": "CS601", "title": "A", "credits": "3"}]}]})),
@@ -344,6 +350,24 @@ def test_the_contract_mode_fails_an_adapter_that_breaks_the_contract() -> None:
             except AssertionError:
                 continue
             raise AssertionError(f"the contract mode passed an Adapter with {name}")
+
+
+def test_the_contract_mode_fails_a_courses_that_is_not_an_array_in_any_scope() -> None:
+    """The plugin refuses a non-array `courses` whatever the scope, though the roster's record schemas do not name it."""
+    with tempfile.TemporaryDirectory() as td:
+        csv_path = Path(td) / "student_identity_data.csv"
+        csv_path.write_bytes(ROSTER.read_bytes())
+        mock = host_get(csv_path)
+
+        def get(path: str):
+            status, body = mock(path)
+            return (status, {**body, "courses": "CS601"}) if path.startswith("/records/hack") else (status, body)
+
+        try:
+            check_contract(get, "hack-2026-0001", ROSTER_SCOPES[0])
+        except AssertionError:
+            return
+        raise AssertionError("the contract mode passed a roster record whose courses is a string")
 
 
 def drift(schema: dict, spec: dict, defs: dict, components: dict, where: str) -> list[str]:

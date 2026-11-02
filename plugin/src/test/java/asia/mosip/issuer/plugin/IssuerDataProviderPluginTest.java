@@ -322,7 +322,7 @@ class IssuerDataProviderPluginTest {
         assertEquals("adapter_error", refused(plugin, CLAIMS).getErrorCode());
     }
 
-    /** `courses` is the one object or array the contract allows at the top of a record; every other claim is a string. */
+    /** `courses` is the one array the contract allows at the top of a record; any other extra field is a scalar. */
     @ParameterizedTest(name = "the record carries {0}")
     @CsvSource(delimiter = '|', textBlock = """
             an object                  | {"fullName": "Somchai Jaidee", "committee": {"chair": "Dr. A"}}
