@@ -33,13 +33,27 @@ check_contexts() {
 
 issuer_checks() {
   local want_configs got_configs i config scope want_claims got_claims eligible adapter_down_rc
-  # 1. Certify started with the Gateway plugin selected.
-  local certify_log
+  # 1. Certify started with the Data-provider plugin selected, configured by its nine keys and nothing else, its token
+  # the Gateway's.
+  local certify_log certify_props plugin_keys want_keys
   certify_log=$(docker compose logs --no-color certify 2>&1) || fail "cannot read the certify log"
   ! grep -qE 'NoSuchBeanDefinitionException|NoUniqueBeanDefinitionException' <<<"$certify_log" \
     || fail "missing-bean or duplicate-bean error in the certify log"
-  grep -q 'IssuerDataProviderPlugin selected' <<<"$certify_log" || fail "the certify log does not name IssuerDataProviderPlugin"
+  grep -q 'IssuerDataProviderPlugin selected: records from the Adapter at http' <<<"$certify_log" \
+    || fail "the certify log does not name IssuerDataProviderPlugin and its Adapter"
   ok "Certify started with IssuerDataProviderPlugin"
+  certify_props=$(tr -d '\r' <"$INSTALLATION_DIR/certify-installation.properties")
+  plugin_keys=$( (grep -oE '^mosip\.certify\.((adapter|gateway)\.[a-z-]+|integration\.(data-provider-plugin|scan-base-package))=' <<<"$certify_props" || true) \
+    | tr -d = | LC_ALL=C sort)
+  want_keys=$(printf '%s\n' mosip.certify.adapter.{connect-timeout-ms,read-timeout-ms,url} \
+    mosip.certify.gateway.{auth-token,connect-timeout-ms,read-timeout-ms,url} \
+    mosip.certify.integration.{data-provider-plugin,scan-base-package} | LC_ALL=C sort)
+  [[ "$plugin_keys" == "$want_keys" ]] || fail "Certify's plugin keys must be the plugin's nine (got: $plugin_keys)"
+  ! grep -q '^mosip\.certify\.mock\.data-provider\.' <<<"$certify_props" || fail "the CSV plugin's keys are still in Certify's properties"
+  [[ "$(grep '^mosip.certify.gateway.auth-token=' <<<"$certify_props")" == \
+     "mosip.certify.gateway.auth-token=$(tr -d '\r' <"$INSTALLATION_DIR/gateway.env" | grep '^GATEWAY_AUTH_TOKEN=' | cut -d= -f2-)" ]] \
+    || fail "mosip.certify.gateway.auth-token must equal GATEWAY_AUTH_TOKEN in gateway.env"
+  ok "Certify's plugin configuration is the nine keys; its token is the Gateway's"
 
   # 2. Certify signs as its live key: did.json's id (a credential's issuer) is the did:key of the key it publishes, and
   # every credential configuration's did_url (a credential's verificationMethod) is that DID. A fresh keystore holds a

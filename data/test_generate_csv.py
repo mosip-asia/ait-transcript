@@ -62,7 +62,7 @@ def test_generated_csv_roundtrip() -> None:
 
 
 def test_claims_are_written_verbatim_not_escaped() -> None:
-    # The Gateway is the only escaper (gateway/credential_types.py); the CSV holds the values themselves.
+    # The Data-provider plugin escapes for Certify's template (plugin/); the CSV holds the values themselves.
     rows = gc.build_rows(gc.load_students()["students"])
     for claim in ("courseList", "programCommittee"):
         assert any("\n" in r[claim] for r in rows), claim

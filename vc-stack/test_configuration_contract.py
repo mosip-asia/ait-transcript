@@ -75,12 +75,17 @@ def env_file_scopes(path: Path) -> tuple[tuple[str, str], ...]:
     return tuple(sorted(scopes))
 
 
+def passed_through(spec: dict) -> list[str]:
+    """The environment entries without a value: Compose passes each from vc-stack/.env or the shell, or leaves it unset."""
+    return [item for item in spec.get("environment", []) if "=" not in item]
+
+
 def compose_rows() -> set[tuple[str, str, str, str, str, str]]:
     """(folder, service, kind, name, source, scope) for every env, env_file, mount and port in the Compose files."""
     rows = set()
     for service, (folder, spec) in services().items():
         for item in spec.get("environment", []):
-            name, value = item.split("=", 1)
+            name, value = item.split("=", 1) if "=" in item else (item, "${" + item + "}")
             rows.add((folder, service, "env", name, "", scope_of(value)))
         for env_file in spec.get("env_file", []):
             rows.add((folder, service, "env_file", repo_path(env_file, folder), "", "installation"))
@@ -123,6 +128,7 @@ def compose_variables(wanted: str) -> set[str]:
             found.update(VARIABLE.findall(node))
 
     walk([spec for folder, spec in services().values() if folder == wanted])
+    found.update(name for folder, spec in services().values() if folder == wanted for name in passed_through(spec))
     return found
 
 
@@ -234,6 +240,15 @@ def test_the_gateway_has_a_folder_of_its_own_that_both_stacks_include() -> None:
     assert services()["gateway"][0] == "vc-stack/gateway", services()["gateway"][0]
     for top in ("compose.yaml", "issuer-dev.yaml"):
         assert "gateway/compose.yaml" in load(STACK / top)["include"], top
+
+
+def test_the_adapter_url_reaches_certify_from_the_environment_with_the_mock_adapter_as_the_fallback() -> None:
+    """CERTIFY_ADAPTER_URL is passed to Certify only when vc-stack/.env sets it, so the one fallback is the
+    installation's properties: the mock Adapter."""
+    assert "CERTIFY_ADAPTER_URL" in passed_through(services()["certify"][1]), services()["certify"][1]["environment"]
+    for name in NAMES:
+        props = (INSTALLATIONS / name / "certify-installation.properties").read_text(encoding="utf-8").splitlines()
+        assert "mosip.certify.adapter.url=${CERTIFY_ADAPTER_URL:http://adapter:8000}" in props, name
 
 
 def test_mimoto_config_comes_from_demo() -> None:

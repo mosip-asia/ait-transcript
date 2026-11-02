@@ -59,19 +59,6 @@ with p.open(newline='', encoding='utf-8') as f:
 [[ "$kc_users" == "$csv_ids" ]] || fail "Keycloak usernames must match CSV id column row-for-row"
 ok "Keycloak users align with CSV ids"
 
-# Certify's data provider is the Gateway plugin, configured by the six keys of contracts.md section 2a and nothing else.
-certify_props=$(tr -d '\r' <"$INSTALLATION_DIR/certify-installation.properties")
-plugin_keys=$( (grep -oE '^mosip\.certify\.(gateway\.[a-z-]+|integration\.(data-provider-plugin|scan-base-package))=' <<<"$certify_props" || true) \
-  | tr -d = | LC_ALL=C sort)
-want_keys=$(printf '%s\n' mosip.certify.gateway.{auth-token,connect-timeout-ms,read-timeout-ms,url} \
-  mosip.certify.integration.{data-provider-plugin,scan-base-package} | LC_ALL=C sort)
-[[ "$plugin_keys" == "$want_keys" ]] || fail "Certify's plugin keys must be the six of contracts.md section 2a (got: $plugin_keys)"
-! grep -q '^mosip\.certify\.mock\.data-provider\.' <<<"$certify_props" || fail "the CSV plugin's keys are still in Certify's properties"
-[[ "$(grep '^mosip.certify.gateway.auth-token=' <<<"$certify_props")" == \
-   "mosip.certify.gateway.auth-token=$(tr -d '\r' <"$INSTALLATION_DIR/gateway.env" | grep '^GATEWAY_AUTH_TOKEN=' | cut -d= -f2-)" ]] \
-  || fail "mosip.certify.gateway.auth-token must equal GATEWAY_AUTH_TOKEN in gateway.env"
-ok "Certify's plugin configuration is the six keys; its token is the Gateway's"
-
 for ((i = 0; i < TYPE_COUNT; i++)); do
   load_type "$i"
   if [[ -n "$MIMOTO_TEMPLATE" ]]; then
@@ -155,24 +142,39 @@ issue_and_verify() {
     -v "$STACK_DIR/issue_and_verify.py:/demo/vc-stack/issue_and_verify.py:ro" \
     demo-app python vc-stack/issue_and_verify.py "$@"
 }
-issuance_rows() {
-  docker compose exec -T database psql -U postgres -d inji_certify -tAc "select count(*) from gateway.issuances"     | tr -d '[:space:]'
+# Certify's ledger: one row per issued credential, its indexed attributes holding the plugin's trace keys.
+ledger_rows() {
+  docker compose exec -T database psql -U postgres -d inji_certify -tAc "select count(*) from certify.ledger" | tr -d '[:space:]'
 }
+last_ledger_trace() {
+  docker compose exec -T database psql -U postgres -d inji_certify -tAc \
+    "select coalesce(indexed_attributes->>'tokenSub', '<none>') || ' ' || coalesce(indexed_attributes->>'tokenClientId', '<none>')
+     from certify.ledger order by id desc limit 1" | tr -d '\r'
+}
+# The client_id claim the realm's test-only smoke client puts in its tokens, which the plugin traces as tokenClientId.
+smoke_client_id=$(jq -r '.clients[] | select(.clientId == "smoke") | .protocolMappers[]
+  | select(.config["claim.name"] == "client_id") | .config["claim.value"]' "$INSTALLATION_DIR/keycloak-realm.json")
+[[ -n "$smoke_client_id" ]] || fail "the realm's smoke client sets no client_id claim"
 for ((i = 0; i < TYPE_COUNT; i++)); do
   load_type "$i"
   # One file per type, kept as a CI artifact; with several eligible personas it holds the last one's credential.
   smoke_vc=".demo-state/smoke-credential-$CONFIG.json"
   for persona in "${ELIGIBLE[@]}"; do
-    rows_before=$(issuance_rows) || fail "cannot count gateway.issuances"
+    rows_before=$(ledger_rows) || fail "cannot count certify.ledger"
     issue_and_verify issue "$INSTALLATION" "$persona" "$SCOPE" "$smoke_vc" \
       || fail "scripted issuance of $CONFIG to $persona (vc-stack/issue_and_verify.py issue)"
     jq -e --arg u "$ctx_url" '."@context" | index($u)' "$REPO_ROOT/$smoke_vc" >/dev/null \
       || fail "issued credential does not name $ctx_url in its @context"
+    jq -e '[paths | .[-1] | strings] | any(. == "tokenSub" or . == "tokenClientId") | not' "$REPO_ROOT/$smoke_vc" >/dev/null \
+      || fail "the credential of $CONFIG for $persona carries a trace key (tokenSub, tokenClientId)"
     issue_and_verify verify "$smoke_vc" "${TAMPER[@]}" || fail "verification of $CONFIG for $persona (vc-stack/issue_and_verify.py verify)"
-    rows_issued=$(issuance_rows) || fail "cannot count gateway.issuances"
+    rows_issued=$(ledger_rows) || fail "cannot count certify.ledger"
     [[ "$rows_issued" == "$((rows_before + 1))" ]] \
-      || fail "the Certify-path issuance of $CONFIG to $persona must add one gateway.issuances row (before: $rows_before, after: $rows_issued)"
-    ok "the Certify-path issuance of $CONFIG to $persona wrote one gateway.issuances row"
+      || fail "the issuance of $CONFIG to $persona must add one certify.ledger row (before: $rows_before, after: $rows_issued)"
+    trace=$(last_ledger_trace) || fail "cannot read certify.ledger"
+    [[ "$trace" == "$persona $smoke_client_id" ]] \
+      || fail "the ledger row of $CONFIG for $persona must index tokenSub=$persona tokenClientId=$smoke_client_id (got: $trace)"
+    ok "the issuance of $CONFIG to $persona added one ledger row indexing tokenSub and tokenClientId; the credential carries neither"
   done
 
   # Each persona the Gateway's checklist refuses gets the OpenID4VCI error body with its code.
@@ -180,10 +182,10 @@ for ((i = 0; i < TYPE_COUNT; i++)); do
     issue_and_verify refused "$INSTALLATION" "$persona" "$SCOPE" checklist_failed \
       || fail "refused persona $persona for $CONFIG through Certify (vc-stack/issue_and_verify.py refused ... checklist_failed)"
   done
-  rows_refused=$(issuance_rows) || fail "cannot count gateway.issuances"
+  rows_refused=$(ledger_rows) || fail "cannot count certify.ledger"
   [[ "$rows_refused" == "$rows_issued" ]] \
-    || fail "the refused personas of $CONFIG must add no gateway.issuances row (before: $rows_issued, after: $rows_refused)"
-  ok "the refused personas of $CONFIG wrote no gateway.issuances row"
+    || fail "the refused personas of $CONFIG must add no certify.ledger row (before: $rows_issued, after: $rows_refused)"
+  ok "the refused personas of $CONFIG added no ledger row"
 done
 
 # With the Gateway down, Certify still starts (the plugin calls nothing at startup) and a credential request is

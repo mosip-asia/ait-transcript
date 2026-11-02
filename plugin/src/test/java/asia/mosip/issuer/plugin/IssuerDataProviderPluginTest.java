@@ -8,11 +8,13 @@ import com.sun.net.httpserver.HttpServer;
 import io.mosip.certify.api.exception.DataProviderExchangeException;
 import java.io.IOException;
 import java.net.InetSocketAddress;
+import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -20,84 +22,178 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
-/** The plugin against a stand-in Gateway on a local port: what it sends, and what it makes of each answer. */
+/**
+ * The plugin against a stand-in Adapter and a stand-in Gateway on local ports: the requests each one receives, in
+ * order, and the data map or error code the plugin hands Certify.
+ */
 class IssuerDataProviderPluginTest {
 
     private static final String TOKEN = "test-token";
+    private static final String SUB = "ait-2026-0001";
+    private static final String SCOPE = "openid ait_transcript_vc_ldp";
+    /** Not the sub: the plugin must take the record id from the Adapter's list. */
+    private static final String RECORD_ID = "rec 0001";
+    private static final String RECORD_PATH = "/records/rec%200001";
+    private static final Map<String, Object> CLAIMS = Map.of("sub", SUB, "scope", SCOPE, "client_id", "smoke",
+            "accessTokenHash", "h4sh", "iss", "http://keycloak:8080/realms/inji");
 
-    /** One request as the stand-in Gateway saw it. */
-    record Seen(String method, String path, String authorization, String contentType, String body) {}
+    /** One request as a stand-in saw it, the query decoded. */
+    record Seen(String server, String method, String path, Map<String, String> query, String authorization,
+            String contentType, String body) {}
 
+    record Reply(int status, String body, long delayMs) {
+        static Reply of(int status, String body) {
+            return new Reply(status, body, 0);
+        }
+    }
+
+    /** Every request either stand-in received, in arrival order. */
     private final List<Seen> seen = new CopyOnWriteArrayList<>();
-    private HttpServer server;
-    private int status = 200;
-    private String answer = "{}";
-    private long delayMs = 0;
+    private final Map<String, Reply> adapterReplies = new ConcurrentHashMap<>();
+    private final Map<String, Reply> gatewayReplies = new ConcurrentHashMap<>();
+    private final List<HttpServer> servers = new CopyOnWriteArrayList<>();
 
-    private IssuerDataProviderPlugin plugin(long readTimeoutMs) throws IOException {
-        server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+    /** A server on a local port answering each path from {@code replies}, 599 for any other path. */
+    private String standIn(String name, Map<String, Reply> replies) throws IOException {
+        HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
         server.createContext("/", exchange -> {
-            seen.add(new Seen(exchange.getRequestMethod(), exchange.getRequestURI().getPath(),
+            String path = exchange.getRequestURI().getRawPath();
+            seen.add(new Seen(name, exchange.getRequestMethod(), path, query(exchange.getRequestURI().getRawQuery()),
                     exchange.getRequestHeaders().getFirst("Authorization"),
                     exchange.getRequestHeaders().getFirst("Content-Type"),
                     new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8)));
+            Reply reply = replies.getOrDefault(path, Reply.of(599, "no reply for " + path));
             try {
-                Thread.sleep(delayMs);
+                Thread.sleep(reply.delayMs());
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
             }
-            byte[] bytes = answer.getBytes(StandardCharsets.UTF_8);
-            exchange.sendResponseHeaders(status, bytes.length == 0 ? -1 : bytes.length);
+            byte[] bytes = reply.body().getBytes(StandardCharsets.UTF_8);
+            exchange.sendResponseHeaders(reply.status(), bytes.length == 0 ? -1 : bytes.length);
             exchange.getResponseBody().write(bytes);
             exchange.close();
         });
         server.start();
-        return new IssuerDataProviderPlugin("http://127.0.0.1:" + server.getAddress().getPort(), TOKEN, 2000, readTimeoutMs);
+        servers.add(server);
+        return "http://127.0.0.1:" + server.getAddress().getPort();
     }
 
+    private static Map<String, String> query(String raw) {
+        Map<String, String> query = new LinkedHashMap<>();
+        if (raw != null) {
+            for (String pair : raw.split("&")) {
+                String[] kv = pair.split("=", 2);
+                query.put(URLDecoder.decode(kv[0], StandardCharsets.UTF_8),
+                        URLDecoder.decode(kv.length > 1 ? kv[1] : "", StandardCharsets.UTF_8));
+            }
+        }
+        return query;
+    }
+
+    private IssuerDataProviderPlugin plugin(String adapterUrl, long adapterReadMs, String gatewayUrl, long gatewayReadMs) {
+        return new IssuerDataProviderPlugin(adapterUrl, 2000, adapterReadMs, gatewayUrl, TOKEN, 2000, gatewayReadMs);
+    }
+
+    /** The happy answers: a list of two records, a pass, the first record. */
+    {
+        adapterReplies.put("/records", Reply.of(200, "[{\"recordId\": \"rec 0001\", \"level\": \"Masters\"}, {\"recordId\": \"rec-0002\"}]"));
+        adapterReplies.put(RECORD_PATH, Reply.of(200, "{\"fullName\": \"Somchai Jaidee\"}"));
+        gatewayReplies.put("/evaluations", Reply.of(200,
+                "{\"credentialType\": \"AitTranscriptCredential\", \"checks\": [{\"check\": \"no_holds\", \"passed\": true}]}"));
+    }
+
+    /** Both stand-ins up. */
     private IssuerDataProviderPlugin plugin() throws IOException {
-        return plugin(10000);
+        return plugin(10000, 10000);
+    }
+
+    private IssuerDataProviderPlugin plugin(long adapterReadMs, long gatewayReadMs) throws IOException {
+        return plugin(standIn("adapter", adapterReplies), adapterReadMs, standIn("gateway", gatewayReplies), gatewayReadMs);
     }
 
     @AfterEach
     void stop() {
-        if (server != null) server.stop(0);
+        servers.forEach(server -> server.stop(0));
+    }
+
+    private Seen listRequest() {
+        return new Seen("adapter", "GET", "/records", Map.of("sub", SUB, "scope", SCOPE), null, null, "");
+    }
+
+    private Seen recordRequest() {
+        return new Seen("adapter", "GET", RECORD_PATH, Map.of("scope", SCOPE), null, null, "");
+    }
+
+    private static DataProviderExchangeException refused(IssuerDataProviderPlugin plugin, Map<String, Object> claims) {
+        return assertThrows(DataProviderExchangeException.class, () -> plugin.fetchData(claims));
     }
 
     @Test
-    void postsTheTokenClaimsMinusAccessTokenHashWithTheBearerToken() throws Exception {
-        plugin().fetchData(Map.of("sub", "ait-2026-0001", "scope", "openid ait_transcript_vc_ldp",
-                "client_id", "wallet-demo", "accessTokenHash", "h4sh"));
-
-        assertEquals(1, seen.size());
-        Seen request = seen.get(0);
-        assertEquals("POST", request.method());
-        assertEquals("/issuances", request.path());
-        assertEquals("Bearer " + TOKEN, request.authorization());
-        assertEquals("application/json", request.contentType());
-        assertEquals(Map.of("sub", "ait-2026-0001", "scope", "openid ait_transcript_vc_ldp", "client_id", "wallet-demo"),
-                new JSONObject(request.body()).toMap());
-    }
-
-    @Test
-    void turnsEveryTopLevelObjectAndArrayIntoItsJsonTextAndKeepsTheRest() throws Exception {
+    void aPassListsThenEvaluatesThenFetchesAndReturnsTheRecordEscapedAndExtended() throws Exception {
         IssuerDataProviderPlugin plugin = plugin();
-        answer = """
-                {"fullName": "Somchai \\\\\\"Tom\\\\\\" Jaidee",
-                 "courses": [{"term": "2025/1", "courses": [{"code": "CS601", "grade": "A"}]}],
+        adapterReplies.put(RECORD_PATH, Reply.of(200, """
+                {"fullName": "Somchai \\"Tom\\" Jaidée",
+                 "programCommittee": "Prof. A (Chair)\\nDr. B",
+                 "courses": [{"term": "2025/1", "courses": [{"no": "CS601", "grade": "A"}]}],
                  "committee": {"chair": "Dr. A"},
-                 "totalCredits": "48"}""";
+                 "totalCredits": "48",
+                 "credits": 48,
+                 "conferred": true}"""));
 
-        JSONObject claims = plugin.fetchData(Map.of("sub", "ait-2026-0001", "scope", "ait_transcript_vc_ldp"));
+        JSONObject data = plugin.fetchData(CLAIMS);
 
-        assertEquals(Set.of("fullName", "courses", "committee", "totalCredits"), claims.keySet());
-        assertEquals("Somchai \\\"Tom\\\" Jaidee", claims.get("fullName"));
-        assertEquals("48", claims.get("totalCredits"));
-        // Certify's template receives text; the text is the same JSON (key order inside it is not significant).
-        assertEquals(List.of(Map.of("term", "2025/1", "courses", List.of(Map.of("code", "CS601", "grade", "A")))),
-                new JSONArray((String) claims.get("courses")).toList());
-        assertEquals(Map.of("chair", "Dr. A"), new JSONObject((String) claims.get("committee")).toMap());
+        assertEquals(3, seen.size(), seen.toString());
+        assertEquals(listRequest(), seen.get(0));
+        Seen evaluation = seen.get(1);
+        assertEquals(List.of("gateway", "POST", "/evaluations", "Bearer " + TOKEN, "application/json"),
+                List.of(evaluation.server(), evaluation.method(), evaluation.path(), evaluation.authorization(),
+                        evaluation.contentType()));
+        assertEquals(Map.of("sub", SUB, "scope", SCOPE, "recordId", RECORD_ID), new JSONObject(evaluation.body()).toMap());
+        assertEquals(recordRequest(), seen.get(2));
+
+        Map<String, Object> expected = new HashMap<>();
+        expected.put("fullName", "Somchai \\\"Tom\\\" Jaid\\u00e9e");
+        expected.put("programCommittee", "Prof. A (Chair)\\nDr. B");
+        expected.put("totalCredits", "48");
+        expected.put("credits", 48);
+        expected.put("conferred", true);
+        expected.put("tokenSub", SUB);
+        expected.put("tokenClientId", "smoke");
+        Map<String, Object> got = new HashMap<>(data.toMap());
+        // Objects and arrays reach the template as their JSON text (key order inside it is not significant).
+        assertEquals(List.of(Map.of("term", "2025/1", "courses", List.of(Map.of("no", "CS601", "grade", "A")))),
+                new JSONArray((String) got.remove("courses")).toList());
+        assertEquals(Map.of("chair", "Dr. A"), new JSONObject((String) got.remove("committee")).toMap());
+        assertEquals(expected, got);
+    }
+
+    @Test
+    void aTokenWithoutAClientIdGetsNoTokenClientId() throws Exception {
+        IssuerDataProviderPlugin plugin = plugin();
+        Map<String, Object> nullClient = new HashMap<>(Map.of("sub", SUB, "scope", SCOPE));
+        nullClient.put("client_id", null);
+
+        for (Map<String, Object> claims : List.of(Map.<String, Object>of("sub", SUB, "scope", SCOPE), nullClient)) {
+            assertEquals(Map.of("fullName", "Somchai Jaidee", "tokenSub", SUB), plugin.fetchData(claims).toMap());
+        }
+    }
+
+    /** Every top-level string reaches Certify escaped as the Gateway's escaper (Python's json.dumps) wrote it. */
+    @Test
+    void quotesNewlinesAndNonAsciiAreEscapedForTheQuotedTemplate() throws Exception {
+        IssuerDataProviderPlugin plugin = plugin();
+        String value = "a\"b\\c\n\r\t\b\f\u0001\u007f é ü 中 😀 </   ${x} #if";
+        adapterReplies.put(RECORD_PATH, Reply.of(200, new JSONObject(Map.of("fullName", value)).toString()));
+
+        String escaped = (String) plugin.fetchData(CLAIMS).get("fullName");
+
+        // The literal json.dumps(value)[1:-1] prints.
+        assertEquals("a\\\"b\\\\c\\n\\r\\t\\b\\f\\u0001\\u007f \\u00e9 \\u00fc \\u4e2d \\ud83d\\ude00 </ \\u2028 ${x} #if",
+                escaped);
+        // Substituted into the template's quoted slot, it reads back as the Adapter's value.
+        assertEquals(value, new JSONObject("{\"fullName\": \"" + escaped + "\"}").getString("fullName"));
     }
 
     @ParameterizedTest(name = "{0} {1} -> {2}")
@@ -109,55 +205,137 @@ class IssuerDataProviderPluginTest {
             401 | {"detail": "missing or wrong bearer token"}                                              | gateway_error
             500 | Internal Server Error                                                                    | gateway_error
             503 | ''                                                                                       | gateway_error
-            200 | not json                                                                                 | gateway_error
             """)
-    void anAnswerOtherThanAClaimSetIsAnExchangeErrorWithTheBodysErrorElseGatewayError(
-            int status, String body, String code) throws Exception {
+    void aGatewayRefusalIsForwardedAndTheRecordIsNeverFetched(int status, String body, String code) throws Exception {
         IssuerDataProviderPlugin plugin = plugin();
-        this.status = status;
-        this.answer = body;
+        gatewayReplies.put("/evaluations", Reply.of(status, body));
 
-        DataProviderExchangeException e = assertThrows(DataProviderExchangeException.class,
-                () -> plugin.fetchData(Map.of("sub", "ait-2026-0002", "scope", "ait_transcript_vc_ldp")));
-        assertEquals(code, e.getErrorCode());
+        assertEquals(code, refused(plugin, CLAIMS).getErrorCode());
+        assertEquals(List.of("/records", "/evaluations"), seen.stream().map(Seen::path).toList());
     }
 
     @ParameterizedTest
     @CsvSource({"http://127.0.0.1:1", "http://gateway.invalid:8000"})
-    void aGatewayThatCannotBeReachedIsGatewayError(String url) {
-        IssuerDataProviderPlugin plugin = new IssuerDataProviderPlugin(url, TOKEN, 2000, 10000);
+    void aGatewayThatCannotBeReachedIsGatewayErrorAndTheRecordIsNeverFetched(String gatewayUrl) throws Exception {
+        IssuerDataProviderPlugin plugin = plugin(standIn("adapter", adapterReplies), 10000, gatewayUrl, 10000);
 
-        DataProviderExchangeException e = assertThrows(DataProviderExchangeException.class,
-                () -> plugin.fetchData(Map.of("sub", "ait-2026-0001", "scope", "ait_transcript_vc_ldp")));
-        assertEquals("gateway_error", e.getErrorCode());
+        assertEquals("gateway_error", refused(plugin, CLAIMS).getErrorCode());
+        assertEquals(List.of(listRequest()), seen);
     }
 
     @Test
-    void aGatewaySlowerThanTheReadTimeoutIsGatewayError() throws Exception {
-        IssuerDataProviderPlugin plugin = plugin(200);
-        delayMs = 1000;
+    void aGatewaySlowerThanItsReadTimeoutIsGatewayErrorAndTheRecordIsNeverFetched() throws Exception {
+        IssuerDataProviderPlugin plugin = plugin(10000, 200);
+        gatewayReplies.put("/evaluations", new Reply(200, "{}", 1000));
 
         long start = System.nanoTime();
-        DataProviderExchangeException e = assertThrows(DataProviderExchangeException.class,
-                () -> plugin.fetchData(Map.of("sub", "ait-2026-0001", "scope", "ait_transcript_vc_ldp")));
-        assertEquals("gateway_error", e.getErrorCode());
+        assertEquals("gateway_error", refused(plugin, CLAIMS).getErrorCode());
         assertTrue(System.nanoTime() - start < 800_000_000L, "the read timeout did not cut the call short");
+        assertEquals(List.of("/records", "/evaluations"), seen.stream().map(Seen::path).toList());
     }
 
     /** Keycloak always puts sub in its tokens, so the stack cannot produce this case; only this test covers it. */
     @Test
-    void claimsWithoutSubAreInvalidAccessTokenAndTheGatewayIsNotCalled() throws Exception {
+    void claimsWithoutSubAreInvalidAccessTokenAndNothingIsCalled() throws Exception {
         IssuerDataProviderPlugin plugin = plugin();
-        Map<String, Object> blankSub = new HashMap<>(Map.of("sub", "", "scope", "ait_transcript_vc_ldp"));
-        Map<String, Object> nullSub = new HashMap<>(Map.of("scope", "ait_transcript_vc_ldp"));
+        Map<String, Object> blankSub = new HashMap<>(Map.of("sub", "", "scope", SCOPE));
+        Map<String, Object> nullSub = new HashMap<>(Map.of("scope", SCOPE));
         nullSub.put("sub", null);
 
-        for (Map<String, Object> claims : List.of(Map.<String, Object>of("scope", "ait_transcript_vc_ldp"), blankSub, nullSub)) {
-            DataProviderExchangeException e = assertThrows(DataProviderExchangeException.class,
-                    () -> plugin.fetchData(claims));
-            assertEquals("invalid_access_token", e.getErrorCode(), claims.toString());
+        for (Map<String, Object> claims : List.of(Map.<String, Object>of("scope", SCOPE), blankSub, nullSub)) {
+            assertEquals("invalid_access_token", refused(plugin, claims).getErrorCode(), claims.toString());
         }
         assertEquals(List.of(), seen);
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @CsvSource(delimiter = '|', textBlock = """
+            an empty list   | 200 | []
+            a 404           | 404 | {"detail": "no such student or record"}
+            a 404, no body  | 404 | ''
+            """)
+    void noRecordInTheListIsNoRecordAndTheGatewayIsNeverCalled(String name, int status, String body) throws Exception {
+        IssuerDataProviderPlugin plugin = plugin();
+        adapterReplies.put("/records", Reply.of(status, body));
+
+        assertEquals("no_record", refused(plugin, CLAIMS).getErrorCode());
+        assertEquals(List.of(listRequest()), seen);
+    }
+
+    @Test
+    void aRecordThatAnswers404IsNoRecord() throws Exception {
+        IssuerDataProviderPlugin plugin = plugin();
+        adapterReplies.put(RECORD_PATH, Reply.of(404, ""));
+
+        assertEquals("no_record", refused(plugin, CLAIMS).getErrorCode());
+        assertEquals(recordRequest(), seen.get(2));
+    }
+
+    @ParameterizedTest(name = "the list answers {0}")
+    @CsvSource(delimiter = '|', textBlock = """
+            another status        | 500 | []
+            a 422                 | 422 | {"detail": [{"msg": "Field required"}]}
+            an object             | 200 | {"recordId": "rec-0001"}
+            not JSON              | 200 | not json
+            no body               | 200 | ''
+            an entry no recordId  | 200 | [{"level": "Masters"}]
+            an empty recordId     | 200 | [{"recordId": ""}]
+            a number recordId     | 200 | [{"recordId": 1}]
+            a string entry        | 200 | ["rec-0001"]
+            """)
+    void aListThatIsNotTheContractsIsAdapterErrorAndTheGatewayIsNeverCalled(String name, int status, String body)
+            throws Exception {
+        IssuerDataProviderPlugin plugin = plugin();
+        adapterReplies.put("/records", Reply.of(status, body));
+
+        assertEquals("adapter_error", refused(plugin, CLAIMS).getErrorCode());
+        assertEquals(List.of(listRequest()), seen);
+    }
+
+    @ParameterizedTest(name = "the record answers {0}")
+    @CsvSource(delimiter = '|', textBlock = """
+            another status  | 503 | {"fullName": "Somchai Jaidee"}
+            an array        | 200 | [{"fullName": "Somchai Jaidee"}]
+            a string        | 200 | "Somchai Jaidee"
+            not JSON        | 200 | not json
+            no body         | 200 | ''
+            """)
+    void aRecordThatIsNotAJsonObjectIsAdapterError(String name, int status, String body) throws Exception {
+        IssuerDataProviderPlugin plugin = plugin();
+        adapterReplies.put(RECORD_PATH, Reply.of(status, body));
+
+        assertEquals("adapter_error", refused(plugin, CLAIMS).getErrorCode());
+        assertEquals(List.of("/records", "/evaluations", RECORD_PATH), seen.stream().map(Seen::path).toList());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"id", "_holderId", "_issuer", "validFrom", "validUntil", "credentialStatus", "tokenSub",
+            "tokenClientId"})
+    void aRecordCarryingAReservedOrTraceKeyIsAdapterError(String key) throws Exception {
+        IssuerDataProviderPlugin plugin = plugin();
+        adapterReplies.put(RECORD_PATH, Reply.of(200, new JSONObject(Map.of("fullName", "Somchai Jaidee", key, "x")).toString()));
+
+        assertEquals("adapter_error", refused(plugin, CLAIMS).getErrorCode());
+    }
+
+    @ParameterizedTest
+    @CsvSource({"http://127.0.0.1:1", "http://adapter.invalid:8000"})
+    void anAdapterThatCannotBeReachedIsAdapterErrorAndTheGatewayIsNeverCalled(String adapterUrl) throws Exception {
+        IssuerDataProviderPlugin plugin = plugin(adapterUrl, 10000, standIn("gateway", gatewayReplies), 10000);
+
+        assertEquals("adapter_error", refused(plugin, CLAIMS).getErrorCode());
+        assertEquals(List.of(), seen);
+    }
+
+    @ParameterizedTest(name = "a slow {0}")
+    @ValueSource(strings = {"/records", RECORD_PATH})
+    void anAdapterSlowerThanItsReadTimeoutIsAdapterError(String path) throws Exception {
+        IssuerDataProviderPlugin plugin = plugin(200, 10000);
+        adapterReplies.computeIfPresent(path, (p, reply) -> new Reply(reply.status(), reply.body(), 1000));
+
+        long start = System.nanoTime();
+        assertEquals("adapter_error", refused(plugin, CLAIMS).getErrorCode());
+        assertTrue(System.nanoTime() - start < 800_000_000L, "the read timeout did not cut the call short");
     }
 
     @Test
