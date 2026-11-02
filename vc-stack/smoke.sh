@@ -39,9 +39,10 @@ sorted_lines() {
 
 python3 "$REPO_ROOT/data/generate_csv.py" >/dev/null
 
-# The Issuer's own checks first, as issuer-smoke.sh runs them (issuer-checks.sh): the Gateway plugin in Certify's log,
-# the issuer metadata against the Adapter contract's record schemas, the contexts through certify-nginx, every persona through the
-# Gateway, and 502 with the adapter down. They leave Certify's metadata in issuer_json.
+# The Issuer's own checks first, as issuer-smoke.sh runs them (issuer-checks.sh): the Data-provider plugin in Certify's
+# log, the issuer metadata against the Adapter contract's record schemas, the contexts through certify-nginx, and with
+# the gate on every persona through the Gateway and 502 with the adapter down. They leave Certify's metadata in
+# issuer_json.
 issuer_checks
 
 auth_srv=$(echo "$issuer_json" | jq -r '.authorization_servers[0] // empty')
@@ -85,7 +86,7 @@ for jar in issuer-data-provider-plugin mock-certify-plugin sunbird-rc-certify-in
   postgres-dataprovider-plugin mosip-identity-certify-plugin; do
   grep -qE "^$jar.*\.jar$" <<<"$certify_jars" || fail "additional_jars/ lacks $jar (has: $(tr '\n' ' ' <<<"$certify_jars"))"
 done
-ok "Certify's additional_jars/ holds the Gateway plugin beside the four bundled jars"
+ok "Certify's additional_jars/ holds the Data-provider plugin beside the four bundled jars"
 
 issuer=$(curl -sf "http://localhost:9080/realms/$REALM/.well-known/openid-configuration" | jq -r '.issuer')
 [[ "$issuer" == "$AUTH_SERVER_ISSUER" ]] || fail "the stand-in realm $REALM must be the configured issuer $AUTH_SERVER_ISSUER (got: ${issuer:-<empty>})"
