@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Issuer data adapter
-  version: 0.2.0
+  version: 0.3.0
   description: |
     The Adapter contract: the API any Adapter serves to the Issuer, read-only, generic across credential types.
     Jo and Boss build the SIS Adapter for the AIT installation. Thas's mock in `adapter/main.py` serves it from a
@@ -27,9 +27,6 @@ info:
     Data-provider plugin with `adapter_error`, the Gateway with `gateway_error`. It never issues an empty claim.
     The Adapter keeps `sub` out of its storage and access logs. There is no secret on either hop: the network is
     the boundary.
-
-    The `/students` paths are the old contract (contracts.md section 2b), which the Gateway still calls: `degrees`,
-    then `eligibility`, then `transcript`. They go once every caller reads `/records`.
 servers:
   - url: http://adapter:8000
     description: Thas's mock in the Compose stack (`GATEWAY_ADAPTER_URL`, defaulted in `installations/<name>/gateway.env`, set per environment in `vc-stack/.env`)
@@ -119,79 +116,6 @@ paths:
                     balance: '1250.00'
         '404':
           $ref: '#/components/responses/NoRecord'
-  /students/{id}/degrees:
-    get:
-      operationId: listDegrees
-      summary: The student's degrees (old contract)
-      description: |
-        The Gateway takes the first entry and passes its `degreeId` unchanged to the next two calls. In v0.1
-        return one entry per `id`, because how the Gateway would choose between two degrees is still open. An empty list
-        means the same as `404`.
-      parameters:
-        - $ref: '#/components/parameters/StudentId'
-      responses:
-        '200':
-          description: The degrees, the first one used
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/Degree'
-              examples:
-                transcript:
-                  value:
-                    - degreeId: ait-2026-0001
-                      level: Masters
-                      degreeAwarded: Master of Engineering
-                      dateGraduation: '2026-08-31'
-                hackathon:
-                  value:
-                    - degreeId: hack-2026-0001
-        '404':
-          $ref: '#/components/responses/NoRecord'
-  /students/{id}/eligibility:
-    get:
-      operationId: getEligibility
-      summary: The attributes the Checklist reads (old contract)
-      description: |
-        The checks of `/records/{recordId}/eligibility`. A `null` in a field the credential type reads is
-        `gateway_error`.
-      parameters:
-        - $ref: '#/components/parameters/StudentId'
-        - $ref: '#/components/parameters/DegreeId'
-      responses:
-        '200':
-          description: The eligibility attributes
-          content:
-            application/json:
-              schema:
-                oneOf:
-                  - $ref: '#/components/schemas/TranscriptEligibility'
-                  - $ref: '#/components/schemas/RosterRow'
-        '404':
-          $ref: '#/components/responses/NoRecord'
-  /students/{id}/transcript:
-    get:
-      operationId: getTranscript
-      summary: The degree's full record (old contract)
-      description: |
-        Every field the credential's template needs, by name. The Gateway escapes the values for Certify, so serve
-        them as stored. Don't serve `courseList`. The Gateway derives it from `courses`.
-      parameters:
-        - $ref: '#/components/parameters/StudentId'
-        - $ref: '#/components/parameters/DegreeId'
-      responses:
-        '200':
-          description: The record
-          content:
-            application/json:
-              schema:
-                oneOf:
-                  - $ref: '#/components/schemas/LegacyTranscriptRecord'
-                  - $ref: '#/components/schemas/RosterRow'
-        '404':
-          $ref: '#/components/responses/NoRecord'
 components:
   parameters:
     Sub:
@@ -233,22 +157,6 @@ components:
       in: path
       required: true
       description: A `recordId` from `GET /records`, passed back unchanged. One the Adapter does not hold is `404`.
-      schema:
-        type: string
-        minLength: 1
-    StudentId:
-      name: id
-      in: path
-      required: true
-      description: The access token's `sub` (old contract), as `Sub` describes it, URL-encoded.
-      schema:
-        type: string
-        minLength: 1
-    DegreeId:
-      name: degreeId
-      in: query
-      required: true
-      description: The `degreeId` from `degrees`, passed back unchanged. One the student does not hold is `404`.
       schema:
         type: string
         minLength: 1
@@ -425,98 +333,3 @@ components:
         lec: {type: string, description: Lecture hours}
         credits: {type: string}
         grade: {type: string}
-    Degree:
-      type: object
-      description: An entry of the old `degrees` path.
-      required: [degreeId]
-      properties:
-        degreeId:
-          type: string
-          minLength: 1
-          description: The adapter chooses the format. The mock uses the row id.
-        level:
-          type: string
-          examples: [Masters, PhD]
-        degreeAwarded:
-          type: string
-        dateGraduation:
-          type: string
-          format: date
-    LegacyTranscriptRecord:
-      type: object
-      description: |
-        The old `transcript` path's record: `TranscriptRecord` without `courseList`, which the Gateway derives.
-      required:
-        - fullName
-        - dateOfBirth
-        - country
-        - registrationNo
-        - previousDegree
-        - yearAwarded
-        - dateAdmitted
-        - option
-        - degreeAwarded
-        - dateGraduation
-        - faculty
-        - academicProgram
-        - areaOfSpecialization
-        - notes
-        - issueDate
-        - courses
-        - thesisTitle
-        - thesisGrade
-        - programCommittee
-        - courseworkCredits
-        - thesisCredits
-        - totalCredits
-        - thesisExamination
-      properties:
-        degreeId: {type: string, description: Served by the mock and ignored by the Gateway.}
-        fullName: {type: string}
-        dateOfBirth: {type: string, format: date}
-        country: {type: string}
-        registrationNo: {type: string, examples: [st125001]}
-        previousDegree: {type: string}
-        yearAwarded: {type: string, examples: ['2023']}
-        dateAdmitted: {type: string, format: date}
-        option: {type: string, examples: [Thesis]}
-        degreeAwarded: {type: string}
-        dateGraduation: {type: string, format: date}
-        faculty: {type: string}
-        academicProgram: {type: string}
-        areaOfSpecialization: {type: string}
-        notes: {type: string, description: '`-` when there are none'}
-        issueDate: {type: string, format: date}
-        courses:
-          type: array
-          description: Terms in order, each with its courses in order.
-          items:
-            $ref: '#/components/schemas/Term'
-        thesisTitle: {type: string}
-        thesisGrade: {type: string}
-        programCommittee: {type: string}
-        courseworkCredits: {type: string, examples: ['27.0']}
-        thesisCredits: {type: string}
-        totalCredits: {type: string}
-        thesisExamination: {type: string, examples: [Passed]}
-        level:
-          type: string
-          description: Served by the mock and ignored by the Gateway.
-    RosterRow:
-      type: object
-      description: |
-        The hackathon installation's roster row on the old paths, served by Thas's mock only, the whole row on both.
-        `teamId` is empty for a participant without a team; `winner` is `true` for a member of a winning team,
-        read case-insensitively, and anything else is not. Each credential type reads only some columns: a
-        `null` in a field the credential type reads is `gateway_error`, and other columns are ignored.
-      required: [teamId, teamName, winner, award, oidcClientId, authEndpoint, issuerEndpoint, verifierEndpoint]
-      properties:
-        degreeId: {type: string}
-        teamId: {type: string}
-        teamName: {type: string}
-        winner: {type: string}
-        award: {type: string}
-        oidcClientId: {type: string}
-        authEndpoint: {type: string}
-        issuerEndpoint: {type: string}
-        verifierEndpoint: {type: string}

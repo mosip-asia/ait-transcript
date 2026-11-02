@@ -1,7 +1,7 @@
 name: vc-stack
 
 services:
-  # The Issuer's Postgres: Certify's schema, and the gateway schema the Gateway creates on start. verify/ and demo/
+  # The Issuer's Postgres: Certify's schema. verify/ and demo/
   # bring their own (verify-database, demo-database); only this one keeps a host port.
   database:
     image: 'postgres:15'

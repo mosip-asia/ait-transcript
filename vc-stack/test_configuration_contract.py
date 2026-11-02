@@ -244,16 +244,13 @@ def test_both_installations_are_found() -> None:
     assert {"ait", "hackathon"} <= set(NAMES), NAMES
 
 
-def test_every_folder_but_demo_and_gateway_runs_alone() -> None:
-    """Every service a folder's services depend on is in that folder, its database included; demo/ needs the Issuer.
-    The Gateway still waits for the Issuer's Postgres, the one service gateway/ may name outside its folder."""
-    outside = {"vc-stack/gateway": {"database"}}
+def test_every_folder_but_demo_runs_alone() -> None:
+    """Every service a folder's services depend on is in that folder, its database included; demo/ needs the Issuer."""
     for service, (folder, spec) in services().items():
         if folder == "vc-stack/demo":
             continue
         for needed in spec.get("depends_on", []):
-            assert services()[needed][0] == folder or needed in outside.get(folder, set()), \
-                f"{service} in {folder} depends on {needed} in {services()[needed][0]}"
+            assert services()[needed][0] == folder, f"{service} in {folder} depends on {needed} in {services()[needed][0]}"
 
 
 def test_the_gateway_has_a_folder_of_its_own_that_both_stacks_include() -> None:
