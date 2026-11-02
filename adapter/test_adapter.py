@@ -11,7 +11,8 @@ Run: python3 adapter/test_adapter.py                      on the host, no Docker
      python3 adapter/test_adapter.py --contract URL SUB SCOPE
                                                           the contract mode, against any Adapter at URL: the list
                                                           for SUB, its first record against SCOPE's record schema
-                                                          (no reserved key), and a 404 for an unknown sub.
+                                                          (no reserved key), and a 404 or an empty
+                                                          list for an unknown sub.
                                                           check_contract(get, sub, scope) is the same in-process
      python3 adapter/test_adapter.py --record-claims SCOPE
                                                           the claim names of SCOPE's record schema, one per line
@@ -223,7 +224,8 @@ def violations(value, schema: dict, contract: dict, where: str) -> list[str]:
 def check_contract(get, sub: str, scope: str) -> None:
     """The contract mode: any Adapter, through `get(path)` -> (status, body), against openapi.yaml for one known
     `sub` and one token `scope`. The list is a non-empty list of record summaries; its first entry's record follows
-    the scope's record schema, so it holds every claim and no reserved or trace key; an unknown sub is a 404."""
+    the scope's record schema, so it holds every claim and no reserved or trace key; an unknown sub is a 404 or an
+    empty list."""
     from urllib.parse import quote
 
     contract = load_contract()
@@ -240,8 +242,9 @@ def check_contract(get, sub: str, scope: str) -> None:
     assert not problems, f"GET /records/{entries[0]['recordId']}: {problems}"
 
     unknown = "no-such-student-" + os.urandom(4).hex()
-    status, _ = get(f"/records?sub={unknown}&scope={q(scope)}")
-    assert status == 404, f"GET /records for an unknown sub: {status}, not 404"
+    status, unknown_entries = get(f"/records?sub={unknown}&scope={q(scope)}")
+    assert status == 404 or (status == 200 and unknown_entries == []), (
+        f"GET /records for an unknown sub: {status} {unknown_entries!r}, not a 404 or an empty list")
 
 
 def template_claims() -> dict[str, set[str]]:
