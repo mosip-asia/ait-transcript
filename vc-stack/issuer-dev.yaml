@@ -1,4 +1,4 @@
-# The Issuer and the mock Adapter, without demo/ and verify/: what issuer-dev runs until infra's Adapter serves
+# The Issuer, the Gateway and the mock Adapter, without demo/ and verify/: what issuer-dev runs until infra's Adapter serves
 # credential data. The same project as compose.yaml, so a run shares its volumes, keystore and DID.
 #   docker compose --env-file vc-stack/.env -f vc-stack/issuer-dev.yaml up -d --build
 #   ./vc-stack/issuer-smoke.sh
@@ -6,4 +6,5 @@ name: vc-stack
 
 include:
   - issuer/compose.yaml
+  - gateway/compose.yaml
   - mock-adapter/compose.yaml

@@ -24,19 +24,20 @@ Full service and port topology: [wiki/architecture/vc-stack.md](./wiki/architect
 
 ## Deploy locally
 
-Run every command from the repo root, in WSL2 on Windows (see Prerequisites). The stack is four deployments, one folder each under `vc-stack/`, each with its own `compose.yaml`. Every folder file is `name: vc-stack`, so they all belong to one Compose project and share its network, volumes, keystore and DID.
+Run every command from the repo root, in WSL2 on Windows (see Prerequisites). The stack is five deployments, one folder each under `vc-stack/`, each with its own `compose.yaml`. Every folder file is `name: vc-stack`, so they all belong to one Compose project and share its network, volumes, keystore and DID.
 
 | Folder | Containers | Host ports |
 |---|---|---|
-| `issuer/` | `database` (Postgres), `certify`, `certify-nginx`, `gateway`, `vdr` (the mock VDR) | 6440, 9090, 9091 |
+| `issuer/` | `database` (Postgres), `certify`, `certify-nginx`, `vdr` (the mock VDR) | 6440, 9090, 9091 |
+| `gateway/` | `gateway` (the checklist runner; runs beside `issuer/`) | none |
 | `mock-adapter/` | `adapter` (the mock data Adapter) | none |
 | `verify/` | `verify-database`, `verify-service`, `verify-ui` | 9095, 4007 |
 | `demo/` | `demo-database`, `mimoto-service`, `inji-web`, `keycloak-server`, `keycloak`, `public-gateway`, `demo-app` | 9099, 4004, 9080, 9098, 4100 |
 
 Two top-level files pull the folders in with `include:`:
 
-- `vc-stack/compose.yaml`: all four folders, the whole journey.
-- `vc-stack/issuer-dev.yaml`: `issuer/` and `mock-adapter/`, the Issuer alone.
+- `vc-stack/compose.yaml`: all five folders, the whole journey.
+- `vc-stack/issuer-dev.yaml`: `issuer/`, `gateway/` and `mock-adapter/`, the Issuer alone.
 
 What each service is configured with, and which values a deployment replaces, is in [the configuration contract](./wiki/project/issuer-v0.1/configuration-contract.md); this README does not repeat it. How the folders fit together is in [wiki/architecture/vc-stack.md](./wiki/architecture/vc-stack.md).
 
