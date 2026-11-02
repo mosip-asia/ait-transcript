@@ -72,7 +72,7 @@ sequenceDiagram
     C-->>W: signed credential
 ```
 
-- Certify hands the plugin the token's claims; the plugin reads only `sub` and `scope`. A token with no `sub` makes the plugin answer `invalid_access_token`, before any call.
+- Certify hands the plugin the token's claims; the plugin reads `sub` and `scope`, and `client_id`, which it passes on as `tokenClientId`. A token with no `sub` makes the plugin answer `invalid_access_token`, before any call.
 - The plugin lists the student's records at the adapter and takes the first; none is `no_record`. It reads the record only after the Gateway passed it, or straight away when the installation runs without the Gateway (`mosip.certify.gateway.enabled=false`).
 - The Gateway picks the credential type from the first served scope inside `scope`. No match is `unknown_scope` (400). It parses the eligibility with the type's Pydantic model: an answer that does not parse is `gateway_error` (502). The checklist (for example `on_roster`, `winner`) can refuse at issuance with `checklist_failed` (403).
 - Both reach the adapter on the private network, with no authentication in v0.1. An adapter answer the plugin cannot use is `adapter_error`, never an empty claim. The adapter sees no wallet and no user token.
