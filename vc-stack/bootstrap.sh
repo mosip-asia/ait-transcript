@@ -396,8 +396,10 @@ EOF
 # The no-Gateway form has no gateway service, so an `up` after a gate-on run leaves that run's gateway container
 # running, and the gate-off smoke fails on it. Removed by label, not by `up --remove-orphans`, which would also remove
 # every other container of the project that no stack file names (the temporary sis-bridge runs that way).
+# Takes the form's service list. The list is read once into a variable, not piped into `grep -q`: grep exits at the
+# first match, compose dies on SIGPIPE, and under `pipefail` the pipeline then fails although the service is there.
 drop_stale_gateway() {
-  docker compose config --services | grep -qx gateway && return 0
+  grep -qx gateway <<<"$1" && return 0
   local project stale
   project=$(docker compose config --format json | jq -r .name)
   stale=$(docker ps -aq --filter "label=com.docker.compose.project=$project" --filter "label=com.docker.compose.service=gateway")
@@ -408,12 +410,14 @@ drop_stale_gateway() {
 
 compose_up() {
   step "docker compose up -d (mode=$MODE)"
-  drop_stale_gateway
+  local services
+  services=$(docker compose config --services)
+  drop_stale_gateway "$services"
   if [[ "$MODE" == "a" ]]; then
     docker compose up -d database certify certify-nginx mimoto-service inji-web verify-service verify-ui
     # mimoto-service brought up its config server, public-gateway, and vdr behind it; keycloak-* stay down.
     # The Gateway too, unless the stack form leaves it out (compose-no-gateway.yaml).
-    docker compose up -d adapter $(docker compose config --services | grep -x gateway || true)
+    docker compose up -d adapter $(grep -x gateway <<<"$services" || true)
     ensure_certify_nginx_up
     docker compose restart mimoto-service inji-web verify-ui
     ok "started Mode A services (keycloak-* skipped)"
