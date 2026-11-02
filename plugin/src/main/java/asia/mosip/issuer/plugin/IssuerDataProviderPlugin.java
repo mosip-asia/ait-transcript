@@ -29,8 +29,8 @@ import org.springframework.stereotype.Component;
  * ({@code GET /records}), asks the Gateway whether the first one passes its Checklist ({@code POST /evaluations}) when
  * the gate is on ({@code mosip.certify.gateway.enabled}), fetches that record ({@code GET /records/{recordId}}) and
  * hands it to Certify shaped for its quoted Velocity template, with the token's {@code sub} and {@code client_id} added
- * as trace keys for the ledger. It knows no claim name, maps no scope, and makes no call until Certify asks for data,
- * so Certify starts whatever is down.
+ * as trace keys for the ledger. It knows no claim name but {@code courses}, maps no scope, and makes no call until
+ * Certify asks for data, so Certify starts whatever is down.
  */
 @Component
 @ConditionalOnProperty(value = "mosip.certify.integration.data-provider-plugin", havingValue = "IssuerDataProviderPlugin")
