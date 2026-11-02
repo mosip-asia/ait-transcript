@@ -128,16 +128,24 @@ cp "$csv_file" "$adapter_copy_dir/student_identity_data.csv"
 docker rm -f adapter-copy >/dev/null 2>&1 || true
 docker compose run -d --no-deps --name adapter-copy -e ADAPTER_CSV=/copy/student_identity_data.csv \
   -v "$adapter_copy_dir:/copy:ro" adapter >/dev/null || fail "cannot start a second adapter on a copy of the CSV"
+adapter_test() {
+  docker compose run --rm --no-deps -T -v "$STACK_DIR/../adapter:/demo/adapter:ro" demo-app python adapter/test_adapter.py "$@"
+}
 adapter_rc=0
-docker compose run --rm --no-deps -T \
-  -v "$STACK_DIR/../adapter/test_adapter.py:/demo/adapter/test_adapter.py:ro" \
-  demo-app python adapter/test_adapter.py http://adapter:8000 \
-  "/demo/installations/$INSTALLATION/adapter/student_identity_data.csv" \
+adapter_test http://adapter:8000 "/demo/installations/$INSTALLATION/adapter/student_identity_data.csv" \
   http://adapter-copy:8000 /demo/.demo-state/adapter-copy/student_identity_data.csv || adapter_rc=$?
 docker rm -f adapter-copy >/dev/null 2>&1 || true
 rm -rf "$adapter_copy_dir"
 [[ "$adapter_rc" == 0 ]] || fail "mock adapter (adapter/test_adapter.py)"
-ok "mock adapter serves the degree list, the record and the eligibility attributes, and an edited value at once"
+ok "mock adapter serves the old and the /records paths, and an edited value at once"
+
+# The contract mode (adapter/openapi.yaml), as any Adapter is checked: every type's first eligible persona.
+for ((i = 0; i < TYPE_COUNT; i++)); do
+  load_type "$i"
+  adapter_test --contract http://adapter:8000 "${ELIGIBLE[0]}" "$SCOPE" \
+    || fail "the mock adapter fails the Adapter contract for $SCOPE (adapter/test_adapter.py --contract)"
+  ok "the mock adapter passes the Adapter contract for $SCOPE"
+done
 
 load_type 0  # the Gateway-down check below runs for the first type
 

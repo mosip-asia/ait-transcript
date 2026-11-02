@@ -393,6 +393,64 @@
           ]
         }
       ]
+    },
+    {
+      "id": "st123456",
+      "role": "student",
+      "displayName": "Somchai Prasert (SIS test student, M.Eng Information Management)",
+      "fullName": "Somchai Prasert",
+      "dateOfBirth": "1998-05-12",
+      "country": "Thailand",
+      "degrees": [
+        {
+          "degreeId": "meng-im",
+          "level": "Masters",
+          "keycloakId": "st123456",
+          "eligibility": { "holds": [], "conferralStatus": "Conferred", "balance": "0.00" },
+          "registrationNo": "st123456",
+          "previousDegree": "B.Sc Computer Science, Chulalongkorn University",
+          "yearAwarded": "2022",
+          "dateAdmitted": "2024-08-19",
+          "option": "Thesis",
+          "degreeAwarded": "Master of Engineering",
+          "dateGraduation": "2026-08-31",
+          "faculty": "School of Engineering and Technology",
+          "academicProgram": "M.Eng Information Management",
+          "areaOfSpecialization": "Data Engineering",
+          "notes": "-",
+          "issueDate": "2026-09-17",
+          "thesisTitle": "Record Linkage Across Campus Information Systems",
+          "thesisGrade": "A",
+          "programCommittee": "Prof. Kittipong Wongsathan (Chair)\nDr. Priya Ramaswamy",
+          "courseworkCredits": "24.0",
+          "thesisCredits": "22.0",
+          "totalCredits": "46.0",
+          "thesisExamination": "Passed",
+          "courses": [
+            {
+              "term": "August Semester 2024",
+              "courses": [
+                { "no": "IM601", "title": "Database Systems", "lab": "45", "lec": "30", "credits": "3", "grade": "A" },
+                { "no": "IM602", "title": "Information Retrieval", "lab": "0", "lec": "45", "credits": "3", "grade": "A-" },
+                { "no": "IM603", "title": "Data Warehousing", "lab": "45", "lec": "30", "credits": "3", "grade": "B+" }
+              ],
+              "credits": "9",
+              "gpa": "3.67",
+              "cumGpa": "3.67"
+            },
+            {
+              "term": "January Semester 2025",
+              "courses": [
+                { "no": "IM604", "title": "Data Integration", "lab": "45", "lec": "30", "credits": "3", "grade": "A" },
+                { "no": "IM605", "title": "Information Security Management", "lab": "0", "lec": "45", "credits": "3", "grade": "A" }
+              ],
+              "credits": "6",
+              "gpa": "4.00",
+              "cumGpa": "3.80"
+            }
+          ]
+        }
+      ]
     }
   ]
 }

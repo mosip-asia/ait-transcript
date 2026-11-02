@@ -148,6 +148,21 @@
           "temporary": false
         }
       ]
+    },
+    {
+      "username": "st123456",
+      "enabled": true,
+      "emailVerified": true,
+      "email": "somchai.prasert@ait.example",
+      "firstName": "Somchai",
+      "lastName": "Prasert",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "inji",
+          "temporary": false
+        }
+      ]
     }
   ],
   "clients": [
