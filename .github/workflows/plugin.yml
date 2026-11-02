@@ -1,4 +1,4 @@
-# Builds the Certify data-provider plugin (gateway/plugin/), runs its unit tests, and keeps the jar as an artifact
+# Builds the Certify data-provider plugin (plugin/), runs its unit tests, and keeps the jar as an artifact
 # named after the commit. The jar is never committed; run-demo.sh builds its own copy for the stack.
 name: Plugin
 
@@ -26,12 +26,12 @@ jobs:
           distribution: temurin
           java-version: "21"
           cache: maven
-          cache-dependency-path: gateway/plugin/pom.xml
+          cache-dependency-path: plugin/pom.xml
 
-      - run: mvn -B -f gateway/plugin/pom.xml package
+      - run: mvn -B -f plugin/pom.xml package
 
       - uses: actions/upload-artifact@v5
         with:
-          name: gateway-data-provider-plugin-${{ github.sha }}
-          path: gateway/plugin/target/gateway-data-provider-plugin.jar
+          name: issuer-data-provider-plugin-${{ github.sha }}
+          path: plugin/target/issuer-data-provider-plugin.jar
           if-no-files-found: error

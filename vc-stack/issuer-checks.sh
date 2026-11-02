@@ -38,8 +38,8 @@ issuer_checks() {
   certify_log=$(docker compose logs --no-color certify 2>&1) || fail "cannot read the certify log"
   ! grep -qE 'NoSuchBeanDefinitionException|NoUniqueBeanDefinitionException' <<<"$certify_log" \
     || fail "missing-bean or duplicate-bean error in the certify log"
-  grep -q 'GatewayDataProviderPlugin selected' <<<"$certify_log" || fail "the certify log does not name GatewayDataProviderPlugin"
-  ok "Certify started with GatewayDataProviderPlugin"
+  grep -q 'IssuerDataProviderPlugin selected' <<<"$certify_log" || fail "the certify log does not name IssuerDataProviderPlugin"
+  ok "Certify started with IssuerDataProviderPlugin"
 
   # 2. Certify signs as its live key: did.json's id (a credential's issuer) is the did:key of the key it publishes, and
   # every credential configuration's did_url (a credential's verificationMethod) is that DID. A fresh keystore holds a

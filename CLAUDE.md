@@ -26,7 +26,7 @@ Deployment is manual: push, then run the `Deploy` workflow for a commit. A commi
 
 - **Data.** `data/students.json` is the source of truth for the AIT personas; `data/generate_csv.py` writes the git-ignored `installations/ait/adapter/student_identity_data.csv` from it (claim columns first, then the eligibility columns). Identity is per degree: a student with two degrees is two rows and two Keycloak users. The hackathon roster CSV is committed and edited by hand. Change `data/ait_courses.py`, never the frozen `design/` copy.
 - **Gateway** (`gateway/`). `POST /issuances` (`contracts.md` section 2a). `credential_types.py` is the registry keyed by scope: Pydantic models of the Adapter's answers following `adapter/openapi.yaml` strictly, and each type's checks (a check returns its failure reason, or `None`). An answer that does not parse is a 502 `gateway_error`, never an empty claim; a check that raises is a 500. Every claim but `courses` is a string escaped by `escape_vc_quoted_claim`, the only escaper in the chain. `store.py` writes one identifiers-only row per 200 to `gateway.issuances`. Settings: `installations/<name>/gateway.env`.
-- **Certify plugin** (`gateway/plugin/`, Java 21). `GatewayDataProviderPlugin` posts the token's claims to the Gateway and turns any refusal into Certify's error. Compiled against `certify-integration-api:0.14.0` with every dependency `provided`, so the jar is one class; `run-demo.sh` builds it into `vc-stack/plugins/`.
+- **Certify plugin** (`plugin/`, Java 21). `IssuerDataProviderPlugin` posts the token's claims to the Gateway and turns any refusal into Certify's error. Compiled against `certify-integration-api:0.14.0` with every dependency `provided`, so the jar is one class; `run-demo.sh` builds it into `vc-stack/plugins/`.
 - **Approval gate.** Every persona is issuable at Certify and Keycloak; the Portal shows the claim link only after a registrar approves. A deliberate scope cut: do not "fix" it unless asked.
 - **The stack** (`vc-stack/`): one folder per deployment (`issuer/`, `mock-adapter/`, `verify/`, `demo/`), each `name: vc-stack`, pulled together by `include:`. Mount sources stay in `vc-stack/`, so folder paths start with `../`. Each group with a database has its own. `wiki/architecture/vc-stack.md` has the table.
 - **Authorization Server**: set in one place, `installations/<name>/authorization-server.env`, the only file that names a realm path; `vc-stack/.env` overrides each value.
@@ -49,7 +49,7 @@ Read before touching the stack:
 ## Repository rules
 
 - `*.sh` files are LF (`.gitattributes`); other text files are CRLF in a Windows checkout.
-- Generated and environment files stay git-ignored: the ait adapter CSV, `installations/<name>/mimoto-issuers-config.json`, `vc-stack/.env`, `vc-stack/certs/`, `vc-stack/data/`, `vc-stack/plugins/`, `gateway/plugin/target/`, `.demo-state/*`. No jar is committed.
+- Generated and environment files stay git-ignored: the ait adapter CSV, `installations/<name>/mimoto-issuers-config.json`, `vc-stack/.env`, `vc-stack/certs/`, `vc-stack/data/`, `vc-stack/plugins/`, `plugin/target/`, `.demo-state/*`. No jar is committed.
 - `AGENTS.md`, `PLAN.md` and `wiki/log.md` at the root are local-only and git-ignored.
 
 ## Docs

@@ -1,4 +1,4 @@
-package asia.mosip.issuer.gateway.plugin;
+package asia.mosip.issuer.plugin;
 
 import io.mosip.certify.api.exception.DataProviderExchangeException;
 import io.mosip.certify.api.spi.DataProviderPlugin;
@@ -26,10 +26,10 @@ import org.springframework.stereotype.Component;
  * and no claim names. It makes no call until Certify asks for data, so Certify starts whether or not the Gateway is up.
  */
 @Component
-@ConditionalOnProperty(value = "mosip.certify.integration.data-provider-plugin", havingValue = "GatewayDataProviderPlugin")
-public class GatewayDataProviderPlugin implements DataProviderPlugin {
+@ConditionalOnProperty(value = "mosip.certify.integration.data-provider-plugin", havingValue = "IssuerDataProviderPlugin")
+public class IssuerDataProviderPlugin implements DataProviderPlugin {
 
-    private static final Logger log = LoggerFactory.getLogger(GatewayDataProviderPlugin.class);
+    private static final Logger log = LoggerFactory.getLogger(IssuerDataProviderPlugin.class);
     private static final String GATEWAY_ERROR = "gateway_error";
 
     private final URI issuances;
@@ -37,7 +37,7 @@ public class GatewayDataProviderPlugin implements DataProviderPlugin {
     private final Duration readTimeout;
     private final HttpClient http;
 
-    public GatewayDataProviderPlugin(
+    public IssuerDataProviderPlugin(
             @Value("${mosip.certify.gateway.url}") String url,
             @Value("${mosip.certify.gateway.auth-token}") String authToken,
             @Value("${mosip.certify.gateway.connect-timeout-ms:2000}") long connectTimeoutMs,
@@ -49,7 +49,7 @@ public class GatewayDataProviderPlugin implements DataProviderPlugin {
                 .version(HttpClient.Version.HTTP_1_1)
                 .connectTimeout(Duration.ofMillis(connectTimeoutMs))
                 .build();
-        log.info("GatewayDataProviderPlugin selected: credential requests go to {}", issuances);
+        log.info("IssuerDataProviderPlugin selected: credential requests go to {}", issuances);
     }
 
     /**
