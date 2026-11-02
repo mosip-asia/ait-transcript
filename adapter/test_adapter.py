@@ -1,13 +1,19 @@
-"""Tests for the mock adapter (contracts.md section 2b).
+"""Tests for the mock adapter and the Adapter contract (adapter/openapi.yaml).
 
 Run: python3 adapter/test_adapter.py                      on the host, no Docker: a temp CSV from the generator,
-                                                          then a temp copy of the hackathon roster
+                                                          then a temp copy of the hackathon roster, and the
+                                                          contract's own checks
      python3 adapter/test_adapter.py URL CSV COPY_URL COPY_CSV
                                                           against the running containers (smoke.sh): the reads at
                                                           URL, the adapter serving CSV (the transcript CSV or a
                                                           roster), and the edit case at COPY_URL, a second adapter
                                                           serving COPY_CSV, a copy, so CSV is never rewritten
-Needs fastapi and httpx (portal/requirements.txt).
+     python3 adapter/test_adapter.py --contract URL SUB SCOPE
+                                                          the contract mode, against any Adapter at URL: the list
+                                                          for SUB, its first record against SCOPE's record schema
+                                                          (no reserved key), and a 404 for an unknown sub.
+                                                          check_contract(get, sub, scope) is the same in-process
+Needs fastapi, httpx and PyYAML (portal/requirements.txt).
 """
 
 from __future__ import annotations
@@ -204,6 +210,59 @@ def scope_schema(contract: dict, path: str, scope: str) -> dict:
     return schema
 
 
+TYPES = {"string": str, "array": list, "object": dict, "boolean": bool}
+
+
+def violations(value, schema: dict, contract: dict, where: str) -> list[str]:
+    """How `value` breaks `schema`, for the keywords openapi.yaml uses on answers: type, required, properties, items,
+    propertyNames, enum, not and minLength. A field the schema does not name is not checked."""
+    schema = resolve(schema, contract)
+    if "type" in schema and not isinstance(value, TYPES[schema["type"]]):
+        return [f"{where}: {value!r} is not a {schema['type']}"]
+    found = []
+    if "enum" in schema and value not in schema["enum"]:
+        found.append(f"{where}: {value!r} is not one of {schema['enum']}")
+    if "not" in schema and not violations(value, schema["not"], contract, where):
+        found.append(f"{where}: {value!r} is excluded by openapi.yaml")
+    if isinstance(value, str) and len(value) < schema.get("minLength", 0):
+        found.append(f"{where}: {value!r} is too short")
+    if isinstance(value, list):
+        for i, item in enumerate(value):
+            found += violations(item, schema.get("items", {}), contract, f"{where}[{i}]")
+    if isinstance(value, dict):
+        found += [f"{where}.{name}: missing" for name in schema.get("required", []) if name not in value]
+        for key, item in value.items():
+            if "propertyNames" in schema:
+                found += violations(key, schema["propertyNames"], contract, f"{where} key")
+            if key in schema.get("properties", {}):
+                found += violations(item, schema["properties"][key], contract, f"{where}.{key}")
+    return found
+
+
+def check_contract(get, sub: str, scope: str) -> None:
+    """The contract mode: any Adapter, through `get(path)` -> (status, body), against openapi.yaml for one known
+    `sub` and one token `scope`. The list is a non-empty list of record summaries; its first entry's record follows
+    the scope's record schema, so it holds every claim and no reserved or trace key; an unknown sub is a 404."""
+    from urllib.parse import quote
+
+    contract = load_contract()
+    q = lambda value: quote(value, safe="")  # noqa: E731
+    status, entries = get(f"/records?sub={q(sub)}&scope={q(scope)}")
+    assert status == 200, f"GET /records for {sub}: {status} {entries!r}"
+    (list_schema,) = answer_schemas(contract, "/records")
+    problems = violations(entries, list_schema, contract, "list")
+    assert entries and not problems, f"GET /records for {sub}: {problems or 'an empty list'}"
+
+    status, record = get(f"/records/{q(entries[0]['recordId'])}?scope={q(scope)}")
+    assert status == 200, f"GET /records/{entries[0]['recordId']}: {status} {record!r}"
+    problems = violations(record, scope_schema(contract, "/records/{recordId}", scope), contract, "record")
+    assert not problems, f"GET /records/{entries[0]['recordId']}: {problems}"
+
+    unknown = "no-such-student-" + os.urandom(4).hex()
+    status, _ = get(f"/records?sub={unknown}&scope={q(scope)}")
+    assert status == 404, f"GET /records for an unknown sub: {status}, not 404"
+
+
 def template_claims() -> dict[str, set[str]]:
     """Each Installation's Certify templates, by scope: the names they substitute, less the ones Certify sets."""
     import base64
@@ -235,6 +294,52 @@ def test_every_record_schema_lists_exactly_the_claims_its_template_substitutes()
             assert resolve(prop, contract).get("type") == want, (scope, name)
         assert set(resolve(schema["propertyNames"], contract)["not"]["enum"]) == RESERVED_KEYS, scope
     assert "courseList" in claims["ait_transcript_vc_ldp"]  # served by the Adapter now, no longer derived
+
+
+def test_the_contract_mode_passes_against_the_mock() -> None:
+    with tempfile.TemporaryDirectory() as td:
+        csv_path = Path(td) / "student_identity_data.csv"
+        gc.write_csv(gc.build_rows(gc.load_students()["students"]), csv_path)
+        get = host_get(csv_path)
+        check_contract(get, "ait-2026-0001", "ait_transcript_vc_ldp")
+        check_contract(get, "ait-2026-0001", "openid ait_transcript_vc_ldp")  # the token's scope claim, whole
+        csv_path.write_bytes(ROSTER.read_bytes())
+        for scope in ROSTER_SCOPES:
+            check_contract(get, "hack-2026-0001", scope)
+
+
+def test_the_contract_mode_fails_an_adapter_that_breaks_the_contract() -> None:
+    """Each break, served by an otherwise correct Adapter (the mock), fails the contract mode."""
+    with tempfile.TemporaryDirectory() as td:
+        csv_path = Path(td) / "student_identity_data.csv"
+        gc.write_csv(gc.build_rows(gc.load_students()["students"]), csv_path)
+        mock = host_get(csv_path)
+
+        def broken(path_start: str, change):
+            def get(path: str):
+                status, body = mock(path)
+                return change(status, body) if path.startswith(path_start) else (status, body)
+            return get
+
+        record = "/records/ait-2026-0001?"
+        breaks = {
+            "a reserved key": broken(record, lambda s, b: (s, {**b, "id": "ait-2026-0001"})),
+            "a trace key": broken(record, lambda s, b: (s, {**b, "tokenSub": "ait-2026-0001"})),
+            "a claim missing": broken(record, lambda s, b: (s, {k: v for k, v in b.items() if k != "courseList"})),
+            "a number for a string": broken(record, lambda s, b: (s, {**b, "totalCredits": 49.0})),
+            "a null claim": broken(record, lambda s, b: (s, {**b, "notes": None})),
+            "a course without a grade": broken(record, lambda s, b: (s, {**b, "courses": [
+                {"term": "T", "courses": [{"no": "CS601", "title": "A", "credits": "3"}]}]})),
+            "a list entry without recordId": broken("/records?sub=ait", lambda s, b: (s, [{"degreeId": "x"}])),
+            "an empty list for a known sub": broken("/records?sub=ait", lambda s, b: (s, [])),
+            "a 200 for an unknown sub": broken("/records?sub=no-such", lambda s, b: (200, [{"recordId": "x"}])),
+        }
+        for name, get in breaks.items():
+            try:
+                check_contract(get, "ait-2026-0001", "ait_transcript_vc_ldp")
+            except AssertionError:
+                continue
+            raise AssertionError(f"the contract mode passed an Adapter with {name}")
 
 
 def drift(schema: dict, spec: dict, defs: dict, components: dict, where: str) -> list[str]:
@@ -294,16 +399,20 @@ def test_every_field_a_gateway_model_requires_is_required_in_openapi_yaml() -> N
     assert drift({"type": "string", "minLength": 1}, {"type": "string"}, {}, {}, "m") != []
 
 
+def getter(base: str):
+    """`get(path)` over HTTP at `base`. Only a 200's body is read as JSON (a 404's is not part of the contract)."""
+    import httpx
+
+    def get(path: str) -> tuple[int, object]:
+        r = httpx.get(base + path, timeout=10)
+        return r.status_code, r.json() if r.status_code == 200 else r.text
+    return get
+
+
 def run_live(url: str, csv_path: Path, copy_url: str, copy_csv: Path) -> None:
     import time
 
     import httpx
-
-    def getter(base: str):
-        def get(path: str) -> tuple[int, object]:
-            r = httpx.get(base + path, timeout=10)
-            return r.status_code, r.json()
-        return get
 
     check_adapter(getter(url), csv_path)
     # The second adapter was started just before this run: wait for it to answer.
@@ -317,7 +426,10 @@ def run_live(url: str, csv_path: Path, copy_url: str, copy_csv: Path) -> None:
 
 
 if __name__ == "__main__":
-    if len(sys.argv) == 5:
+    if sys.argv[1:2] == ["--contract"] and len(sys.argv) == 5:
+        check_contract(getter(sys.argv[2].rstrip("/")), sys.argv[3], sys.argv[4])
+        print(f"PASS contract at {sys.argv[2]} for {sys.argv[4]}")
+    elif len(sys.argv) == 5:
         run_live(sys.argv[1], Path(sys.argv[2]), sys.argv[3], Path(sys.argv[4]))
         print(f"PASS adapter at {sys.argv[1]}, edit case at {sys.argv[3]}")
     else:
