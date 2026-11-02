@@ -89,7 +89,7 @@ ok "bootstrap idempotent re-run"
 # The plugin jar joins the four bundled ones (a single-file mount); issuer_checks saw Certify start with it selected.
 certify_jars=$(docker compose exec -T certify ls /home/inji/additional_jars/ | tr -d '\r') \
   || fail "cannot list Certify's additional_jars/"
-for jar in gateway-data-provider-plugin mock-certify-plugin sunbird-rc-certify-integration-impl \
+for jar in issuer-data-provider-plugin mock-certify-plugin sunbird-rc-certify-integration-impl \
   postgres-dataprovider-plugin mosip-identity-certify-plugin; do
   grep -qE "^$jar.*\.jar$" <<<"$certify_jars" || fail "additional_jars/ lacks $jar (has: $(tr '\n' ' ' <<<"$certify_jars"))"
 done
