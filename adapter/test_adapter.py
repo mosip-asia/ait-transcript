@@ -62,11 +62,6 @@ def check_adapter(get, csv_path: Path) -> None:
     else:
         check_roster_rows(get, rows)
 
-    first = rows[0]["id"]
-    for path in ("degrees", "transcript", "eligibility"):
-        assert get(f"/students/nobody/{path}")[0] == 404, path
-    assert get(f"/students/{first}/transcript?degreeId=other")[0] == 404
-    assert get(f"/students/{first}/eligibility?degreeId=other")[0] == 404
     # An unknown sub or recordId is a 404 on every /records path.
     for path in ("/records?sub=nobody&scope=any", "/records/nobody?scope=any", "/records/nobody/eligibility?scope=any"):
         assert get(path)[0] == 404, path
@@ -79,40 +74,21 @@ def check_edit(get, csv_path: Path) -> None:
     edited = "balance" if "balance" in rows[0] else "teamId"
     first = rows[0]["id"]
     original = csv_path.read_bytes()
-    paths = (f"/students/{first}/eligibility", f"/records/{first}/eligibility?scope=any")
+    path = f"/records/{first}/eligibility?scope=any"
     try:
-        before = get(paths[0])[1][edited]
+        before = get(path)[1][edited]
         assert before != "777.00"
         set_column(csv_path, first, edited, "777.00")
-        assert [get(path)[1][edited] for path in paths] == ["777.00", "777.00"]
+        assert get(path)[1][edited] == "777.00"
     finally:
         csv_path.write_bytes(original)
-    assert [get(path)[1][edited] for path in paths] == [before, before]
+    assert get(path)[1][edited] == before
 
 
 def check_transcript_rows(get, rows: list[dict]) -> None:
     assert len(rows) >= 7
     for row in rows:
         sub = row["id"]
-        status, body = get(f"/students/{sub}/degrees")
-        assert status == 200 and len(body) == 1, (sub, status, body)
-        assert body[0] == {"degreeId": sub, "level": row["level"], "degreeAwarded": row["degreeAwarded"],
-                           "dateGraduation": row["dateGraduation"]}, body
-
-        status, body = get(f"/students/{sub}/transcript?degreeId={sub}")
-        assert status == 200, (sub, status)
-        assert body["fullName"] == row["fullName"] and body["degreeId"] == sub and body["level"] == row["level"]
-        assert body["registrationNo"] == row["registrationNo"] and "balance" not in body and "courseList" not in body
-        assert isinstance(body["courses"], list) and body["courses"][0]["term"] and body["courses"][0]["courses"][0]["no"]
-        # Every other cell exactly as written, a multiline one included: the adapter neither escapes nor un-escapes.
-        verbatim = {k: v for k, v in row.items() if k not in {"id", "courses", "courseList", "holds", "conferralStatus", "balance"}}
-        assert body == {"degreeId": sub, **verbatim, "courses": json.loads(row["courses"])}, sub
-
-        status, body = get(f"/students/{sub}/eligibility?degreeId={sub}")
-        assert status == 200 and body == {"holds": json.loads(row["holds"]), "conferralStatus": row["conferralStatus"],
-                                          "balance": row["balance"]}, (sub, body)
-        assert get(f"/students/{sub}/eligibility")[0] == 200  # degreeId is optional: there is one degree per sub
-
         for scope in TRANSCRIPT_SCOPES:
             assert get(f"/records?sub={sub}&scope={scope}") == (200, [{
                 "recordId": sub, "level": row["level"], "degreeAwarded": row["degreeAwarded"],
@@ -121,6 +97,8 @@ def check_transcript_rows(get, rows: list[dict]) -> None:
             status, body = get(f"/records/{sub}?scope={scope}")
             assert status == 200 and "id" not in body and not set(ELIGIBILITY) & body.keys(), (sub, status, body)
             assert body["courseList"] == row["courseList"] and "\n" in body["courseList"], sub
+            assert isinstance(body["courses"], list) and body["courses"][0]["term"] and body["courses"][0]["courses"][0]["no"]
+            # Every other cell exactly as written, a multiline one included: the adapter neither escapes nor un-escapes.
             verbatim = {k: v for k, v in row.items() if k not in {"id", "courses", *ELIGIBILITY}}
             assert body == {**verbatim, "courses": json.loads(row["courses"])}, sub
             assert get(f"/records/{sub}/eligibility?scope={scope}") == (200, {
@@ -129,14 +107,11 @@ def check_transcript_rows(get, rows: list[dict]) -> None:
 
 
 def check_roster_rows(get, rows: list[dict]) -> None:
-    """A roster (the hackathon installation): the degree list names the row, and the record and the eligibility
-    paths both serve the row's columns."""
+    """A roster (the hackathon installation): the list names the row, and the record and the eligibility paths both
+    serve the row's columns."""
     for row in rows:
         sub = row["id"]
         columns = {k: v for k, v in row.items() if k != "id"}
-        assert get(f"/students/{sub}/degrees") == (200, [{"degreeId": sub}]), sub
-        assert get(f"/students/{sub}/transcript?degreeId={sub}") == (200, {"degreeId": sub, **columns}), sub
-        assert get(f"/students/{sub}/eligibility?degreeId={sub}") == (200, columns), sub
         for scope in ROSTER_SCOPES:  # the roster has no degree columns, so the list names the row only
             assert get(f"/records?sub={sub}&scope={scope}") == (200, [{"recordId": sub}]), (sub, scope)
             assert get(f"/records/{sub}?scope={scope}") == (200, columns), (sub, scope)
@@ -177,10 +152,11 @@ def test_mock_adapter_on_the_hackathon_roster() -> None:
         get = host_get(csv_path)
         check_adapter(get, csv_path)
         check_edit(get, csv_path)
-        assert get("/students/hack-2026-0001/transcript")[1]["teamName"] == "Sandbox Pioneers"
-        assert get("/students/hack-2026-0002/transcript")[1]["teamName"] == 'Chain "Gang"\nof two'
+        scope = ROSTER_SCOPES[0]
+        assert get(f"/records/hack-2026-0001?scope={scope}")[1]["teamName"] == "Sandbox Pioneers"
+        assert get(f"/records/hack-2026-0002?scope={scope}")[1]["teamName"] == 'Chain "Gang"\nof two'
         # The participant without a team is on the roster, with an empty teamId.
-        assert get("/students/hack-2026-0003/eligibility")[1]["teamId"] == ""
+        assert get(f"/records/hack-2026-0003/eligibility?scope={scope}")[1]["teamId"] == ""
 
 
 OPENAPI = Path(__file__).parent / "openapi.yaml"
@@ -336,7 +312,7 @@ def test_the_contract_mode_fails_an_adapter_that_breaks_the_contract() -> None:
             "a null claim": broken(record, lambda s, b: (s, {**b, "notes": None})),
             "a course without a grade": broken(record, lambda s, b: (s, {**b, "courses": [
                 {"term": "T", "courses": [{"no": "CS601", "title": "A", "credits": "3"}]}]})),
-            "a list entry without recordId": broken("/records?sub=ait", lambda s, b: (s, [{"degreeId": "x"}])),
+            "a list entry without recordId": broken("/records?sub=ait", lambda s, b: (s, [{"level": "Masters"}])),
             "an empty list for a known sub": broken("/records?sub=ait", lambda s, b: (s, [])),
             "a 200 for an unknown sub": broken("/records?sub=no-such", lambda s, b: (200, [{"recordId": "x"}])),
         }
