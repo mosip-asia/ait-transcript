@@ -4,6 +4,7 @@ import io.mosip.certify.api.exception.DataProviderExchangeException;
 import io.mosip.certify.api.spi.DataProviderPlugin;
 import java.io.IOException;
 import java.net.URI;
+import java.net.URISyntaxException;
 import java.net.URLEncoder;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -11,6 +12,7 @@ import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -23,8 +25,8 @@ import org.springframework.stereotype.Component;
 
 /**
  * Certify's data provider for the Issuer. For each credential request it lists the token's records at the Adapter
- * ({@code GET /records}), asks the Gateway whether the first one passes its Checklist ({@code POST /evaluations}),
- * fetches that record ({@code GET /records/{recordId}}) and hands it to Certify shaped for its quoted Velocity
+ * ({@code GET /records}), asks the Gateway whether the first one passes its Checklist ({@code POST /evaluations}) when
+ * the gate is on ({@code mosip.certify.gateway.enabled}), fetches that record ({@code GET /records/{recordId}}) and hands it to Certify shaped for its quoted Velocity
  * template, with the token's {@code sub} and {@code client_id} added as trace keys for the ledger. It knows no claim
  * name, maps no scope, and makes no call until Certify asks for data, so Certify starts whatever is down.
  */
@@ -69,27 +71,88 @@ public class IssuerDataProviderPlugin implements DataProviderPlugin {
         }
     }
 
-    private final Peer adapter;
-    private final Peer gateway;
-    private final String gatewayAuthorization;
+    /** The Approval gate: the Gateway's {@code POST /evaluations}, asked with the shared bearer secret. */
+    private record Gate(Peer gateway, String authorization) {
+        /** Any 2xx passes; any other answer is refused with its {@code error}. Fails closed. */
+        void evaluate(String sub, String scope, String recordId) throws DataProviderExchangeException {
+            String body = new JSONObject(Map.of("sub", sub, "scope", scope, "recordId", recordId)).toString();
+            HttpResponse<String> response = gateway.send(HttpRequest.newBuilder(URI.create(gateway.base() + "/evaluations"))
+                    .header("Authorization", authorization)
+                    .header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString(body)));
+            if (response.statusCode() / 100 != 2) {
+                String code = errorCode(response.body());
+                log.warn("the Gateway answered {} with error {}", response.statusCode(), code);
+                throw new DataProviderExchangeException(code);
+            }
+        }
+    }
 
+    /** What {@code mosip.certify.gateway.url} must say when the gate is off. */
+    static final String NO_GATEWAY = "NO GATEWAY";
+
+    private final Peer adapter;
+    /** Empty when {@code mosip.certify.gateway.enabled} is false: every record the Adapter serves is issued. */
+    private final Optional<Gate> gate;
+
+    /**
+     * @throws IllegalArgumentException for a switch that is missing, not {@code true} or {@code false}, or
+     *     contradicts the Gateway's URL (on with {@code NO GATEWAY} or no {@code http(s)} URL, off with anything but
+     *     {@code NO GATEWAY}), or the gate on without a token; Certify then does not start
+     */
     public IssuerDataProviderPlugin(
             @Value("${mosip.certify.adapter.url}") String adapterUrl,
             @Value("${mosip.certify.adapter.connect-timeout-ms:2000}") long adapterConnectTimeoutMs,
             @Value("${mosip.certify.adapter.read-timeout-ms:10000}") long adapterReadTimeoutMs,
-            @Value("${mosip.certify.gateway.url}") String gatewayUrl,
-            @Value("${mosip.certify.gateway.auth-token}") String gatewayAuthToken,
+            @Value("${mosip.certify.gateway.enabled:}") String gatewayEnabled,
+            @Value("${mosip.certify.gateway.url:}") String gatewayUrl,
+            @Value("${mosip.certify.gateway.auth-token:}") String gatewayAuthToken,
             @Value("${mosip.certify.gateway.connect-timeout-ms:2000}") long gatewayConnectTimeoutMs,
             @Value("${mosip.certify.gateway.read-timeout-ms:10000}") long gatewayReadTimeoutMs) {
         this.adapter = Peer.of(adapterUrl, adapterConnectTimeoutMs, adapterReadTimeoutMs, ADAPTER_ERROR);
-        this.gateway = Peer.of(gatewayUrl, gatewayConnectTimeoutMs, gatewayReadTimeoutMs, GATEWAY_ERROR);
-        this.gatewayAuthorization = "Bearer " + gatewayAuthToken;
-        log.info("IssuerDataProviderPlugin selected: records from the Adapter at {}, the gate at the Gateway {}",
-                adapter.base(), gateway.base());
+        boolean enabled = switchSetting(gatewayEnabled);
+        if (enabled) {
+            if (!isHttpUrl(gatewayUrl)) {
+                throw new IllegalArgumentException("mosip.certify.gateway.enabled is true, so mosip.certify.gateway.url "
+                        + "must be an http(s) URL, not '" + gatewayUrl + "'");
+            }
+            if (gatewayAuthToken == null || gatewayAuthToken.isEmpty()) {
+                throw new IllegalArgumentException(
+                        "mosip.certify.gateway.enabled is true, so mosip.certify.gateway.auth-token is required");
+            }
+            this.gate = Optional.of(new Gate(Peer.of(gatewayUrl, gatewayConnectTimeoutMs, gatewayReadTimeoutMs,
+                    GATEWAY_ERROR), "Bearer " + gatewayAuthToken));
+        } else {
+            if (!NO_GATEWAY.equals(gatewayUrl)) {
+                throw new IllegalArgumentException("mosip.certify.gateway.enabled is false, so mosip.certify.gateway.url "
+                        + "must be '" + NO_GATEWAY + "', not '" + gatewayUrl + "'");
+            }
+            this.gate = Optional.empty();
+        }
+        log.info("IssuerDataProviderPlugin selected: gateway.enabled={}, Gateway {}, Adapter {}", enabled,
+                gate.map(g -> g.gateway().base()).orElse(NO_GATEWAY), adapter.base());
+    }
+
+    /** {@code mosip.certify.gateway.enabled}: exactly {@code true} or {@code false}, with no default. */
+    private static boolean switchSetting(String value) {
+        if ("true".equals(value) || "false".equals(value)) {
+            return Boolean.parseBoolean(value);
+        }
+        throw new IllegalArgumentException("mosip.certify.gateway.enabled is required and must be true or false, not '"
+                + value + "'");
+    }
+
+    private static boolean isHttpUrl(String value) {
+        try {
+            URI uri = new URI(value);
+            return ("http".equals(uri.getScheme()) || "https".equals(uri.getScheme())) && uri.getHost() != null;
+        } catch (URISyntaxException | NullPointerException e) {
+            return false;
+        }
     }
 
     /**
-     * The token's first record, after the Gateway passed it, shaped for Certify's template and extended with
+     * The token's first record, after the Gateway passed it when the gate is on, shaped for Certify's template and extended with
      * {@code tokenSub} and {@code tokenClientId}.
      *
      * @throws DataProviderExchangeException {@code invalid_access_token} for claims without {@code sub}, before any
@@ -103,7 +166,9 @@ public class IssuerDataProviderPlugin implements DataProviderPlugin {
         }
         String scope = claims.get("scope") instanceof String s ? s : "";
         String recordId = firstRecordId(sub, scope);
-        evaluate(sub, scope, recordId);
+        if (gate.isPresent()) {
+            gate.get().evaluate(sub, scope, recordId);
+        }
         JSONObject record = record(recordId, scope);
         JSONObject data = shape(record);
         data.put("tokenSub", sub);
@@ -125,20 +190,6 @@ public class IssuerDataProviderPlugin implements DataProviderPlugin {
             throw new DataProviderExchangeException(ADAPTER_ERROR);
         }
         return id;
-    }
-
-    /** {@code POST /evaluations}: any 2xx passes; any other answer is refused with its {@code error}. Fails closed. */
-    private void evaluate(String sub, String scope, String recordId) throws DataProviderExchangeException {
-        String body = new JSONObject(Map.of("sub", sub, "scope", scope, "recordId", recordId)).toString();
-        HttpResponse<String> response = gateway.send(HttpRequest.newBuilder(URI.create(gateway.base() + "/evaluations"))
-                .header("Authorization", gatewayAuthorization)
-                .header("Content-Type", "application/json")
-                .POST(HttpRequest.BodyPublishers.ofString(body)));
-        if (response.statusCode() / 100 != 2) {
-            String code = errorCode(response.body());
-            log.warn("the Gateway answered {} with error {}", response.statusCode(), code);
-            throw new DataProviderExchangeException(code);
-        }
     }
 
     /** {@code GET /records/{recordId}?scope=}: the record, a JSON object with no forbidden key. */

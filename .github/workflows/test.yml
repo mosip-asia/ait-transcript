@@ -62,17 +62,21 @@ jobs:
           done
           exit "$status"
 
-  # One fresh runner per installation: Certify's seed runs only on a fresh database, so nothing is wiped between them.
+  # One fresh runner per installation and switch setting: Certify's seed runs only on a fresh database, so nothing is
+  # wiped between them. The gate off runs the no-Gateway form, which sets the switch off in Certify's environment;
+  # COMPOSE_FILE (relative to vc-stack/) names the form every script runs, so no committed file is edited.
   stack-smoke:
-    name: Stack smoke (Docker Compose, ${{ matrix.installation }})
+    name: Stack smoke (Docker Compose, ${{ matrix.installation }}, gate ${{ matrix.gate }})
     runs-on: ubuntu-latest
     timeout-minutes: 40
     strategy:
       fail-fast: false
       matrix:
         installation: [ait, hackathon]
+        gate: ['on', 'off']
     env:
-      COMPOSE: docker compose -f vc-stack/compose.yaml
+      COMPOSE_FILE: ${{ matrix.gate == 'on' && 'compose.yaml' || 'compose-no-gateway.yaml' }}
+      COMPOSE: docker compose -f vc-stack/${{ matrix.gate == 'on' && 'compose.yaml' || 'compose-no-gateway.yaml' }}
       INSTALLATION: ${{ matrix.installation }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -93,14 +97,14 @@ jobs:
       - uses: actions/upload-artifact@v5
         if: always()
         with:
-          name: smoke-credential-${{ matrix.installation }}-${{ github.sha }}
+          name: smoke-credential-${{ matrix.installation }}-gate-${{ matrix.gate }}-${{ github.sha }}
           path: .demo-state/smoke-credential-*.json
           if-no-files-found: ignore
           include-hidden-files: true
           retention-days: 30
 
-      # context_refresh.sql moves the ait-transcript row only.
-      - if: matrix.installation == 'ait'
+      # context_refresh.sql moves the ait-transcript row only. It runs its own Postgres, so one leg is enough.
+      - if: matrix.installation == 'ait' && matrix.gate == 'on'
         run: python3 vc-stack/test_context_refresh.py
 
       # The stack writes only git-ignored files; a run that changes a tracked one puts a machine's key, certificate or
@@ -118,7 +122,7 @@ jobs:
       - uses: actions/upload-artifact@v5
         if: failure()
         with:
-          name: stack-logs-${{ matrix.installation }}
+          name: stack-logs-${{ matrix.installation }}-gate-${{ matrix.gate }}
           path: stack-logs/
 
       - name: Tear down
@@ -126,17 +130,20 @@ jobs:
         run: $COMPOSE down -v --remove-orphans
 
   # The Issuer and the mock Adapter alone (vc-stack/issuer-dev.yaml), as issuer-dev runs them: demo/ and verify/ are
-  # down, so there is no Keycloak and no credential is issued (stack-smoke does that). One fresh runner per installation.
+  # down, so there is no Keycloak and no credential is issued (stack-smoke does that). One fresh runner per installation
+  # and switch setting; the gate off runs issuer-dev-no-gateway.yaml, named by COMPOSE_FILE as in stack-smoke.
   issuer-smoke:
-    name: Issuer-only smoke (Docker Compose, ${{ matrix.installation }})
+    name: Issuer-only smoke (Docker Compose, ${{ matrix.installation }}, gate ${{ matrix.gate }})
     runs-on: ubuntu-latest
     timeout-minutes: 25
     strategy:
       fail-fast: false
       matrix:
         installation: [ait, hackathon]
+        gate: ['on', 'off']
     env:
-      COMPOSE: docker compose -f vc-stack/issuer-dev.yaml
+      COMPOSE_FILE: ${{ matrix.gate == 'on' && 'issuer-dev.yaml' || 'issuer-dev-no-gateway.yaml' }}
+      COMPOSE: docker compose -f vc-stack/${{ matrix.gate == 'on' && 'issuer-dev.yaml' || 'issuer-dev-no-gateway.yaml' }}
       INSTALLATION: ${{ matrix.installation }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -185,7 +192,7 @@ jobs:
       - uses: actions/upload-artifact@v5
         if: failure()
         with:
-          name: issuer-stack-logs-${{ matrix.installation }}
+          name: issuer-stack-logs-${{ matrix.installation }}-gate-${{ matrix.gate }}
           path: stack-logs/
 
       - name: Tear down

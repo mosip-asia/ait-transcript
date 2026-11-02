@@ -1,17 +1,37 @@
 # Sourced by smoke.sh and issuer-smoke.sh, from vc-stack/ after installation.sh: the checks the Issuer passes with the
 # mock Adapter beside it, and the helpers both scripts use. `docker compose` finds the stack the caller runs:
-# compose.yaml by default, issuer-dev.yaml when the caller exports COMPOSE_FILE. The caller sets REPO_ROOT and FIXTURES
-# (installations/$INSTALLATION/smoke.json); issuer_checks leaves Certify's issuer metadata in issuer_json.
+# compose.yaml by default, or the file COMPOSE_FILE names (issuer-dev.yaml, or a no-Gateway form). The caller sets
+# REPO_ROOT and FIXTURES (installations/$INSTALLATION/smoke.json); issuer_checks leaves Certify's issuer metadata in
+# issuer_json. GATE_ENABLED (true or false) and GATE_URL are the plugin's switch as Certify runs it.
 
 fail() { echo "FAIL: $*" >&2; exit 1; }
 ok() { echo "OK: $*"; }
 # retry TRIES CMD...: runs CMD every 2 s until it succeeds, at most TRIES times.
 retry() { local tries=$1; shift; for _ in $(seq 1 "$tries"); do "$@" >/dev/null 2>&1 && return 0; sleep 2; done; return 1; }
-# in_network URL: the body of a GET from inside the Docker network, through the running Gateway's container.
+# in_network URL: the body of a GET from inside the Docker network, through the mock Adapter's container, which every
+# stack form runs.
 in_network() {
-  docker compose exec -T gateway python -c \
-    "import sys, httpx; r = httpx.get(sys.argv[1], timeout=5); r.raise_for_status(); print(r.text)" "$1"
+  docker compose exec -T adapter python -c \
+    "import sys, urllib.request; print(urllib.request.urlopen(sys.argv[1], timeout=5).read().decode())" "$1"
 }
+
+# switch_setting VARIABLE PROPERTY: the value Certify runs with, its Compose environment's VARIABLE (a no-Gateway form
+# or vc-stack/.env sets it), else the installation's PROPERTY.
+switch_setting() {
+  local from_env
+  from_env=$(docker compose config --format json | jq -r --arg v "$1" '.services.certify.environment[$v] // empty') \
+    || fail "docker compose config failed: cannot read Certify's environment"
+  if [[ -n "$from_env" ]]; then
+    echo "$from_env"
+  else
+    tr -d '\r' <"$INSTALLATION_DIR/certify-installation.properties" | grep "^$2=" | cut -d= -f2-
+  fi
+}
+GATE_ENABLED=$(switch_setting MOSIP_CERTIFY_GATEWAY_ENABLED mosip.certify.gateway.enabled)
+GATE_URL=$(switch_setting MOSIP_CERTIFY_GATEWAY_URL mosip.certify.gateway.url)
+[[ "$GATE_ENABLED" == true || "$GATE_ENABLED" == false ]] \
+  || fail "mosip.certify.gateway.enabled must be true or false (got: ${GATE_ENABLED:-<unset>})"
+echo "The plugin's gate: enabled=$GATE_ENABLED, Gateway $GATE_URL"
 
 # check_contexts BASE NAME: BASE serves the context every credential configuration names under /contexts/, as
 # committed under vc-lab/contexts/. The path comes from the configuration's @context, whatever host the seed names.
@@ -33,27 +53,45 @@ check_contexts() {
 
 issuer_checks() {
   local want_configs got_configs i config scope want_claims got_claims eligible adapter_down_rc
-  # 1. Certify started with the Data-provider plugin selected, configured by its nine keys and nothing else, its token
-  # the Gateway's.
-  local certify_log certify_props plugin_keys want_keys
+  # 1. Certify started with the Data-provider plugin selected and the gate as configured. The installation's
+  # properties carry the plugin's ten keys and no other; the plugin reads all ten with the gate on, and with it off
+  # all but the token and the Gateway's timeouts, so Certify's environment may override only those it reads. With the
+  # gate on, its token is the Gateway's.
+  local certify_log certify_props plugin_keys all_keys want_keys env_keys unread
   certify_log=$(docker compose logs --no-color certify 2>&1) || fail "cannot read the certify log"
   ! grep -qE 'NoSuchBeanDefinitionException|NoUniqueBeanDefinitionException' <<<"$certify_log" \
     || fail "missing-bean or duplicate-bean error in the certify log"
-  grep -q 'IssuerDataProviderPlugin selected: records from the Adapter at http' <<<"$certify_log" \
-    || fail "the certify log does not name IssuerDataProviderPlugin and its Adapter"
-  ok "Certify started with IssuerDataProviderPlugin"
+  grep -qF "IssuerDataProviderPlugin selected: gateway.enabled=$GATE_ENABLED, Gateway ${GATE_URL%/}, Adapter http" <<<"$certify_log" \
+    || fail "the certify log does not name IssuerDataProviderPlugin with gateway.enabled=$GATE_ENABLED, the Gateway $GATE_URL and its Adapter"
+  ok "Certify started with IssuerDataProviderPlugin, gateway.enabled=$GATE_ENABLED"
   certify_props=$(tr -d '\r' <"$INSTALLATION_DIR/certify-installation.properties")
   plugin_keys=$( (grep -oE '^mosip\.certify\.((adapter|gateway)\.[a-z-]+|integration\.(data-provider-plugin|scan-base-package))=' <<<"$certify_props" || true) \
     | tr -d = | LC_ALL=C sort)
-  want_keys=$(printf '%s\n' mosip.certify.adapter.{connect-timeout-ms,read-timeout-ms,url} \
-    mosip.certify.gateway.{auth-token,connect-timeout-ms,read-timeout-ms,url} \
+  all_keys=$(printf '%s\n' mosip.certify.adapter.{connect-timeout-ms,read-timeout-ms,url} \
+    mosip.certify.gateway.{auth-token,connect-timeout-ms,enabled,read-timeout-ms,url} \
     mosip.certify.integration.{data-provider-plugin,scan-base-package} | LC_ALL=C sort)
-  [[ "$plugin_keys" == "$want_keys" ]] || fail "Certify's plugin keys must be the plugin's nine (got: $plugin_keys)"
+  if [[ "$GATE_ENABLED" == true ]]; then
+    want_keys=$all_keys
+  else
+    want_keys=$(grep -vE '^mosip\.certify\.gateway\.(auth-token|connect-timeout-ms|read-timeout-ms)$' <<<"$all_keys")
+  fi
+  [[ "$plugin_keys" == "$all_keys" ]] || fail "Certify's plugin keys must be the plugin's ten (got: $plugin_keys)"
+  # MOSIP_CERTIFY_GATEWAY_AUTH_TOKEN is the property mosip.certify.gateway.auth-token, by Spring's relaxed binding.
+  env_keys=$(docker compose config --format json | jq -r '.services.certify.environment | to_entries[]
+    | select(.value != null) | .key | ascii_downcase | select(test("^mosip_certify_(adapter|gateway)_"))
+    | capture("^mosip_certify_(?<peer>[a-z]+)_(?<key>.+)$") | "mosip.certify.\(.peer).\(.key | gsub("_"; "-"))"' \
+    | LC_ALL=C sort) || fail "docker compose config failed: cannot read Certify's environment"
+  unread=$(LC_ALL=C comm -23 <(echo "$env_keys") <(echo "$want_keys") | awk 'NF')
+  [[ -z "$unread" ]] || fail "with gateway.enabled=$GATE_ENABLED Certify's environment sets plugin keys the plugin does not read: $unread"
   ! grep -q '^mosip\.certify\.mock\.data-provider\.' <<<"$certify_props" || fail "the CSV plugin's keys are still in Certify's properties"
-  [[ "$(grep '^mosip.certify.gateway.auth-token=' <<<"$certify_props")" == \
-     "mosip.certify.gateway.auth-token=$(tr -d '\r' <"$INSTALLATION_DIR/gateway.env" | grep '^GATEWAY_AUTH_TOKEN=' | cut -d= -f2-)" ]] \
-    || fail "mosip.certify.gateway.auth-token must equal GATEWAY_AUTH_TOKEN in gateway.env"
-  ok "Certify's plugin configuration is the nine keys; its token is the Gateway's"
+  if [[ "$GATE_ENABLED" == true ]]; then
+    [[ "$(grep '^mosip.certify.gateway.auth-token=' <<<"$certify_props")" == \
+       "mosip.certify.gateway.auth-token=$(tr -d '\r' <"$INSTALLATION_DIR/gateway.env" | grep '^GATEWAY_AUTH_TOKEN=' | cut -d= -f2-)" ]] \
+      || fail "mosip.certify.gateway.auth-token must equal GATEWAY_AUTH_TOKEN in gateway.env"
+    ok "Certify's plugin configuration is the ten keys; its token is the Gateway's"
+  else
+    ok "Certify's plugin configuration is the ten keys, of which the gate off reads $(wc -l <<<"$want_keys")"
+  fi
 
   # 2. Certify signs as its live key: did.json's id (a credential's issuer) is the did:key of the key it publishes, and
   # every credential configuration's did_url (a credential's verificationMethod) is that DID. A fresh keystore holds a
@@ -91,6 +129,14 @@ issuer_checks() {
 
   # 4. certify-nginx, the Issuer's entry point, serves the contexts from the VDR.
   check_contexts http://localhost:9091 certify-nginx
+
+  # With the gate off the stack form leaves the Gateway out: no gateway service runs, and nothing below asks one.
+  if [[ "$GATE_ENABLED" == false ]]; then
+    ! docker compose config --services | grep -qx gateway || fail "the gate is off, but the stack form defines a gateway service"
+    [[ -z "$(docker ps -q --filter name='^gateway$')" ]] || fail "the gate is off, but a gateway container is running"
+    ok "the gate is off and no gateway service is running"
+    return 0
+  fi
 
   # 5. The Gateway's POST /evaluations answers every persona of smoke.json with the mock Adapter beside it (the live
   # mode of gateway/tests/test_evaluations.py). Run from the gateway image, whose environment carries the token.

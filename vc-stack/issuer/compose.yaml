@@ -50,6 +50,10 @@ services:
       # The plugin's Adapter, passed only when .env sets it; unset, the installation's properties fall back to the
       # mock Adapter.
       - CERTIFY_ADAPTER_URL
+      # The plugin's switch, passed only when .env sets it (false with NO GATEWAY, or true with a Gateway URL); unset,
+      # the installation's properties keep the gate on at http://gateway:8000. The no-Gateway stack forms set it off.
+      - MOSIP_CERTIFY_GATEWAY_ENABLED
+      - MOSIP_CERTIFY_GATEWAY_URL
     # The Authorization Server: the installation's settings, each set per environment in .env. With the stand-in,
     # Keycloak's --hostname-url=http://keycloak:8080 (see keycloak-server service) makes every token it issues carry
     # iss=http://keycloak:8080/realms/<realm>, regardless of which URL the browser used to log in (that's rewritten

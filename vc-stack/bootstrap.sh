@@ -398,7 +398,8 @@ compose_up() {
   if [[ "$MODE" == "a" ]]; then
     docker compose up -d database certify certify-nginx mimoto-service inji-web verify-service verify-ui
     # mimoto-service brought up its config server, public-gateway, and vdr behind it; keycloak-* stay down.
-    docker compose up -d adapter gateway
+    # The Gateway too, unless the stack form leaves it out (compose-no-gateway.yaml).
+    docker compose up -d adapter $(docker compose config --services | grep -x gateway || true)
     ensure_certify_nginx_up
     docker compose restart mimoto-service inji-web verify-ui
     ok "started Mode A services (keycloak-* skipped)"

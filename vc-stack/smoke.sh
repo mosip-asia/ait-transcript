@@ -4,6 +4,8 @@
 # the Mimoto issuer id, set by installation.sh, the Authorization Server settings, which must name the stand-in, and smoke.json: a list with one entry per credential type, each with the
 # credential configuration, its scope, the eligible persona (or a list of them), each refused persona with the check it fails, the claims
 # to tamper and, optionally, the Mimoto PDF template). Every issued, refused and tampered case runs for every type.
+# Without the Gateway (COMPOSE_FILE=compose-no-gateway.yaml, as run-demo.sh took it), the refused personas are issued
+# too, the unknown one is still no_record, and the Adapter stopped is adapter_error instead of the Gateway's checks.
 set -euo pipefail
 
 STACK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -24,6 +26,7 @@ load_type() {
   # One eligible persona, or a list of them; ${ELIGIBLE[0]} is the first.
   mapfile -t ELIGIBLE < <(fixture "$entry.eligible | if type == \"array\" then .[] else . end")
   mapfile -t REFUSED < <(fixture "$entry.refused | keys_unsorted[]")
+  UNKNOWN=$(fixture "$entry.unknown")
   mapfile -t TAMPER < <(fixture "$entry.tamper[]")
   MIMOTO_TEMPLATE=$(fixture "$entry.mimotoTemplate // empty")
   # The context under /contexts/ that the configuration names, which every credential issued for it must carry.
@@ -51,13 +54,15 @@ ok "Certify OID4VCI authorization_servers name the configured issuer $AUTH_SERVE
 check_contexts http://localhost:9098 "the public gateway"
 
 csv_file="$INSTALLATION_DIR/adapter/student_identity_data.csv"
-kc_users=$(jq -r '.users[].username' "$INSTALLATION_DIR/keycloak-realm.json" | sorted_lines)
+# Every realm user but the smoke's unknown persona, which signs in and has no record.
+kc_users=$(jq -r --slurpfile smoke "$FIXTURES" '[$smoke[0][].unknown] as $unknown | .users[].username
+  | select(. as $u | $unknown | index($u) | not)' "$INSTALLATION_DIR/keycloak-realm.json" | sorted_lines)
 csv_ids=$(python3 -c "import csv, sys; from pathlib import Path
 p=Path(sys.argv[1])
 with p.open(newline='', encoding='utf-8') as f:
   print('\n'.join(sorted(r['id'] for r in csv.DictReader(f))))" "$csv_file")
-[[ "$kc_users" == "$csv_ids" ]] || fail "Keycloak usernames must match CSV id column row-for-row"
-ok "Keycloak users align with CSV ids"
+[[ "$kc_users" == "$csv_ids" ]] || fail "Keycloak usernames but the unknown persona's must match CSV id column row-for-row"
+ok "Keycloak users align with CSV ids, and the unknown persona signs in with no row"
 
 for ((i = 0; i < TYPE_COUNT; i++)); do
   load_type "$i"
@@ -134,7 +139,7 @@ for ((i = 0; i < TYPE_COUNT; i++)); do
   ok "the mock adapter passes the Adapter contract for $SCOPE"
 done
 
-load_type 0  # the Gateway-down check below runs for the first type
+load_type 0  # the Gateway-down (gate on) or Adapter-down (gate off) check below runs for the first type
 
 # Scripted issuance, then verification with a tampered copy, inside the Docker network (see the script's docstring).
 issue_and_verify() {
@@ -157,9 +162,12 @@ smoke_client_id=$(jq -r '.clients[] | select(.clientId == "smoke") | .protocolMa
 [[ -n "$smoke_client_id" ]] || fail "the realm's smoke client sets no client_id claim"
 for ((i = 0; i < TYPE_COUNT; i++)); do
   load_type "$i"
-  # One file per type, kept as a CI artifact; with several eligible personas it holds the last one's credential.
+  # One file per type, kept as a CI artifact; with several issued personas it holds the last one's credential.
   smoke_vc=".demo-state/smoke-credential-$CONFIG.json"
-  for persona in "${ELIGIBLE[@]}"; do
+  # With the gate off nothing evaluates the Checklist, so the personas it refuses are issued too.
+  issued=("${ELIGIBLE[@]}")
+  [[ "$GATE_ENABLED" == true ]] || issued+=("${REFUSED[@]}")
+  for persona in "${issued[@]}"; do
     rows_before=$(ledger_rows) || fail "cannot count certify.ledger"
     issue_and_verify issue "$INSTALLATION" "$persona" "$SCOPE" "$smoke_vc" \
       || fail "scripted issuance of $CONFIG to $persona (vc-stack/issue_and_verify.py issue)"
@@ -177,33 +185,50 @@ for ((i = 0; i < TYPE_COUNT; i++)); do
     ok "the issuance of $CONFIG to $persona added one ledger row indexing tokenSub and tokenClientId; the credential carries neither"
   done
 
-  # Each persona the Gateway's checklist refuses gets the OpenID4VCI error body with its code.
-  for persona in "${REFUSED[@]}"; do
-    issue_and_verify refused "$INSTALLATION" "$persona" "$SCOPE" checklist_failed \
-      || fail "refused persona $persona for $CONFIG through Certify (vc-stack/issue_and_verify.py refused ... checklist_failed)"
-  done
+  # With the gate on, each persona the Gateway's checklist refuses gets the OpenID4VCI error body with its code.
+  if [[ "$GATE_ENABLED" == true ]]; then
+    for persona in "${REFUSED[@]}"; do
+      issue_and_verify refused "$INSTALLATION" "$persona" "$SCOPE" checklist_failed \
+        || fail "refused persona $persona for $CONFIG through Certify (vc-stack/issue_and_verify.py refused ... checklist_failed)"
+    done
+  fi
+  # The unknown persona signs in, but the Adapter has no record of it: no_record, with the gate on or off.
+  issue_and_verify refused "$INSTALLATION" "$UNKNOWN" "$SCOPE" no_record \
+    || fail "unknown persona $UNKNOWN for $CONFIG through Certify (vc-stack/issue_and_verify.py refused ... no_record)"
   rows_refused=$(ledger_rows) || fail "cannot count certify.ledger"
   [[ "$rows_refused" == "$rows_issued" ]] \
     || fail "the refused personas of $CONFIG must add no certify.ledger row (before: $rows_issued, after: $rows_refused)"
   ok "the refused personas of $CONFIG added no ledger row"
 done
 
-# With the Gateway down, Certify still starts (the plugin calls nothing at startup) and a credential request is
-# gateway_error. The Gateway is started again whether or not the checks pass, so later steps still see it.
-docker compose stop gateway >/dev/null || fail "cannot stop the Gateway"
-docker compose restart certify >/dev/null || fail "cannot restart certify"
-certify_up=0
-retry 90 curl -sf http://localhost:9091/.well-known/openid-credential-issuer && certify_up=1
-gateway_down_rc=1
-if [[ "$certify_up" == 1 ]]; then
-  gateway_down_rc=0
-  issue_and_verify refused "$INSTALLATION" "${ELIGIBLE[0]}" "$SCOPE" gateway_error || gateway_down_rc=$?
+if [[ "$GATE_ENABLED" == true ]]; then
+  # With the Gateway down, Certify still starts (the plugin calls nothing at startup) and a credential request is
+  # gateway_error. The Gateway is started again whether or not the checks pass, so later steps still see it.
+  docker compose stop gateway >/dev/null || fail "cannot stop the Gateway"
+  docker compose restart certify >/dev/null || fail "cannot restart certify"
+  certify_up=0
+  retry 90 curl -sf http://localhost:9091/.well-known/openid-credential-issuer && certify_up=1
+  gateway_down_rc=1
+  if [[ "$certify_up" == 1 ]]; then
+    gateway_down_rc=0
+    issue_and_verify refused "$INSTALLATION" "${ELIGIBLE[0]}" "$SCOPE" gateway_error || gateway_down_rc=$?
+  fi
+  docker compose start gateway >/dev/null || fail "cannot restart the Gateway"
+  [[ "$certify_up" == 1 ]] || fail "Certify did not start while the Gateway was down"
+  [[ "$gateway_down_rc" == 0 ]] || fail "with the Gateway down a credential request must be refused with gateway_error"
+  retry 30 in_network http://gateway:8000/docs || fail "the Gateway did not answer again after restart"
+  ok "Certify starts with the Gateway down and then answers gateway_error; the Gateway is back"
+else
+  # With the gate off the Adapter is the plugin's only peer: stopped, a credential request is adapter_error. It is
+  # started again whether or not the check passes, and answers again before the next step.
+  docker compose stop adapter >/dev/null || fail "cannot stop the adapter"
+  adapter_down_rc=0
+  issue_and_verify refused "$INSTALLATION" "${ELIGIBLE[0]}" "$SCOPE" adapter_error || adapter_down_rc=$?
+  docker compose start adapter >/dev/null || fail "cannot restart the adapter"
+  [[ "$adapter_down_rc" == 0 ]] || fail "with the gate off and the Adapter down a credential request must be refused with adapter_error"
+  retry 30 in_network http://adapter:8000/docs || fail "the adapter did not answer again after restart"
+  ok "with the gate off and the Adapter down a credential request is adapter_error; the adapter is back"
 fi
-docker compose start gateway >/dev/null || fail "cannot restart the Gateway"
-[[ "$certify_up" == 1 ]] || fail "Certify did not start while the Gateway was down"
-[[ "$gateway_down_rc" == 0 ]] || fail "with the Gateway down a credential request must be refused with gateway_error"
-retry 30 in_network http://gateway:8000/docs || fail "the Gateway did not answer again after restart"
-ok "Certify starts with the Gateway down and then answers gateway_error; the Gateway is back"
 
 stack_logs=$(docker compose logs --no-color certify verify-service 2>&1) || fail "cannot read the certify and verify-service logs"
 context_warnings=$(grep -E 'Cannot load context|is not an absolute IRI nor @json' <<<"$stack_logs" | head -5 || true)

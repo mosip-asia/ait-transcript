@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Start the full AIT Transcript VC demo: CSV sync, Inji stack, demo app (all Docker).
 # INSTALLATION (environment, else vc-stack/.env, else the git-ignored vc-stack/.installation marker) names the installations/ directory: INSTALLATION=ait ./run-demo.sh
+# Without the Gateway: COMPOSE_FILE=compose-no-gateway.yaml ./run-demo.sh (relative to vc-stack/; smoke.sh takes the same).
 set -euo pipefail
 
 for bin in docker jq curl awk; do
@@ -19,7 +20,8 @@ cd "$STACK"
 
 # The generators run as the host user, so the files they write stay the host's to edit and regenerate.
 echo "==> Regenerate Certify CSV from data/students.json"
-docker compose build demo-app adapter gateway
+# Every image the stack form builds: demo-app, adapter, and gateway unless COMPOSE_FILE names a no-Gateway form.
+docker compose build
 docker compose run --rm --no-deps --user "$(id -u):$(id -g)" demo-app python data/generate_csv.py
 
 echo "==> Render mimoto-issuers-config.json from the installation's template"

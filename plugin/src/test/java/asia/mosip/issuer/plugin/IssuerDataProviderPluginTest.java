@@ -92,8 +92,14 @@ class IssuerDataProviderPluginTest {
         return query;
     }
 
+    /** The gate on. */
     private IssuerDataProviderPlugin plugin(String adapterUrl, long adapterReadMs, String gatewayUrl, long gatewayReadMs) {
-        return new IssuerDataProviderPlugin(adapterUrl, 2000, adapterReadMs, gatewayUrl, TOKEN, 2000, gatewayReadMs);
+        return new IssuerDataProviderPlugin(adapterUrl, 2000, adapterReadMs, "true", gatewayUrl, TOKEN, 2000, gatewayReadMs);
+    }
+
+    /** The gate off, configured as an Installation run without the Gateway is: no token, no timeouts. */
+    private IssuerDataProviderPlugin gateOff(String adapterUrl) {
+        return new IssuerDataProviderPlugin(adapterUrl, 2000, 10000, "false", "NO GATEWAY", "", 2000, 10000);
     }
 
     /** The happy answers: a list of two records, a pass, the first record. */
@@ -341,6 +347,82 @@ class IssuerDataProviderPluginTest {
     @Test
     void makesNoCallUntilAskedForData() throws Exception {
         plugin();
+        gateOff(standIn("adapter", adapterReplies));
         assertEquals(List.of(), seen);
+    }
+
+    // ---------- the gate off ----------
+
+    @Test
+    void withTheGateOffTheGatewayIsNeverCalledEvenWhenOneListensAndTheResultIsTheGateOnOne() throws Exception {
+        String adapterUrl = standIn("adapter", adapterReplies);
+        JSONObject gateOn = plugin(adapterUrl, 10000, standIn("gateway", gatewayReplies), 10000).fetchData(CLAIMS);
+        seen.clear();
+        // The Gateway still listens, and would now refuse: with the gate off nothing asks it.
+        gatewayReplies.put("/evaluations", Reply.of(403, "{\"error\": \"checklist_failed\"}"));
+
+        JSONObject gateOff = gateOff(adapterUrl).fetchData(CLAIMS);
+
+        assertEquals(gateOn.toMap(), gateOff.toMap());
+        assertEquals(List.of(listRequest(), recordRequest()), seen);
+    }
+
+    @ParameterizedTest(name = "the list answers {0}")
+    @CsvSource(delimiter = '|', textBlock = """
+            an empty list   | 200 | []                       | no_record
+            a 404           | 404 | ''                       | no_record
+            another status  | 500 | []                       | adapter_error
+            an object       | 200 | {"recordId": "rec-0001"} | adapter_error
+            """)
+    void withTheGateOffTheAdaptersRefusalsAreTheGateOnOnes(String name, int status, String body, String code)
+            throws Exception {
+        adapterReplies.put("/records", Reply.of(status, body));
+
+        assertEquals(code, refused(gateOff(standIn("adapter", adapterReplies)), CLAIMS).getErrorCode());
+        assertEquals(List.of(listRequest()), seen);
+    }
+
+    @Test
+    void withTheGateOffAnAdapterThatCannotBeReachedIsAdapterError() {
+        assertEquals("adapter_error", refused(gateOff("http://127.0.0.1:1"), CLAIMS).getErrorCode());
+    }
+
+    // ---------- the switch: a bad setting throws at construction, so Certify does not start ----------
+
+    @ParameterizedTest(name = "enabled={0} url={1} token={2}")
+    @CsvSource(delimiter = '|', nullValues = "null", textBlock = """
+            null  | http://gateway:8000 | t
+            ''    | http://gateway:8000 | t
+            yes   | http://gateway:8000 | t
+            TRUE  | http://gateway:8000 | t
+            1     | http://gateway:8000 | t
+            on    | NO GATEWAY          | ''
+            true  | NO GATEWAY          | t
+            false | http://gateway:8000 | ''
+            true  | null                | t
+            false | null                | ''
+            true  | ''                  | t
+            false | ''                  | ''
+            false | no gateway          | ''
+            true  | gateway:8000        | t
+            true  | ftp://gateway:8000  | t
+            true  | http://             | t
+            true  | http://gateway:8000 | ''
+            true  | http://gateway:8000 | null
+            """)
+    void aMissingNonBooleanOrContradictorySwitchThrowsAtConstruction(String enabled, String url, String token) {
+        assertThrows(IllegalArgumentException.class,
+                () -> new IssuerDataProviderPlugin("http://adapter:8000", 2000, 10000, enabled, url, token, 2000, 10000));
+    }
+
+    @ParameterizedTest(name = "enabled={0} url={1}")
+    @CsvSource(delimiter = '|', textBlock = """
+            true  | http://gateway:8000
+            true  | https://gateway.example/
+            false | NO GATEWAY
+            """)
+    void aConsistentSwitchConstructs(String enabled, String url) {
+        new IssuerDataProviderPlugin("http://adapter:8000", 2000, 10000, enabled, url, enabled.equals("true") ? TOKEN : "",
+                2000, 10000);
     }
 }
