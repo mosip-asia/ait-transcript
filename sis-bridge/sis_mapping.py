@@ -1,20 +1,19 @@
 """TEMPORARY: every rule that turns the SIS Adapter's current answer into the Adapter contract's record.
 
-Ticket 08 of the issuer reshape adds this; ticket 11 deletes it, with the rest of sis-bridge/ and vc-stack/sis-bridge/,
-once the SIS Adapter serves `GET /records/{recordId}` itself (asks/sis-adapter.md items 1-8). The rules are those
-asks, applied here until the SIS side does them:
+Deleted, with the rest of sis-bridge/ and vc-stack/sis-bridge/, once the SIS Adapter serves `GET /records/{recordId}`
+itself (ticket 11). The rules are the changes the SIS Adapter is asked to make, applied here until it makes them:
 
 - the VC envelope (`@context`, `type`, `issuer`, `issuanceDate`) and `credentialSubject.id` are dropped, and so is
   every SIS field the contract has no claim for: the record is exactly the claims of adapter/openapi.yaml's
   `TranscriptRecord`, so it cannot carry a key Certify reserves;
-- renames (item 3): `admissionDate` to `dateAdmitted`, `graduationDate` to `dateGraduation`, `degreeName` to
+- renames: `admissionDate` to `dateAdmitted`, `graduationDate` to `dateGraduation`, `degreeName` to
   `degreeAwarded`, `studyProgram` to `academicProgram`, `thesis.title` and `thesis.grade` to `thesisTitle` and
   `thesisGrade`;
 - `academicRecords` becomes `courses`, terms of `{ term, courses: [{ no, title, credits, grade }] }`; a term is named by
   the SIS's `termLabel` (`term` when the label is empty);
 - numbers become strings, a whole number without a decimal point (`32.0` is `"32"`);
 - `courseList` is built by data/ait_courses.py, the data generator's own function;
-- a claim the SIS has no field for (item 4) is served as an empty string, as is a SIS field that is absent or `null`.
+- a claim the SIS has no field for is served as an empty string, as is a SIS field that is absent or `null`.
 """
 
 from __future__ import annotations
@@ -74,8 +73,8 @@ def terms(academic_records: Any) -> list[dict]:
             where = f"academicRecords[{i}].courses[{j}]"
             courses.append({"no": text(course.get("courseCode"), where), "title": text(course.get("courseTitle"), where),
                             "credits": text(course.get("credits"), where), "grade": text(course.get("grade"), where)})
-        found.append({"term": text(term.get("termLabel"), f"academicRecords[{i}]") or text(term.get("term"), f"academicRecords[{i}]"),
-                      "courses": courses})
+        label = text(term.get("termLabel"), f"academicRecords[{i}]") or text(term.get("term"), f"academicRecords[{i}]")
+        found.append({"term": label, "courses": courses})
     return found
 
 

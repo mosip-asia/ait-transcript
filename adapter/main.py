@@ -38,7 +38,7 @@ def find_row(row_id: str) -> dict:
     return {k: json.loads(v) if k in JSON_COLUMNS and v is not None else v for k, v in row.items()}
 
 
-def summary(row: dict) -> dict:
+def degree_summary(row: dict) -> dict:
     return {k: row[k] for k in DEGREE_COLUMNS if k in row}
 
 
@@ -50,7 +50,7 @@ def eligibility_of(row: dict) -> dict:
 @app.get("/records")
 def records(sub: str, scope: str) -> list[dict]:
     row = find_row(sub)
-    return [{"recordId": row["id"], **summary(row)}]
+    return [{"recordId": row["id"], **degree_summary(row)}]
 
 
 @app.get("/records/{recordId}")

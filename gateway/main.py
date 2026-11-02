@@ -6,7 +6,7 @@ the type's eligibility model, evaluates every check in order and answers `{crede
 check passes, else 403 with `error: checklist_failed`. It writes nothing.
 
 It answers `unknown_scope` (400), `no_record` (404), and 502 `gateway_error` for an adapter that is unreachable,
-answers another status or answers data that does not parse; a check that raises is a bug, so a 500.
+answers another status or answers data that does not parse; a check that raises is a bug, so a 500 with no body.
 Startup touches nothing external, so Certify, the adapter and the Gateway start in any order.
 
 Settings come from the environment, which Compose fills from installations/<name>/gateway.env.
@@ -23,7 +23,7 @@ from urllib.parse import quote
 
 import httpx
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, ConfigDict, Field, StrictStr, ValidationError
 
 import credential_types as ct
@@ -83,6 +83,11 @@ def create_app(settings: Settings, adapter: httpx.Client | None = None) -> FastA
     @app.exception_handler(Refusal)
     async def refused(request, exc: Refusal) -> JSONResponse:
         return JSONResponse(exc.body, status_code=exc.status)
+
+    @app.exception_handler(Exception)
+    async def bug(request, exc: Exception) -> Response:
+        """A check that raised: 500 with no body (Starlette still logs the traceback)."""
+        return Response(status_code=500)
 
     def authenticate(authorization: str = Header("")) -> None:
         if not hmac.compare_digest(authorization.encode(), expected_auth):

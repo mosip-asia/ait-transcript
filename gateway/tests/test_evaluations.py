@@ -287,7 +287,7 @@ def test_a_check_that_raises_is_a_bug_answered_500_without_a_body() -> None:
         ct.REGISTRY = registry
     with TestClient(app, raise_server_exceptions=False) as client:
         r = client.post("/evaluations", json=evaluation(ELIGIBLE), headers={"Authorization": f"Bearer {TOKEN}"})
-    assert r.status_code == 500 and "json" not in r.headers["content-type"], (r.status_code, r.headers, r.text)
+    assert r.status_code == 500 and r.content == b"", (r.status_code, r.headers, r.text)
 
 
 def test_every_persona_of_every_installation_is_evaluated() -> None:

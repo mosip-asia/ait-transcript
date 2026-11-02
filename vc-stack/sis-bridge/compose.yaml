@@ -1,8 +1,8 @@
 name: vc-stack
 
 services:
-  # TEMPORARY SIS bridge (ticket 08 of the issuer reshape; ticket 11 deletes this folder and sis-bridge/): the Adapter
-  # contract's record paths in front of the SIS Adapter's current route, until the SIS Adapter serves /records itself.
+  # TEMPORARY SIS bridge: this folder and sis-bridge/ are deleted once the SIS Adapter serves /records itself
+  # (ticket 11). It serves the Adapter contract's record paths in front of the SIS Adapter's current route.
   # Not included by vc-stack/compose.yaml or issuer-dev.yaml. An environment that wants it runs this folder next to
   # them and points the Data-provider plugin at it (CERTIFY_ADAPTER_URL=http://sis-bridge:8000 in vc-stack/.env, then
   # recreate certify). The Gateway stays on the mock Adapter (GATEWAY_ADAPTER_URL): the bridge serves no eligibility.

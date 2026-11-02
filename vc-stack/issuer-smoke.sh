@@ -6,13 +6,12 @@
 # Without the Gateway, the same with issuer-dev-no-gateway.yaml, and COMPOSE_FILE=issuer-dev-no-gateway.yaml for the
 # smoke: Certify's log says the gate is off, the metadata and contexts are as with it on, and no gateway runs.
 # It waits for Certify and the Gateway, then checks that Certify loads the Data-provider plugin configured by its ten
-# keys (the Adapter's, the switch and the Gateway's) with the gate as set, signs as its live did:key
-# (which --did-refresh writes), serves the issuer metadata
-# for the installation's credential types with the claims of the Adapter contract's record schemas, that certify-nginx
-# serves their contexts from the VDR, and that the Gateway
-# answers every persona of installations/$INSTALLATION/smoke.json on POST /evaluations (200
-# eligible, 403 checklist_failed refused, 404 no_record unknown) and 502 gateway_error with the Adapter down. There is no Authorization Server, so no credential
-# is issued: the full-stack smoke.sh does that. The contexts are checked by path, whatever host the seed names; before
+# keys (the Adapter's, the switch and the Gateway's) with the gate as set, signs as its live did:key (which
+# --did-refresh writes), serves the issuer metadata for the installation's credential types with the claims of the
+# Adapter contract's record schemas, that certify-nginx serves their contexts from the VDR, and that the Gateway answers
+# every persona of installations/$INSTALLATION/smoke.json on POST /evaluations (200 eligible, 403 checklist_failed
+# refused, 404 no_record unknown) and 502 gateway_error with the Adapter down. There is no Authorization Server, so no
+# credential is issued: the full-stack smoke.sh does that. The contexts are checked by path, whatever host the seed names; before
 # Certify can sign on issuer-dev, bootstrap.sh --did-refresh moves the AIT row to CERTIFY_PUBLIC_BASE_URL.
 set -euo pipefail
 

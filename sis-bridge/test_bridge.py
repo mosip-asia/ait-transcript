@@ -1,7 +1,7 @@
-"""TEMPORARY, with the rest of sis-bridge/ (ticket 08 of the issuer reshape; ticket 11 deletes it).
+"""TEMPORARY, with the rest of sis-bridge/: deleted once the SIS Adapter serves /records itself (ticket 11).
 
-Tests for the SIS bridge, over its HTTP interface, against a stand-in SIS that serves the redacted st123456 sample of
-wayfinder ticket 03 (fixtures/st123456.json) on the SIS Adapter's current route. The stand-in is a real server on a
+Tests for the SIS bridge, over its HTTP interface, against a stand-in SIS that serves a redacted st123456 sample
+(fixtures/st123456.json) on the SIS Adapter's current route. The stand-in is a real server on a
 local port, so "the SIS is unreachable" is a closed port. Needs fastapi, uvicorn, httpx and PyYAML (portal/requirements.txt).
 Run: python3 sis-bridge/test_bridge.py
 """
@@ -19,7 +19,7 @@ from pathlib import Path
 HERE = Path(__file__).parent
 sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(HERE.parent / "data"))  # ait_courses, which the image copies next to the bridge
-sys.path.insert(0, str(HERE.parent / "adapter"))  # the contract mode of ticket 03
+sys.path.insert(0, str(HERE.parent / "adapter"))  # the Adapter's contract mode
 from fastapi import FastAPI, Request  # noqa: E402
 from fastapi.responses import JSONResponse, PlainTextResponse  # noqa: E402
 

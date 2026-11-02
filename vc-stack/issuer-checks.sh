@@ -15,12 +15,14 @@ in_network() {
     "import sys, urllib.request; print(urllib.request.urlopen(sys.argv[1], timeout=5).read().decode())" "$1"
 }
 
+# Certify's Compose environment, as JSON, read once.
+certify_env=$(docker compose config --format json | jq -c '.services.certify.environment // {}') \
+  || fail "docker compose config failed: cannot read Certify's environment"
 # switch_setting VARIABLE PROPERTY: the value Certify runs with, its Compose environment's VARIABLE (a no-Gateway form
 # or vc-stack/.env sets it), else the installation's PROPERTY.
 switch_setting() {
   local from_env
-  from_env=$(docker compose config --format json | jq -r --arg v "$1" '.services.certify.environment[$v] // empty') \
-    || fail "docker compose config failed: cannot read Certify's environment"
+  from_env=$(jq -r --arg v "$1" '.[$v] // empty' <<<"$certify_env")
   if [[ -n "$from_env" ]]; then
     echo "$from_env"
   else
@@ -54,10 +56,9 @@ check_contexts() {
 issuer_checks() {
   local want_configs got_configs i config scope want_claims got_claims eligible adapter_down_rc
   # 1. Certify started with the Data-provider plugin selected and the gate as configured. The installation's
-  # properties carry the plugin's ten keys and no other; the plugin reads all ten with the gate on, and with it off
-  # all but the token and the Gateway's timeouts, so Certify's environment may override only those it reads. With the
-  # gate on, its token is the Gateway's.
-  local certify_log certify_props plugin_keys all_keys want_keys env_keys unread
+  # properties carry the plugin's ten keys and no other, with either setting; with the gate on, its token is the
+  # Gateway's.
+  local certify_log certify_props plugin_keys want_keys
   certify_log=$(docker compose logs --no-color certify 2>&1) || fail "cannot read the certify log"
   ! grep -qE 'NoSuchBeanDefinitionException|NoUniqueBeanDefinitionException' <<<"$certify_log" \
     || fail "missing-bean or duplicate-bean error in the certify log"
@@ -67,22 +68,10 @@ issuer_checks() {
   certify_props=$(tr -d '\r' <"$INSTALLATION_DIR/certify-installation.properties")
   plugin_keys=$( (grep -oE '^mosip\.certify\.((adapter|gateway)\.[a-z-]+|integration\.(data-provider-plugin|scan-base-package))=' <<<"$certify_props" || true) \
     | tr -d = | LC_ALL=C sort)
-  all_keys=$(printf '%s\n' mosip.certify.adapter.{connect-timeout-ms,read-timeout-ms,url} \
+  want_keys=$(printf '%s\n' mosip.certify.adapter.{connect-timeout-ms,read-timeout-ms,url} \
     mosip.certify.gateway.{auth-token,connect-timeout-ms,enabled,read-timeout-ms,url} \
     mosip.certify.integration.{data-provider-plugin,scan-base-package} | LC_ALL=C sort)
-  if [[ "$GATE_ENABLED" == true ]]; then
-    want_keys=$all_keys
-  else
-    want_keys=$(grep -vE '^mosip\.certify\.gateway\.(auth-token|connect-timeout-ms|read-timeout-ms)$' <<<"$all_keys")
-  fi
-  [[ "$plugin_keys" == "$all_keys" ]] || fail "Certify's plugin keys must be the plugin's ten (got: $plugin_keys)"
-  # MOSIP_CERTIFY_GATEWAY_AUTH_TOKEN is the property mosip.certify.gateway.auth-token, by Spring's relaxed binding.
-  env_keys=$(docker compose config --format json | jq -r '.services.certify.environment | to_entries[]
-    | select(.value != null) | .key | ascii_downcase | select(test("^mosip_certify_(adapter|gateway)_"))
-    | capture("^mosip_certify_(?<peer>[a-z]+)_(?<key>.+)$") | "mosip.certify.\(.peer).\(.key | gsub("_"; "-"))"' \
-    | LC_ALL=C sort) || fail "docker compose config failed: cannot read Certify's environment"
-  unread=$(LC_ALL=C comm -23 <(echo "$env_keys") <(echo "$want_keys") | awk 'NF')
-  [[ -z "$unread" ]] || fail "with gateway.enabled=$GATE_ENABLED Certify's environment sets plugin keys the plugin does not read: $unread"
+  [[ "$plugin_keys" == "$want_keys" ]] || fail "Certify's plugin keys must be the plugin's ten (got: $plugin_keys)"
   ! grep -q '^mosip\.certify\.mock\.data-provider\.' <<<"$certify_props" || fail "the CSV plugin's keys are still in Certify's properties"
   if [[ "$GATE_ENABLED" == true ]]; then
     [[ "$(grep '^mosip.certify.gateway.auth-token=' <<<"$certify_props")" == \
@@ -90,7 +79,7 @@ issuer_checks() {
       || fail "mosip.certify.gateway.auth-token must equal GATEWAY_AUTH_TOKEN in gateway.env"
     ok "Certify's plugin configuration is the ten keys; its token is the Gateway's"
   else
-    ok "Certify's plugin configuration is the ten keys, of which the gate off reads $(wc -l <<<"$want_keys")"
+    ok "Certify's plugin configuration is the ten keys"
   fi
 
   # 2. Certify signs as its live key: did.json's id (a credential's issuer) is the did:key of the key it publishes, and
