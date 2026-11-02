@@ -113,8 +113,9 @@ auth_aud=$(curl -sf "http://localhost:4004/v1/mimoto/issuers/$ISSUER_ID" | jq -r
   || fail "authorization_audience must be AUTH_SERVER_TOKEN_ENDPOINT, $AUTH_SERVER_TOKEN_ENDPOINT (got: ${auth_aud:-<empty>})"
 ok "Issuer authorization_audience is the configured token endpoint"
 
-# The mock adapter answers contract 2b's three paths and a 404, and serves an edited CSV value at once. The edit
-# case runs on a copy of the CSV served by a second adapter container, so the installation's file is never rewritten.
+# The mock adapter answers the Adapter contract's three /records paths and a 404 on each, and serves an edited CSV
+# value at once. The edit case runs on a copy of the CSV served by a second adapter container, so the installation's
+# file is never rewritten.
 adapter_copy_dir="$REPO_ROOT/.demo-state/adapter-copy"
 rm -rf "$adapter_copy_dir" && mkdir -p "$adapter_copy_dir"
 cp "$csv_file" "$adapter_copy_dir/student_identity_data.csv"
@@ -130,7 +131,7 @@ adapter_test http://adapter:8000 "/demo/installations/$INSTALLATION/adapter/stud
 docker rm -f adapter-copy >/dev/null 2>&1 || true
 rm -rf "$adapter_copy_dir"
 [[ "$adapter_rc" == 0 ]] || fail "mock adapter (adapter/test_adapter.py)"
-ok "mock adapter serves the old and the /records paths, and an edited value at once"
+ok "mock adapter serves the three /records paths, a 404 on each for an unknown student, and an edited value at once"
 
 # The contract mode (adapter/openapi.yaml), as any Adapter is checked: every type's first eligible persona.
 for ((i = 0; i < TYPE_COUNT; i++)); do

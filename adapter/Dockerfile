@@ -13,4 +13,5 @@ COPY adapter/main.py main.py
 
 EXPOSE 8000
 
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+# No access log: the request line carries the student's `sub`, which the contract keeps out of logs.
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--no-access-log"]
