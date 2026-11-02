@@ -62,7 +62,7 @@ The plugin's sequence, `fetchData(claims)`, in order:
       { "check": "zero_balance", "passed": true } ] }
   ```
 
-- `400` `{ "error": "invalid_request" }`: the body is not an object of exactly those three keys. `400` `{ "error": "unknown_scope" }`: no scope the Gateway serves. `401`: a wrong secret, with no `error`. `404` `{ "error": "no_record" }`: the eligibility path answered `404`. `502` `{ "error": "gateway_error" }`: the Adapter is unreachable, slower than 3 s, answers another status, or answers eligibility that does not parse. `500` with no JSON body: a check raised, which is a bug.
+- `400` `{ "error": "invalid_request" }`: the body is not an object of exactly those three keys. `400` `{ "error": "unknown_scope" }`: no scope the Gateway serves. `401`: a wrong secret, with no `error`. `404` `{ "error": "no_record" }`: the eligibility path answered `404`. `502` `{ "error": "gateway_error" }`: the Adapter is unreachable, slower than 3 s, answers another status, or answers eligibility that does not parse. `500` with no body: a check raised, which is a bug.
 - The Portal calls the same endpoint (section 3).
 
 **The error vocabulary, by owner.** On a refusal the plugin throws Certify's `DataProviderExchangeException` with the code below. Certify answers the credential request with the OpenID4VCI error body `{ "error": "<code>", "error_description": "<code>" }`, which Inji Web and Mimoto show as a generic failure. Reasons reach the student only through the Portal's student side (responsibilities.md section 5), never through the wallet.
