@@ -328,6 +328,10 @@ def test_the_contract_mode_fails_an_adapter_that_breaks_the_contract() -> None:
             "a claim missing": broken(record, lambda s, b: (s, {k: v for k, v in b.items() if k != "courseList"})),
             "a number for a string": broken(record, lambda s, b: (s, {**b, "totalCredits": 49.0})),
             "a null claim": broken(record, lambda s, b: (s, {**b, "notes": None})),
+            "an extra field that is an array of objects": broken(record, lambda s, b: (s, {
+                **b, "advisors": [{"name": "Dr. A"}]})),
+            "an extra field that is an object": broken(record, lambda s, b: (s, {**b, "committee": {"chair": "Dr. A"}})),
+            "courses that is not an array": broken(record, lambda s, b: (s, {**b, "courses": "CS601"})),
             "a course without a grade": broken(record, lambda s, b: (s, {**b, "courses": [
                 {"term": "T", "courses": [{"no": "CS601", "title": "A", "credits": "3"}]}]})),
             "a list entry without recordId": broken("/records?sub=ait", lambda s, b: (s, [{"level": "Masters"}])),
@@ -397,6 +401,23 @@ def test_the_plugin_refuses_exactly_the_keys_openapi_yaml_forbids() -> None:
     assert java_string_set(PLUGIN.read_text(encoding="utf-8"), "FORBIDDEN_KEYS") == contract
     # The parse reads a set split over lines, as the plugin writes it, so a key the plugin misses fails the test.
     assert java_string_set('FORBIDDEN_KEYS = Set.of("id",\n        "_issuer")', "FORBIDDEN_KEYS") == {"id", "_issuer"}
+
+
+def test_the_plugin_refuses_exactly_the_structured_fields_openapi_yaml_forbids() -> None:
+    """The plugin's `shape` refuses an object or array at the top of a record except the one named by its COURSES
+    constant, which must be an array. openapi.yaml must say the same: in every record schema, only that name is
+    declared an array, and any other field is a string, number or boolean (`additionalProperties`)."""
+    contract = load_contract()
+    source = PLUGIN.read_text(encoding="utf-8")
+    (courses,) = re.findall(r'\bCOURSES\s*=\s*"([^"]*)"', source)
+    for scope in template_claims():
+        schema = scope_schema(contract, "/records/{recordId}", scope)
+        arrays = {n for n, p in schema["properties"].items() if resolve(p, contract).get("type") == "array"}
+        assert arrays <= {courses}, (scope, arrays)
+        extra = resolve(schema["additionalProperties"], contract)
+        assert extra["type"] == ["string", "number", "boolean"], (scope, extra)
+    # The parse reads the constant as the plugin writes it, so a rename in the plugin fails the test.
+    assert re.findall(r'\bCOURSES\s*=\s*"([^"]*)"', 'private static final String COURSES = "terms";') == ["terms"]
 
 
 def getter(base: str):
