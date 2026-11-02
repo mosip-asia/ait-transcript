@@ -123,6 +123,21 @@
           "temporary": false
         }
       ]
+    },
+    {
+      "username": "hack-2026-9999",
+      "enabled": true,
+      "emailVerified": true,
+      "email": "smoke.unknown@hackathon.example",
+      "firstName": "Unknown",
+      "lastName": "Smoke",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "inji",
+          "temporary": false
+        }
+      ]
     }
   ],
   "clients": [

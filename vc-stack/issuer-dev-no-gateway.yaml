@@ -1,0 +1,11 @@
+# The Issuer and the mock Adapter without the Gateway: issuer-dev.yaml with gateway/ left out and Certify's plugin
+# switch off (issuer/no-gateway.yaml), so every record the Adapter serves is issued to whoever may sign in.
+#   docker compose --env-file vc-stack/.env -f vc-stack/issuer-dev-no-gateway.yaml up -d --build
+#   COMPOSE_FILE=issuer-dev-no-gateway.yaml ./vc-stack/issuer-smoke.sh
+name: vc-stack
+
+include:
+  - path:
+      - issuer/compose.yaml
+      - issuer/no-gateway.yaml
+  - mock-adapter/compose.yaml

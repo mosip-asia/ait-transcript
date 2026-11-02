@@ -163,6 +163,21 @@
           "temporary": false
         }
       ]
+    },
+    {
+      "username": "ait-2026-9999",
+      "enabled": true,
+      "emailVerified": true,
+      "email": "smoke.unknown@ait.example",
+      "firstName": "Unknown",
+      "lastName": "Smoke",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "inji",
+          "temporary": false
+        }
+      ]
     }
   ],
   "clients": [

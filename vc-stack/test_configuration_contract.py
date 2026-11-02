@@ -6,7 +6,8 @@ folder) appears in the page's tables, in the section of the deployment whose fol
 tables is absent from the Compose files. A deployment's section names its folder in a "**Deploy:** `vc-stack/<folder>/`"
 line. The Gateway's variables come from its env_file, installations/<name>/gateway.env, which must name the same
 variables in every installation. Every host port is named public or internal in the ingress allowlist, and each
-server of the Servers section runs a Compose file that includes the deployments it lists.
+server of the Servers section runs a Compose file that includes the deployments it lists. The Servers section also
+names each stack's no-Gateway form, which leaves gateway/ out and sets Certify's plugin switch off.
 
 Host only, no Docker. Needs PyYAML, which uvicorn[standard] (portal/requirements.txt) installs.
 Run: python3 vc-stack/test_configuration_contract.py
@@ -36,9 +37,28 @@ def load(path: Path) -> dict:
     return yaml.safe_load(path.read_text(encoding="utf-8"))
 
 
+def included(top: str) -> list[list[str]]:
+    """Each include entry of a top-level vc-stack/ file, as its files from the repository root: a folder's compose.yaml,
+    then any file merged over it (an entry may be a path, or a mapping whose path is one file or a list)."""
+    found = []
+    for entry in load(STACK / top)["include"]:
+        paths = entry["path"] if isinstance(entry, dict) else entry
+        found.append([posixpath.normpath(f"vc-stack/{p}") for p in ([paths] if isinstance(paths, str) else paths)])
+    return found
+
+
+def included_folders(top: str) -> set[str]:
+    return {posixpath.dirname(files[0]) for files in included(top)}
+
+
+def stack_files() -> set[str]:
+    """Every top-level Compose file of vc-stack/ that pulls folders together: the stacks and their no-Gateway forms."""
+    return {f"vc-stack/{p.name}" for p in STACK.glob("*.yaml") if "include" in (load(p) or {})}
+
+
 def folders() -> list[str]:
     """The folders vc-stack/compose.yaml includes, each as its path from the repository root."""
-    return [posixpath.dirname(f"vc-stack/{path}") for path in load(STACK / "compose.yaml")["include"]]
+    return [posixpath.dirname(files[0]) for files in included("compose.yaml")]
 
 
 def services() -> dict[str, tuple[str, dict]]:
@@ -314,10 +334,50 @@ def test_each_server_runs_a_compose_file_that_includes_the_deployments_it_lists(
     for row in rows:
         path = REPO_ROOT / row["Compose file"]
         assert path.is_file(), f"{row['Server']} runs {row['Compose file']}, which does not exist"
-        included = {posixpath.dirname(posixpath.normpath(posixpath.join(posixpath.dirname(row["Compose file"]), inc)))
-                    for inc in load(path)["include"]}
         named = {by_heading[name.strip()] for name in row["Deployments"].split(",")}
-        assert included == named, (row["Server"], sorted(included), sorted(named))
+        assert included_folders(path.name) == named, (row["Server"], sorted(included_folders(path.name)), sorted(named))
+
+
+def no_gateway_forms() -> list[dict[str, str]]:
+    """The Servers section's table of the no-Gateway forms: each form's Compose file and the stack it is a form of."""
+    return [row for table in header_tables("Servers", "No-Gateway form") for row in table]
+
+
+def test_every_stack_file_is_on_the_page_and_nothing_else() -> None:
+    """Each top-level Compose file is a server's or a no-Gateway form's row of the Servers section, and each row's
+    file exists."""
+    listed = {row["Compose file"] for row in header_tables("Servers", "Compose file")[0]} \
+        | {row["No-Gateway form"] for row in no_gateway_forms()}
+    assert listed == stack_files(), sorted(listed ^ stack_files())
+
+
+def test_each_no_gateway_form_is_its_stack_without_the_gateway_and_with_the_switch_off() -> None:
+    """A no-Gateway form includes every folder of its stack but gateway/, merges issuer/no-gateway.yaml over the
+    Issuer's file, and that file sets Certify's switch off and nothing else; the page's row says the same."""
+    overlay = load(STACK / "issuer" / "no-gateway.yaml")
+    switch_off = ["MOSIP_CERTIFY_GATEWAY_ENABLED=false", "MOSIP_CERTIFY_GATEWAY_URL=NO GATEWAY"]
+    assert overlay == {"services": {"certify": {"environment": switch_off}}}, overlay
+    rows = no_gateway_forms()
+    assert {row["Stack"] for row in rows} == {"vc-stack/compose.yaml", "vc-stack/issuer-dev.yaml"}, rows
+    for row in rows:
+        stack, form = posixpath.basename(row["Stack"]), posixpath.basename(row["No-Gateway form"])
+        assert "vc-stack/gateway" in included_folders(stack), stack
+        assert included_folders(form) == included_folders(stack) - {"vc-stack/gateway"}, (form, included_folders(form))
+        assert ["vc-stack/issuer/compose.yaml", "vc-stack/issuer/no-gateway.yaml"] in included(form), included(form)
+        assert row["Certify's environment"] == ", ".join(switch_off), row
+
+
+def test_the_switch_reaches_certify_from_the_environment_with_the_gate_on_as_the_fallback() -> None:
+    """MOSIP_CERTIFY_GATEWAY_ENABLED and MOSIP_CERTIFY_GATEWAY_URL are passed to Certify only when vc-stack/.env
+    sets them, so unset, each installation's properties keep the gate on at the Gateway, with the NO GATEWAY comment
+    on the line above the URL (a properties file has no end-of-line comment)."""
+    environment = passed_through(services()["certify"][1])
+    assert {"MOSIP_CERTIFY_GATEWAY_ENABLED", "MOSIP_CERTIFY_GATEWAY_URL"} <= set(environment), environment
+    for name in NAMES:
+        props = (INSTALLATIONS / name / "certify-installation.properties").read_text(encoding="utf-8").splitlines()
+        assert "mosip.certify.gateway.enabled=true" in props, name
+        url = props.index("mosip.certify.gateway.url=http://gateway:8000")
+        assert props[url - 1].startswith("#") and "NO GATEWAY" in props[url - 1], (name, props[url - 1])
 
 
 def test_the_host_port_is_read_from_every_binding_form() -> None:

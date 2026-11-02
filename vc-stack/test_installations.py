@@ -1,5 +1,6 @@
 """Every installation's sign-in identities match its adapter CSV: one Keycloak user per CSV row, with the row's `id`
-as username, and the smoke personas among them (smoke.sh checks the same against the running stack).
+as username, plus the smoke's unknown persona, which signs in but has no row; and the smoke personas among them
+(smoke.sh checks the same against the running stack).
 
 Host only, no Docker. Run: python3 vc-stack/test_installations.py
 """
@@ -32,37 +33,44 @@ def realm_usernames(installation: str) -> list[str]:
     return [user["username"] for user in realm["users"]]
 
 
+def smoke_fixtures(installation: str) -> list[dict]:
+    return json.loads((INSTALLATIONS / installation / "smoke.json").read_text(encoding="utf-8"))
+
+
+def unknown_personas(installation: str) -> set[str]:
+    return {fixture["unknown"] for fixture in smoke_fixtures(installation)}
+
+
 def test_every_installation_is_found() -> None:
     assert {"ait", "hackathon"} <= set(NAMES), NAMES
 
 
-def test_realm_users_match_the_csv_row_for_row() -> None:
+def test_every_realm_user_but_the_smokes_unknown_persona_has_a_csv_row() -> None:
     for installation in NAMES:
-        assert sorted(realm_usernames(installation)) == sorted(csv_ids(installation)), installation
+        users = [u for u in realm_usernames(installation) if u not in unknown_personas(installation)]
+        assert sorted(users) == sorted(csv_ids(installation)), installation
 
 
-def test_the_hackathon_realm_holds_the_three_roster_personas() -> None:
-    assert sorted(realm_usernames("hackathon")) == ["hack-2026-0001", "hack-2026-0002", "hack-2026-0003"]
+def test_the_hackathon_realm_holds_the_three_roster_personas_and_the_unknown_one() -> None:
+    assert sorted(realm_usernames("hackathon")) == ["hack-2026-0001", "hack-2026-0002", "hack-2026-0003", "hack-2026-9999"]
 
 
 def test_smoke_personas_can_sign_in() -> None:
     for installation in NAMES:
-        fixtures = json.loads((INSTALLATIONS / installation / "smoke.json").read_text(encoding="utf-8"))
         users = set(realm_usernames(installation))
-        for fixture in fixtures:
+        for fixture in smoke_fixtures(installation):
             eligible = fixture["eligible"]  # one persona or a list
             eligible = [eligible] if isinstance(eligible, str) else eligible
-            assert {*eligible, *fixture["refused"]} <= users, (installation, fixture["scope"])
+            assert {*eligible, *fixture["refused"], fixture["unknown"]} <= users, (installation, fixture["scope"])
 
 
-def test_the_unknown_smoke_persona_has_no_record_and_no_sign_in() -> None:
-    """Each type's `unknown` persona is the Gateway's 404 `no_record` case, so the adapter must not know it."""
+def test_the_unknown_smoke_persona_can_sign_in_but_has_no_record() -> None:
+    """Each type's `unknown` persona gets a token, and the Adapter has no record of it: Certify answers `no_record`
+    for it with the gate on or off, and so does the Gateway's 404."""
     for installation in NAMES:
-        fixtures = json.loads((INSTALLATIONS / installation / "smoke.json").read_text(encoding="utf-8"))
-        known = {*csv_ids(installation), *realm_usernames(installation)}
-        for fixture in fixtures:
+        for fixture in smoke_fixtures(installation):
             assert isinstance(fixture["unknown"], str) and fixture["unknown"], (installation, fixture["scope"])
-            assert fixture["unknown"] not in known, (installation, fixture["scope"], fixture["unknown"])
+            assert fixture["unknown"] not in csv_ids(installation), (installation, fixture["scope"], fixture["unknown"])
 
 
 if __name__ == "__main__":

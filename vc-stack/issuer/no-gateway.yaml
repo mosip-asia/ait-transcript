@@ -1,0 +1,8 @@
+# Merged over issuer/compose.yaml by the no-Gateway stack forms (compose-no-gateway.yaml, issuer-dev-no-gateway.yaml),
+# which leave gateway/ out: Certify's plugin switch off, so the plugin asks no Gateway and issues every record the
+# Adapter serves. It wins over vc-stack/.env's values for the same two variables.
+services:
+  certify:
+    environment:
+      - MOSIP_CERTIFY_GATEWAY_ENABLED=false
+      - MOSIP_CERTIFY_GATEWAY_URL=NO GATEWAY
