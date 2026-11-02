@@ -1,0 +1,26 @@
+name: vc-stack
+
+services:
+  # TEMPORARY SIS bridge (ticket 08 of the issuer reshape; ticket 11 deletes this folder and sis-bridge/): the Adapter
+  # contract's record paths in front of the SIS Adapter's current route, until the SIS Adapter serves /records itself.
+  # Not included by vc-stack/compose.yaml or issuer-dev.yaml. An environment that wants it runs this folder next to
+  # them and points the Gateway at it (GATEWAY_ADAPTER_URL=http://sis-bridge:8000 in vc-stack/.env, then recreate the
+  # gateway):
+  #   docker compose --env-file vc-stack/.env -f vc-stack/sis-bridge/compose.yaml up -d --build
+  # Its one setting is SIS_BASE_URL, the SIS Adapter, which is reachable only over NetBird. Reached as
+  # http://sis-bridge:8000 from the other services; no host port.
+  sis-bridge:
+    container_name: sis-bridge
+    build:
+      context: ../..
+      dockerfile: sis-bridge/Dockerfile
+    environment:
+      - SIS_BASE_URL=${SIS_BASE_URL:-http://ait-itserv-vm:8000}
+    restart: unless-stopped
+    networks:
+      - network
+
+networks:
+  network:
+    name: vc_stack_network
+    external: true
