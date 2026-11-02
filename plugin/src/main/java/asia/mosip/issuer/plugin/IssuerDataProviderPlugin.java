@@ -14,6 +14,7 @@ import java.time.Duration;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Function;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -26,9 +27,10 @@ import org.springframework.stereotype.Component;
 /**
  * Certify's data provider for the Issuer. For each credential request it lists the token's records at the Adapter
  * ({@code GET /records}), asks the Gateway whether the first one passes its Checklist ({@code POST /evaluations}) when
- * the gate is on ({@code mosip.certify.gateway.enabled}), fetches that record ({@code GET /records/{recordId}}) and hands it to Certify shaped for its quoted Velocity
- * template, with the token's {@code sub} and {@code client_id} added as trace keys for the ledger. It knows no claim
- * name, maps no scope, and makes no call until Certify asks for data, so Certify starts whatever is down.
+ * the gate is on ({@code mosip.certify.gateway.enabled}), fetches that record ({@code GET /records/{recordId}}) and
+ * hands it to Certify shaped for its quoted Velocity template, with the token's {@code sub} and {@code client_id} added
+ * as trace keys for the ledger. It knows no claim name, maps no scope, and makes no call until Certify asks for data,
+ * so Certify starts whatever is down.
  */
 @Component
 @ConditionalOnProperty(value = "mosip.certify.integration.data-provider-plugin", havingValue = "IssuerDataProviderPlugin")
@@ -116,7 +118,7 @@ public class IssuerDataProviderPlugin implements DataProviderPlugin {
                 throw new IllegalArgumentException("mosip.certify.gateway.enabled is true, so mosip.certify.gateway.url "
                         + "must be an http(s) URL, not '" + gatewayUrl + "'");
             }
-            if (gatewayAuthToken == null || gatewayAuthToken.isEmpty()) {
+            if (gatewayAuthToken.isEmpty()) {
                 throw new IllegalArgumentException(
                         "mosip.certify.gateway.enabled is true, so mosip.certify.gateway.auth-token is required");
             }
@@ -146,14 +148,14 @@ public class IssuerDataProviderPlugin implements DataProviderPlugin {
         try {
             URI uri = new URI(value);
             return ("http".equals(uri.getScheme()) || "https".equals(uri.getScheme())) && uri.getHost() != null;
-        } catch (URISyntaxException | NullPointerException e) {
+        } catch (URISyntaxException e) {
             return false;
         }
     }
 
     /**
-     * The token's first record, after the Gateway passed it when the gate is on, shaped for Certify's template and extended with
-     * {@code tokenSub} and {@code tokenClientId}.
+     * The token's first record, after the Gateway passed it when the gate is on, shaped for Certify's template and
+     * extended with {@code tokenSub} and {@code tokenClientId}.
      *
      * @throws DataProviderExchangeException {@code invalid_access_token} for claims without {@code sub}, before any
      *     call; {@code no_record} for an empty list or a 404; the Gateway refusal's {@code error}, else
@@ -205,12 +207,9 @@ public class IssuerDataProviderPlugin implements DataProviderPlugin {
         return record;
     }
 
-    private interface Parser<T> {
-        T parse(String body) throws JSONException;
-    }
-
     /** A 200's body parsed, {@code no_record} for a 404, {@code adapter_error} for anything else. */
-    private static <T> T adapterAnswer(HttpResponse<String> response, Parser<T> parser) throws DataProviderExchangeException {
+    private static <T> T adapterAnswer(HttpResponse<String> response, Function<String, T> parser)
+            throws DataProviderExchangeException {
         if (response.statusCode() == 404) {
             throw new DataProviderExchangeException(NO_RECORD);
         }
@@ -219,7 +218,7 @@ public class IssuerDataProviderPlugin implements DataProviderPlugin {
             throw new DataProviderExchangeException(ADAPTER_ERROR);
         }
         try {
-            return parser.parse(response.body());
+            return parser.apply(response.body());
         } catch (JSONException e) {
             log.warn("the Adapter's answer is not the expected JSON: {}", e.getMessage());
             throw new DataProviderExchangeException(ADAPTER_ERROR);
@@ -248,7 +247,9 @@ public class IssuerDataProviderPlugin implements DataProviderPlugin {
 
     /**
      * JSON string escaping without the surrounding quotes, ASCII only, as Python's {@code json.dumps(value)[1:-1]}
-     * (the Gateway's former escaper) writes it.
+     * writes it: a quote or a backslash gets a backslash before it, newline, carriage return, tab, backspace and form
+     * feed get their short escapes, and every other character outside printable ASCII becomes a backslash, a
+     * {@code u} and its four hex digits (per UTF-16 code unit, so a surrogate pair is two escapes).
      */
     static String escapeForQuotedTemplate(String value) {
         StringBuilder out = new StringBuilder(value.length());

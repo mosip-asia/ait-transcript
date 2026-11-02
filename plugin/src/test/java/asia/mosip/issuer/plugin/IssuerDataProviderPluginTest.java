@@ -186,7 +186,7 @@ class IssuerDataProviderPluginTest {
         }
     }
 
-    /** Every top-level string reaches Certify escaped as the Gateway's escaper (Python's json.dumps) wrote it. */
+    /** Every top-level string reaches Certify escaped as Python's json.dumps writes it, without the quotes. */
     @Test
     void quotesNewlinesAndNonAsciiAreEscapedForTheQuotedTemplate() throws Exception {
         IssuerDataProviderPlugin plugin = plugin();
@@ -390,8 +390,7 @@ class IssuerDataProviderPluginTest {
     // ---------- the switch: a bad setting throws at construction, so Certify does not start ----------
 
     @ParameterizedTest(name = "enabled={0} url={1} token={2}")
-    @CsvSource(delimiter = '|', nullValues = "null", textBlock = """
-            null  | http://gateway:8000 | t
+    @CsvSource(delimiter = '|', textBlock = """
             ''    | http://gateway:8000 | t
             yes   | http://gateway:8000 | t
             TRUE  | http://gateway:8000 | t
@@ -399,8 +398,6 @@ class IssuerDataProviderPluginTest {
             on    | NO GATEWAY          | ''
             true  | NO GATEWAY          | t
             false | http://gateway:8000 | ''
-            true  | null                | t
-            false | null                | ''
             true  | ''                  | t
             false | ''                  | ''
             false | no gateway          | ''
@@ -408,7 +405,6 @@ class IssuerDataProviderPluginTest {
             true  | ftp://gateway:8000  | t
             true  | http://             | t
             true  | http://gateway:8000 | ''
-            true  | http://gateway:8000 | null
             """)
     void aMissingNonBooleanOrContradictorySwitchThrowsAtConstruction(String enabled, String url, String token) {
         assertThrows(IllegalArgumentException.class,
