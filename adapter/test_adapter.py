@@ -24,6 +24,10 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "data"))
 import generate_csv as gc  # noqa: E402
 
 ROSTER = Path(__file__).parent.parent / "installations" / "hackathon" / "adapter" / "student_identity_data.csv"
+# The scopes each CSV's Installation enables. The mock serves the same row for every one of them.
+TRANSCRIPT_SCOPES = ("ait_transcript_vc_ldp",)
+ROSTER_SCOPES = ("developer_passport_vc_ldp", "achievement_certificate_vc_ldp")
+ELIGIBILITY = ("holds", "conferralStatus", "balance")  # the transcript CSV's eligibility columns
 
 
 def read_rows(csv_path: Path) -> list[dict]:
@@ -54,6 +58,9 @@ def check_adapter(get, csv_path: Path) -> None:
         assert get(f"/students/nobody/{path}")[0] == 404, path
     assert get(f"/students/{first}/transcript?degreeId=other")[0] == 404
     assert get(f"/students/{first}/eligibility?degreeId=other")[0] == 404
+    # An unknown sub or recordId is a 404 on every /records path.
+    for path in ("/records?sub=nobody&scope=any", "/records/nobody?scope=any", "/records/nobody/eligibility?scope=any"):
+        assert get(path)[0] == 404, path
 
 
 def check_edit(get, csv_path: Path) -> None:
@@ -63,14 +70,15 @@ def check_edit(get, csv_path: Path) -> None:
     edited = "balance" if "balance" in rows[0] else "teamId"
     first = rows[0]["id"]
     original = csv_path.read_bytes()
+    paths = (f"/students/{first}/eligibility", f"/records/{first}/eligibility?scope=any")
     try:
-        before = get(f"/students/{first}/eligibility")[1][edited]
+        before = get(paths[0])[1][edited]
         assert before != "777.00"
         set_column(csv_path, first, edited, "777.00")
-        assert get(f"/students/{first}/eligibility")[1][edited] == "777.00"
+        assert [get(path)[1][edited] for path in paths] == ["777.00", "777.00"]
     finally:
         csv_path.write_bytes(original)
-    assert get(f"/students/{first}/eligibility")[1][edited] == before
+    assert [get(path)[1][edited] for path in paths] == [before, before]
 
 
 def check_transcript_rows(get, rows: list[dict]) -> None:
@@ -96,6 +104,20 @@ def check_transcript_rows(get, rows: list[dict]) -> None:
                                           "balance": row["balance"]}, (sub, body)
         assert get(f"/students/{sub}/eligibility")[0] == 200  # degreeId is optional: there is one degree per sub
 
+        for scope in TRANSCRIPT_SCOPES:
+            assert get(f"/records?sub={sub}&scope={scope}") == (200, [{
+                "recordId": sub, "level": row["level"], "degreeAwarded": row["degreeAwarded"],
+                "dateGraduation": row["dateGraduation"]}]), sub
+            # The record: every column but the id and the eligibility columns, the generator's courseList included.
+            status, body = get(f"/records/{sub}?scope={scope}")
+            assert status == 200 and "id" not in body and not set(ELIGIBILITY) & body.keys(), (sub, status, body)
+            assert body["courseList"] == row["courseList"] and "\n" in body["courseList"], sub
+            verbatim = {k: v for k, v in row.items() if k not in {"id", "courses", *ELIGIBILITY}}
+            assert body == {**verbatim, "courses": json.loads(row["courses"])}, sub
+            assert get(f"/records/{sub}/eligibility?scope={scope}") == (200, {
+                "holds": json.loads(row["holds"]), "conferralStatus": row["conferralStatus"],
+                "balance": row["balance"]}), sub
+
 
 def check_roster_rows(get, rows: list[dict]) -> None:
     """A roster (the hackathon installation): the degree list names the row, and the record and the eligibility
@@ -106,6 +128,10 @@ def check_roster_rows(get, rows: list[dict]) -> None:
         assert get(f"/students/{sub}/degrees") == (200, [{"degreeId": sub}]), sub
         assert get(f"/students/{sub}/transcript?degreeId={sub}") == (200, {"degreeId": sub, **columns}), sub
         assert get(f"/students/{sub}/eligibility?degreeId={sub}") == (200, columns), sub
+        for scope in ROSTER_SCOPES:  # the roster has no degree columns, so the list names the row only
+            assert get(f"/records?sub={sub}&scope={scope}") == (200, [{"recordId": sub}]), (sub, scope)
+            assert get(f"/records/{sub}?scope={scope}") == (200, columns), (sub, scope)
+            assert get(f"/records/{sub}/eligibility?scope={scope}") == (200, columns), (sub, scope)
 
 
 def host_get(csv_path: Path):
