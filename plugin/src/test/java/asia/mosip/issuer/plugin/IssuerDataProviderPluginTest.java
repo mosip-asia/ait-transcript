@@ -1,4 +1,4 @@
-package asia.mosip.issuer.gateway.plugin;
+package asia.mosip.issuer.plugin;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -22,7 +22,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 
 /** The plugin against a stand-in Gateway on a local port: what it sends, and what it makes of each answer. */
-class GatewayDataProviderPluginTest {
+class IssuerDataProviderPluginTest {
 
     private static final String TOKEN = "test-token";
 
@@ -35,7 +35,7 @@ class GatewayDataProviderPluginTest {
     private String answer = "{}";
     private long delayMs = 0;
 
-    private GatewayDataProviderPlugin plugin(long readTimeoutMs) throws IOException {
+    private IssuerDataProviderPlugin plugin(long readTimeoutMs) throws IOException {
         server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
         server.createContext("/", exchange -> {
             seen.add(new Seen(exchange.getRequestMethod(), exchange.getRequestURI().getPath(),
@@ -53,10 +53,10 @@ class GatewayDataProviderPluginTest {
             exchange.close();
         });
         server.start();
-        return new GatewayDataProviderPlugin("http://127.0.0.1:" + server.getAddress().getPort(), TOKEN, 2000, readTimeoutMs);
+        return new IssuerDataProviderPlugin("http://127.0.0.1:" + server.getAddress().getPort(), TOKEN, 2000, readTimeoutMs);
     }
 
-    private GatewayDataProviderPlugin plugin() throws IOException {
+    private IssuerDataProviderPlugin plugin() throws IOException {
         return plugin(10000);
     }
 
@@ -82,7 +82,7 @@ class GatewayDataProviderPluginTest {
 
     @Test
     void turnsEveryTopLevelObjectAndArrayIntoItsJsonTextAndKeepsTheRest() throws Exception {
-        GatewayDataProviderPlugin plugin = plugin();
+        IssuerDataProviderPlugin plugin = plugin();
         answer = """
                 {"fullName": "Somchai \\\\\\"Tom\\\\\\" Jaidee",
                  "courses": [{"term": "2025/1", "courses": [{"code": "CS601", "grade": "A"}]}],
@@ -113,7 +113,7 @@ class GatewayDataProviderPluginTest {
             """)
     void anAnswerOtherThanAClaimSetIsAnExchangeErrorWithTheBodysErrorElseGatewayError(
             int status, String body, String code) throws Exception {
-        GatewayDataProviderPlugin plugin = plugin();
+        IssuerDataProviderPlugin plugin = plugin();
         this.status = status;
         this.answer = body;
 
@@ -125,7 +125,7 @@ class GatewayDataProviderPluginTest {
     @ParameterizedTest
     @CsvSource({"http://127.0.0.1:1", "http://gateway.invalid:8000"})
     void aGatewayThatCannotBeReachedIsGatewayError(String url) {
-        GatewayDataProviderPlugin plugin = new GatewayDataProviderPlugin(url, TOKEN, 2000, 10000);
+        IssuerDataProviderPlugin plugin = new IssuerDataProviderPlugin(url, TOKEN, 2000, 10000);
 
         DataProviderExchangeException e = assertThrows(DataProviderExchangeException.class,
                 () -> plugin.fetchData(Map.of("sub", "ait-2026-0001", "scope", "ait_transcript_vc_ldp")));
@@ -134,7 +134,7 @@ class GatewayDataProviderPluginTest {
 
     @Test
     void aGatewaySlowerThanTheReadTimeoutIsGatewayError() throws Exception {
-        GatewayDataProviderPlugin plugin = plugin(200);
+        IssuerDataProviderPlugin plugin = plugin(200);
         delayMs = 1000;
 
         long start = System.nanoTime();
@@ -147,7 +147,7 @@ class GatewayDataProviderPluginTest {
     /** Keycloak always puts sub in its tokens, so the stack cannot produce this case; only this test covers it. */
     @Test
     void claimsWithoutSubAreInvalidAccessTokenAndTheGatewayIsNotCalled() throws Exception {
-        GatewayDataProviderPlugin plugin = plugin();
+        IssuerDataProviderPlugin plugin = plugin();
         Map<String, Object> blankSub = new HashMap<>(Map.of("sub", "", "scope", "ait_transcript_vc_ldp"));
         Map<String, Object> nullSub = new HashMap<>(Map.of("scope", "ait_transcript_vc_ldp"));
         nullSub.put("sub", null);

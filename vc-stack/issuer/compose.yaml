@@ -63,8 +63,8 @@ services:
       # The Gateway data-provider plugin, built by run-demo.sh. A single file, never the directory, so the four
       # jars bundled in additional_jars/ stay visible; a missing jar fails here instead of mounting an empty directory.
       - type: bind
-        source: ../plugins/gateway-data-provider-plugin.jar
-        target: /home/inji/additional_jars/gateway-data-provider-plugin.jar
+        source: ../plugins/issuer-data-provider-plugin.jar
+        target: /home/inji/additional_jars/issuer-data-provider-plugin.jar
         read_only: true
         bind:
           create_host_path: false

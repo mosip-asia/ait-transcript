@@ -82,7 +82,7 @@ jobs:
       - uses: actions/cache@v4
         with:
           path: vc-stack/plugins/.m2
-          key: plugin-m2-${{ hashFiles('gateway/plugin/pom.xml') }}
+          key: plugin-m2-${{ hashFiles('plugin/pom.xml') }}
 
       - name: Bring up the stack
         run: ./run-demo.sh
@@ -145,7 +145,7 @@ jobs:
       - uses: actions/cache@v4
         with:
           path: vc-stack/plugins/.m2
-          key: plugin-m2-${{ hashFiles('gateway/plugin/pom.xml') }}
+          key: plugin-m2-${{ hashFiles('plugin/pom.xml') }}
 
       # .env naming the installation, and the external network.
       - run: ./vc-stack/bootstrap.sh --prepare
@@ -156,10 +156,10 @@ jobs:
           python3 data/generate_csv.py
           mkdir -p vc-stack/plugins/.m2
           docker run --rm --user "$(id -u):$(id -g)" \
-            -v "$PWD/gateway/plugin:/src" -w /src \
+            -v "$PWD/plugin:/src" -w /src \
             -v "$PWD/vc-stack/plugins/.m2:/var/maven/.m2" -e MAVEN_CONFIG=/var/maven/.m2 \
             maven:3.9-eclipse-temurin-21 mvn -q -B -Duser.home=/var/maven package
-          cp gateway/plugin/target/gateway-data-provider-plugin.jar vc-stack/plugins/
+          cp plugin/target/issuer-data-provider-plugin.jar vc-stack/plugins/
 
       - name: Bring up the Issuer and the mock Adapter
         run: $COMPOSE up -d --build

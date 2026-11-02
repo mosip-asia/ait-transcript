@@ -58,14 +58,14 @@ Plugin configuration, per installation, the same jar everywhere:
 
 | Key | Value |
 |---|---|
-| `mosip.certify.integration.data-provider-plugin` | `GatewayDataProviderPlugin` |
-| `mosip.certify.integration.scan-base-package` | `asia.mosip.issuer.gateway.plugin` |
+| `mosip.certify.integration.data-provider-plugin` | `IssuerDataProviderPlugin` |
+| `mosip.certify.integration.scan-base-package` | `asia.mosip.issuer.plugin` |
 | `mosip.certify.gateway.url` | Base URL of the Gateway, for example `http://gateway:8000` |
 | `mosip.certify.gateway.auth-token` | The shared secret above |
 | `mosip.certify.gateway.connect-timeout-ms` | Default `2000` |
 | `mosip.certify.gateway.read-timeout-ms` | Default `10000` |
 
-The jar is one generic artifact built from `gateway/plugin/` against `certify-integration-api:0.14.0` (Java 21, no shaded dependencies) and mounted as a single file into Certify's `additional_jars/`; its delivery to the infra team is part of section 6.
+The jar is one generic artifact built from `plugin/` against `certify-integration-api:0.14.0` (Java 21, no shaded dependencies) and mounted as a single file into Certify's `additional_jars/`; its delivery to the infra team is part of section 6.
 
 ### 2b. Gateway → data adapter (Jo and Boss)
 
