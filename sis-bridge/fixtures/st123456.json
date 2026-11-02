@@ -1,0 +1,56 @@
+{
+  "@context": ["https://www.w3.org/2018/credentials/v1", "https://schema.etda.or.th/v1/transcript"],
+  "type": ["VerifiableCredential", "UniversityTranscriptCredential"],
+  "issuer": "did:example:ait-sis",
+  "issuanceDate": "2026-11-02T00:00:00Z",
+  "credentialSubject": {
+    "id": "urn:ait:student:st123456",
+    "studentId": "st123456",
+    "namePrefix": "Mr.",
+    "fullName": "Somchai Prasert",
+    "dateOfBirth": "1998-05-12",
+    "admissionDate": "2024-08-19",
+    "graduationDate": "2026-08-31",
+    "degreeName": "Master of Engineering",
+    "studyProgram": "M.Eng Information Management",
+    "schoolName": "Asian Institute of Technology",
+    "status": "G",
+    "cumulativeGpa": 3.34,
+    "totalCredits": 32.0,
+    "thesis": {"title": "Record Linkage Across Campus Information Systems", "grade": "A"},
+    "academicRecords": [
+      {
+        "academicYear": "2024", "term": "1", "termLabel": "August Semester 2024",
+        "courses": [
+          {"courseCode": "IM601", "courseTitle": "Database Systems", "credits": 3, "grade": "A", "gradePoint": 4.0},
+          {"courseCode": "IM602", "courseTitle": "Information Retrieval", "credits": 3, "grade": "A-", "gradePoint": 3.67},
+          {"courseCode": "IM603", "courseTitle": "Data Warehousing", "credits": 3, "grade": "B+", "gradePoint": 3.33}
+        ]
+      },
+      {
+        "academicYear": "2024", "term": "2", "termLabel": "January Semester 2025",
+        "courses": [
+          {"courseCode": "IM604", "courseTitle": "Data Integration", "credits": 3, "grade": "A", "gradePoint": 4.0},
+          {"courseCode": "IM605", "courseTitle": "Information Security Management", "credits": 3, "grade": "A", "gradePoint": 4.0},
+          {"courseCode": "IM606", "courseTitle": "Research Methods", "credits": 3, "grade": "B", "gradePoint": 3.0}
+        ]
+      },
+      {
+        "academicYear": "2025", "term": "1", "termLabel": "August Semester 2025",
+        "courses": [
+          {"courseCode": "IM701", "courseTitle": "Knowledge Management", "credits": 3.0, "grade": "A", "gradePoint": 4.0},
+          {"courseCode": "IM702", "courseTitle": "Data Governance", "credits": 3.0, "grade": "B+", "gradePoint": 3.33},
+          {"courseCode": "IM703", "courseTitle": "Professional Seminar", "credits": 2.0, "grade": "S", "gradePoint": 0.0}
+        ]
+      },
+      {
+        "academicYear": "2025", "term": "2", "termLabel": "January Semester 2026",
+        "courses": [
+          {"courseCode": "IM801", "courseTitle": "Thesis Proposal", "credits": 3.0, "grade": "S", "gradePoint": 0.0},
+          {"courseCode": "IM802", "courseTitle": "Elective Studies", "credits": 2.5, "grade": "A-", "gradePoint": 3.67},
+          {"courseCode": "IM803", "courseTitle": "Colloquium", "credits": 0.5, "grade": "S", "gradePoint": 0.0}
+        ]
+      }
+    ]
+  }
+}
