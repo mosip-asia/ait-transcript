@@ -71,10 +71,10 @@ export INSTALLATION=ait                     # or hackathon
 python3 data/generate_csv.py                # ait only: the adapter CSV. The hackathon roster is committed
 mkdir -p vc-stack/plugins/.m2
 docker run --rm --user "$(id -u):$(id -g)" \
-  -v "$PWD/gateway/plugin:/src" -w /src \
+  -v "$PWD/plugin:/src" -w /src \
   -v "$PWD/vc-stack/plugins/.m2:/var/maven/.m2" -e MAVEN_CONFIG=/var/maven/.m2 \
   maven:3.9-eclipse-temurin-21 mvn -q -B -Duser.home=/var/maven package
-cp gateway/plugin/target/gateway-data-provider-plugin.jar vc-stack/plugins/
+cp plugin/target/issuer-data-provider-plugin.jar vc-stack/plugins/
 docker compose -f vc-stack/issuer-dev.yaml up -d --build
 ./vc-stack/bootstrap.sh --did-refresh       # after every compose up: Certify's live did:key, the AIT context URL
 ```
@@ -127,7 +127,7 @@ INSTALLATION=ait python3 data/render_mimoto_issuers_config.py
 | Gateway | `python3 gateway/tests/test_credential_types.py` | each credential type's checklist and claim mapping |
 | Gateway | `python3 gateway/tests/test_issuances.py` | `POST /issuances` against the mock Adapter in-process, for every type in every Installation's `smoke.json`: 200, 403 per failing check, 404 for the unknown persona, 502 for bad Adapter data |
 | Adapter | `python3 adapter/test_adapter.py` | the mock Adapter on the generated CSV and on the hackathon roster, and `adapter/openapi.yaml` requiring every field a Gateway model requires |
-| Plugin | `docker run --rm -v "$PWD/gateway/plugin:/src" -w /src maven:3.9-eclipse-temurin-21 mvn -q package` | needs Docker; prints nothing, exits 0, and leaves `gateway/plugin/target/gateway-data-provider-plugin.jar` |
+| Plugin | `docker run --rm -v "$PWD/plugin:/src" -w /src maven:3.9-eclipse-temurin-21 mvn -q package` | needs Docker; prints nothing, exits 0, and leaves `plugin/target/issuer-data-provider-plugin.jar` |
 | `vc-stack/` | `python3 vc-stack/test_installation_guard.py` | the scripts refuse a missing `INSTALLATION` |
 | `vc-stack/` | `python3 vc-stack/test_installations.py` | each Installation's realm users match its adapter CSV, and its `smoke.json` personas are among them |
 | `vc-stack/` | `python3 vc-stack/test_authorization_server.py` | Certify's properties and Mimoto's issuer list for the stand-in and the campus realm |

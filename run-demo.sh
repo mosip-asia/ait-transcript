@@ -26,14 +26,14 @@ echo "==> Render mimoto-issuers-config.json from the installation's template"
 docker compose run --rm --no-deps --user "$(id -u):$(id -g)" demo-app python data/render_mimoto_issuers_config.py
 
 # Compose mounts the one jar into Certify's additional_jars/; the Maven repository is cached beside it (both git-ignored).
-echo "==> Build the Certify data-provider plugin (gateway/plugin/) into vc-stack/plugins/"
+echo "==> Build the Certify data-provider plugin (plugin/) into vc-stack/plugins/"
 mkdir -p "$STACK/plugins/.m2"
 docker run --rm --user "$(id -u):$(id -g)" \
-  -v "$ROOT/gateway/plugin:/src" -w /src \
+  -v "$ROOT/plugin:/src" -w /src \
   -v "$STACK/plugins/.m2:/var/maven/.m2" -e MAVEN_CONFIG=/var/maven/.m2 \
   maven:3.9-eclipse-temurin-21 mvn -q -B -Duser.home=/var/maven package
-JAR_NEW="$ROOT/gateway/plugin/target/gateway-data-provider-plugin.jar"
-JAR_LIVE="$STACK/plugins/gateway-data-provider-plugin.jar"
+JAR_NEW="$ROOT/plugin/target/issuer-data-provider-plugin.jar"
+JAR_LIVE="$STACK/plugins/issuer-data-provider-plugin.jar"
 jar_changed=1
 if [[ -f "$JAR_LIVE" ]] && cmp -s "$JAR_NEW" "$JAR_LIVE"; then jar_changed=0; fi
 cp "$JAR_NEW" "$STACK/plugins/"
