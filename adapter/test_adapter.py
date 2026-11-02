@@ -13,6 +13,9 @@ Run: python3 adapter/test_adapter.py                      on the host, no Docker
                                                           for SUB, its first record against SCOPE's record schema
                                                           (no reserved key), and a 404 for an unknown sub.
                                                           check_contract(get, sub, scope) is the same in-process
+     python3 adapter/test_adapter.py --record-claims SCOPE
+                                                          the claim names of SCOPE's record schema, one per line
+                                                          (issuer-checks.sh compares Certify's metadata with them)
 Needs fastapi, httpx and PyYAML (portal/requirements.txt).
 """
 
@@ -366,31 +369,16 @@ def drift(schema: dict, spec: dict, defs: dict, components: dict, where: str) ->
 
 
 def test_every_field_a_gateway_model_requires_is_required_in_openapi_yaml() -> None:
-    """The Gateway's models of the adapter's answers (gateway/credential_types.py) ask nothing of the wire beyond
-    adapter/openapi.yaml: each model's validation-mode schema, the input it accepts, against one of the schemas the
-    YAML gives for that path. Fields the YAML requires and no model reads are fine."""
-    import yaml
+    """The Gateway's eligibility models (gateway/credential_types.py) ask nothing of the wire beyond
+    adapter/openapi.yaml: each type's model's validation-mode schema, the input it accepts, against its scope's
+    eligibility schema. Fields the YAML requires and no model reads are fine."""
     from pydantic import TypeAdapter
 
     sys.path.insert(0, str(Path(__file__).parent.parent / "gateway"))
     import credential_types as ct
 
-    spec = yaml.safe_load((Path(__file__).parent / "openapi.yaml").read_text(encoding="utf-8"))
+    spec = load_contract()
     components = spec["components"]["schemas"]
-
-    def answers(path: str) -> list[dict]:
-        schema = spec["paths"][f"/students/{{id}}/{path}"]["get"]["responses"]["200"]["content"]["application/json"]["schema"]
-        return schema.get("oneOf", [schema])
-
-    def drifts(model, path: str) -> list[list[str]]:
-        schema = TypeAdapter(model).json_schema(mode="validation")
-        return [drift(schema, answer, schema.get("$defs", {}), components, f"{path} {model}") for answer in answers(path)]
-
-    checked = [(list[ct.Degree], "degrees")] + [
-        pair for t in ct.REGISTRY.values() for pair in ((t.eligibility, "eligibility"), (t.record, "transcript"))]
-    for model, path in checked:
-        assert [] in drifts(model, path), drifts(model, path)
-    # On /records, each type's eligibility model against its own scope's eligibility schema.
     for t in ct.REGISTRY.values():
         schema = TypeAdapter(t.eligibility).json_schema(mode="validation")
         answer = scope_schema(spec, "/records/{recordId}/eligibility", t.scope)
@@ -432,6 +420,8 @@ if __name__ == "__main__":
     if sys.argv[1:2] == ["--contract"] and len(sys.argv) == 5:
         check_contract(getter(sys.argv[2].rstrip("/")), sys.argv[3], sys.argv[4])
         print(f"PASS contract at {sys.argv[2]} for {sys.argv[4]}")
+    elif sys.argv[1:2] == ["--record-claims"] and len(sys.argv) == 3:
+        print("\n".join(scope_schema(load_contract(), "/records/{recordId}", sys.argv[2])["required"]))
     elif len(sys.argv) == 5:
         run_live(sys.argv[1], Path(sys.argv[2]), sys.argv[3], Path(sys.argv[4]))
         print(f"PASS adapter at {sys.argv[1]}, edit case at {sys.argv[3]}")

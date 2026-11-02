@@ -37,7 +37,7 @@ sorted_lines() {
 python3 "$REPO_ROOT/data/generate_csv.py" >/dev/null
 
 # The Issuer's own checks first, as issuer-smoke.sh runs them (issuer-checks.sh): the Gateway plugin in Certify's log,
-# the issuer metadata against the Gateway's claims, the contexts through certify-nginx, every persona through the
+# the issuer metadata against the Adapter contract's record schemas, the contexts through certify-nginx, every persona through the
 # Gateway, and 502 with the adapter down. They leave Certify's metadata in issuer_json.
 issuer_checks
 

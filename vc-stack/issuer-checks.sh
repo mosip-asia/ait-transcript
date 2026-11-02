@@ -68,7 +68,8 @@ issuer_checks() {
   [[ -z "$stale" ]] || fail "$stale name another DID than the live key $live_did: run bootstrap.sh --did-refresh"
   ok "Certify signs as its live key $live_did"
 
-  # 3. Certify's issuer metadata lists exactly the installation's credential types, each with the Gateway's claims.
+  # 3. Certify's issuer metadata lists exactly the installation's credential types, each with the claims of the Adapter
+  # contract's record schema for its scope.
   issuer_json=$(curl -sf http://localhost:9091/.well-known/openid-credential-issuer) \
     || fail "Certify's issuer metadata not reachable on :9091"
   want_configs=$(jq -r '[.[].credentialConfig] | sort | join(" ")' "$FIXTURES")
@@ -77,47 +78,37 @@ issuer_checks() {
   for ((i = 0; i < $(jq length "$FIXTURES"); i++)); do
     config=$(jq -r ".[$i].credentialConfig" "$FIXTURES")
     scope=$(jq -r ".[$i].scope" "$FIXTURES")
-    # The record model's fields and the derived claims (gateway/credential_types.py), read in the Gateway's container.
-    want_claims=$(docker compose exec -T gateway python -c "import sys, credential_types as ct
-t = ct.REGISTRY[sys.argv[1]]; print('\n'.join([*t.record.model_fields, *t.derived]))" "$scope" | sort | awk 'NF')
+    # The required claims of the scope's record schema in adapter/openapi.yaml, read in the mock Adapter's image (PyYAML).
+    want_claims=$(docker compose run --rm --no-deps -T -v "$REPO_ROOT/adapter:/repo/adapter:ro" \
+      -v "$REPO_ROOT/data:/repo/data:ro" adapter python /repo/adapter/test_adapter.py --record-claims "$scope" \
+      | sort | awk 'NF') || fail "cannot read the record schema for $scope from adapter/openapi.yaml"
+    [[ -n "$want_claims" ]] || fail "adapter/openapi.yaml names no claim for $scope"
     got_claims=$(jq -r --arg c "$config" '.credential_configurations_supported[$c].credential_definition.credentialSubject | keys[]' \
       <<<"$issuer_json" | sort | awk 'NF')
-    [[ "$got_claims" == "$want_claims" ]] || fail "issuer metadata claim names for $config differ from the Gateway's for $scope"
-    ok "Certify lists $config with the Gateway's claims for $scope"
+    [[ "$got_claims" == "$want_claims" ]] || fail "issuer metadata claim names for $config differ from the contract's record schema for $scope"
+    ok "Certify lists $config with the claims of the contract's record schema for $scope"
   done
 
   # 4. certify-nginx, the Issuer's entry point, serves the contexts from the VDR.
   check_contexts http://localhost:9091 certify-nginx
 
-  # 5. The Gateway answers every persona of smoke.json with the mock Adapter beside it (the live mode of
-  # gateway/tests/test_issuances.py) and writes one issuance row per 200. Run from the gateway image (httpx, psycopg),
-  # whose environment carries the token and the database URL.
-  docker compose run --rm --no-deps -T \
-    -v "$REPO_ROOT/gateway/tests:/gateway/tests:ro" \
-    -v "$INSTALLATION_DIR:/installation:ro" \
-    gateway python tests/test_issuances.py http://gateway:8000 /installation/adapter/student_identity_data.csv \
-    /installation/smoke.json \
-    || fail "Gateway (gateway/tests/test_issuances.py)"
-  ok "Gateway: 200 eligible, 403 checklist_failed with the failing checks, 404 no_record unknown, 400, 401, one issuance row per 200"
-
-  # 6. POST /evaluations answers every persona the same way (the live mode of gateway/tests/test_evaluations.py) and
-  # writes no issuance row.
+  # 5. The Gateway's POST /evaluations answers every persona of smoke.json with the mock Adapter beside it (the live
+  # mode of gateway/tests/test_evaluations.py). Run from the gateway image, whose environment carries the token.
   docker compose run --rm --no-deps -T -v "$REPO_ROOT/gateway/tests:/gateway/tests:ro" -v "$FIXTURES:/smoke.json:ro" \
     gateway python tests/test_evaluations.py http://gateway:8000 /smoke.json \
     || fail "Gateway evaluations (gateway/tests/test_evaluations.py)"
-  ok "Gateway evaluations: 200 eligible, 403 checklist_failed with the failing checks, 404 no_record unknown, 400, 401, no issuance row"
+  ok "Gateway evaluations: 200 eligible, 403 checklist_failed with the failing checks, 404 no_record unknown, 400, 401"
 
-  # 7. An Adapter failure during a request is a Gateway error (502), not a crash, on both endpoints. The Adapter is
-  # started again whether or not the checks pass, and answers again before the next step, so the stack is left as it was.
+  # 6. An Adapter failure during an evaluation is a Gateway error (502), not a crash. The Adapter is started again
+  # whether or not the check passes, and answers again before the next step, so the stack is left as it was.
   docker compose stop adapter >/dev/null || fail "cannot stop the adapter"
   adapter_down_rc=0
-  docker compose run --rm --no-deps -T -v "$REPO_ROOT/gateway/tests:/gateway/tests:ro" -v "$FIXTURES:/smoke.json:ro" \
-    gateway python tests/test_issuances.py adapter-down http://gateway:8000 /smoke.json || adapter_down_rc=$?
   docker compose run --rm --no-deps -T -v "$REPO_ROOT/gateway/tests:/gateway/tests:ro" -v "$FIXTURES:/smoke.json:ro" \
     gateway python tests/test_evaluations.py adapter-down http://gateway:8000 /smoke.json || adapter_down_rc=$?
   docker compose start adapter >/dev/null || fail "cannot restart the adapter"
   eligible=$(jq -r '.[0].eligible | if type == "array" then .[0] else . end' "$FIXTURES")
-  retry 30 in_network "http://adapter:8000/students/$eligible/eligibility" || fail "adapter did not answer again after restart"
-  [[ "$adapter_down_rc" == 0 ]] || fail "Gateway with the adapter down must answer 502 gateway_error (test_issuances.py and test_evaluations.py adapter-down)"
-  ok "Gateway: adapter down is a 502 gateway_error on /issuances and /evaluations, and the adapter is back"
+  scope=$(jq -r '.[0].scope' "$FIXTURES")
+  retry 30 in_network "http://adapter:8000/records/$eligible/eligibility?scope=$scope" || fail "adapter did not answer again after restart"
+  [[ "$adapter_down_rc" == 0 ]] || fail "Gateway with the adapter down must answer 502 gateway_error (test_evaluations.py adapter-down)"
+  ok "Gateway: adapter down is a 502 gateway_error on /evaluations, and the adapter is back"
 }

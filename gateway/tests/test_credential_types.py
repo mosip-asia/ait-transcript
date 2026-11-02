@@ -1,37 +1,22 @@
-"""Tests for the credential-type registry: each type's models of the adapter's answers, its checklist and its claim
-mapping, and the Gateway's gateway_error for a record that does not parse.
+"""Tests for the credential-type registry: each type's eligibility model of the adapter's answer and its checklist.
 
 Run: python3 gateway/tests/test_credential_types.py      host only, no Docker
-Needs fastapi and httpx (portal/requirements.txt): the claim test reads the mock adapter in-process.
+Needs gateway/requirements.txt.
 """
 
 from __future__ import annotations
 
-import csv
-import io
-import tempfile
-from pathlib import Path
-
 from pydantic import ValidationError
-from test_evaluations import (ROSTER, FakeStore, assert_only_failing,  # puts gateway/ and data/ on sys.path
-                              host_gateway, mock_adapter)
-from test_issuances import claim_names, escaped, post_with, stringify
+from test_evaluations import assert_only_failing  # puts gateway/ on sys.path
 
 import credential_types as ct  # noqa: E402
-import generate_csv as gc  # noqa: E402
 
 TRANSCRIPT = ct.REGISTRY["ait_transcript_vc_ldp"]
 ELIGIBLE = {"holds": [], "conferralStatus": "Conferred", "balance": "0.00"}
-RESERVED = {"_holderId", "_issuer", "id", "validFrom", "validUntil", "credentialStatus"}
-COURSE = {"no": "AT01", "title": "Ethics", "credits": "3", "grade": "A"}
 
 
 def evaluate(ctype: ct.CredentialType, eligibility: dict) -> list[dict]:
     return ct.evaluate(ctype, ctype.eligibility.model_validate(eligibility))
-
-
-def claims(ctype: ct.CredentialType, record: dict) -> dict:
-    return ct.claims(ctype, ctype.record.model_validate(record))
 
 
 def assert_does_not_parse(model, answer: dict, label: str) -> None:
@@ -40,10 +25,6 @@ def assert_does_not_parse(model, answer: dict, label: str) -> None:
     except ValidationError:
         return
     raise AssertionError(f"{model.__name__} parsed {label}: {answer}")
-
-
-def transcript_record(**fields) -> dict:
-    return {**{k: "" for k in TRANSCRIPT.record.model_fields}, "courses": [{"term": "T1", "courses": [COURSE]}], **fields}
 
 
 def test_the_transcript_scope_names_its_credential_type() -> None:
@@ -89,102 +70,10 @@ def test_transcript_eligibility_follows_openapi_strictly() -> None:
         assert_does_not_parse(TRANSCRIPT.eligibility, broken, label)
 
 
-def test_claims_equal_the_escaped_generated_csv_row_for_every_persona() -> None:
-    """The Gateway's 200 body, after the plugin's stringify rule, is the generator's verbatim row escaped for the
-    quoted template: the same claim set, every claim, for every persona."""
-    assert sorted(claim_names(TRANSCRIPT)) == sorted(gc.CLAIM_COLUMNS)
-    with mock_adapter() as (adapter, _, rows):
-        assert any("\n" in row["programCommittee"] for row in rows)  # a multiline claim is among them
-        for row in rows:
-            body = claims(TRANSCRIPT, adapter.get(f"/students/{row['id']}/transcript").json())
-            assert isinstance(body["courses"], list), row["id"]
-            assert not RESERVED & body.keys() and "courseTableHtml" not in body
-            assert stringify(body) == escaped(row, gc.CLAIM_COLUMNS), row["id"]
-
-
-def test_multiline_claims_are_escaped_for_the_quoted_template() -> None:
-    record = transcript_record(
-        courses=[{"term": "T1", "courses": [{**COURSE, "title": "Thai \"Basics\""}, {**COURSE, "grade": ""}]}],
-        programCommittee="Dr. A (Chair)\nDr. B", fullName="Somchai Café")
-    body = claims(TRANSCRIPT, record)
-    assert body["courseList"] == 'Thai \\"Basics\\" \\u2014 A\\nEthics'
-    assert body["programCommittee"] == "Dr. A (Chair)\\nDr. B"
-    assert body["fullName"] == "Somchai Caf\\u00e9"
-    assert body["courses"][0]["courses"][0]["title"] == 'Thai "Basics"'  # substituted unquoted: left as it is
-
-
-def test_every_claim_but_courses_is_a_string_on_the_wire() -> None:
-    """A list, a dict, a number or a null where a string claim belongs does not parse; it never becomes a repr."""
-    for label, broken in (("dict faculty", {"faculty": {"k": "v"}}), ("list notes", {"notes": ["a"]}),
-                          ("numeric yearAwarded", {"yearAwarded": 2023}), ("null thesisTitle", {"thesisTitle": None})):
-        assert_does_not_parse(TRANSCRIPT.record, transcript_record(**broken), label)
-
-
-def test_courses_are_validated_as_terms_and_courses_and_carried_exactly_as_served() -> None:
-    served = [{"courses": [{"grade": "B+", "no": "CS601", "lab": "0", "title": "Algorithms", "credits": "3",
-                            "remark": "kept"}], "term": "August Semester 2024"}]
-    body = claims(TRANSCRIPT, transcript_record(courses=served))
-    assert body["courses"] == served and stringify(body)["courses"] == stringify({"c": served})["c"]  # order kept
-    without_grade = {k: v for k, v in COURSE.items() if k != "grade"}
-    for label, broken in (("a course without grade", [{"term": "T1", "courses": [without_grade]}]),
-                          ("a term without courses", [{"term": "T1"}]), ("a term as text", ["T1"])):
-        assert_does_not_parse(TRANSCRIPT.record, transcript_record(courses=broken), label)
-
-
-def test_dates_and_numbers_stay_the_strings_the_adapter_served() -> None:
-    body = claims(TRANSCRIPT, transcript_record(dateOfBirth="1999-02-30", courseworkCredits="27.0"))
-    assert (body["dateOfBirth"], body["courseworkCredits"]) == ("1999-02-30", "27.0")
-
-
-def test_a_record_that_lacks_a_claim_or_serves_it_as_null_does_not_parse() -> None:
-    record = {"teamId": "team-01", "teamName": "T", "oidcClientId": "c", "authEndpoint": "a", "issuerEndpoint": "i",
-              "verifierEndpoint": "v"}
-    assert claims(PASSPORT, record)["teamName"] == "T"
-    assert_does_not_parse(PASSPORT.record, {k: v for k, v in record.items() if k != "teamName"}, "no teamName")
-    assert_does_not_parse(PASSPORT.record, {**record, "teamName": None}, "null teamName")
-
-
-def roster_text(transform) -> str:
-    """The committed roster with `transform(columns, row)` applied to the header and every row."""
-    with ROSTER.open(encoding="utf-8", newline="") as f:
-        rows = list(csv.reader(f))
-    buf = io.StringIO()
-    csv.writer(buf, lineterminator="\n").writerows(transform(rows[0], row) for row in rows)
-    return buf.getvalue()
-
-
-def issue_on_roster(text: str, scope: str) -> tuple[tuple[int, dict], list]:
-    """POST /issuances for hack-2026-0001 through the Gateway and the mock adapter in-process, on a roster `text`."""
-    with tempfile.TemporaryDirectory() as td:
-        csv_path = Path(td) / "student_identity_data.csv"
-        csv_path.write_text(text, encoding="utf-8")
-        with mock_adapter(csv_path) as (adapter, _, _):
-            store = FakeStore()
-            with host_gateway(adapter, store, (scope,)) as client:
-                return post_with(client)({"sub": "hack-2026-0001", "scope": scope}, "test-token"), store.rows
-
-
-def test_a_roster_row_missing_a_column_is_a_gateway_error_never_none() -> None:
-    """A row shorter than the header (its trailing cells read as null), and a roster without a column a type needs,
-    are 502 gateway_error, never a claim of "None" or ""."""
-    header = ROSTER.read_text(encoding="utf-8").splitlines()[0]
-    short = header + "\nhack-2026-0001,team-01,Sandbox Pioneers\n"
-    without_team_name = roster_text(lambda columns, row: [v for c, v in zip(columns, row) if c != "teamName"])
-    for label, text, scopes in (("short row", short, (PASSPORT.scope, ACHIEVEMENT.scope)),
-                                ("no teamName column", without_team_name, (PASSPORT.scope,))):
-        for scope in scopes:
-            answer, rows = issue_on_roster(text, scope)
-            assert answer == (502, {"error": "gateway_error"}), (label, scope, answer)
-            assert rows == [], (label, scope)
-
-
-def test_a_null_in_a_roster_column_no_type_reads_still_issues() -> None:
-    """A roster with an extra column, `email`, that the row leaves out (served as null): both types still issue."""
-    text = roster_text(lambda columns, row: row + ["email"] if row is columns else row)
-    for ctype in (PASSPORT, ACHIEVEMENT):
-        (status, body), rows = issue_on_roster(text, ctype.scope)
-        assert status == 200 and sorted(body) == sorted(claim_names(ctype)), (ctype.scope, status, body)
-        assert rows == [("hack-2026-0001", ctype.credential_type, ctype.scope, None)]
+def test_a_null_in_a_field_no_check_reads_is_no_refusal() -> None:
+    """The mock serves a roster cell the row lacks as null: a type reads only its own fields."""
+    assert evaluate(PASSPORT, {"teamId": "team-01", "winner": None, "email": None})[0]["passed"] is True
+    assert evaluate(TRANSCRIPT, {**ELIGIBLE, "level": None})[0]["passed"] is True
 
 
 # --- Developer Passport (the hackathon installation) ---
@@ -204,19 +93,6 @@ def test_a_participant_without_a_team_is_not_on_the_roster() -> None:
     for team_id in ("", "  "):
         [check] = evaluate(PASSPORT, {"teamId": team_id, "winner": "false"})
         assert check["check"] == "on_roster" and check["passed"] is False and check["reason"], check
-
-
-def test_passport_claims_are_the_roster_columns() -> None:
-    with mock_adapter(ROSTER) as (adapter, _, _):
-        record = adapter.get("/students/hack-2026-0001/transcript").json()
-    assert claims(PASSPORT, record) == {
-        "teamId": "team-01",
-        "teamName": "Sandbox Pioneers",
-        "oidcClientId": "hack-team-01",
-        "authEndpoint": "http://localhost:9080/realms/hackathon",
-        "issuerEndpoint": "http://localhost:9091",
-        "verifierEndpoint": "http://localhost:9095",
-    }
 
 
 # --- Achievement (the hackathon installation) ---
@@ -251,14 +127,9 @@ def test_the_winner_column_is_read_as_true_whatever_its_case() -> None:
 
 
 def test_the_winner_column_is_a_string_on_the_wire() -> None:
+    """A null winner, the cell a short roster row lacks, does not parse: the Achievement's evaluation is gateway_error."""
     for winner in (True, None, 1):
         assert_does_not_parse(ACHIEVEMENT.eligibility, {"teamId": "t", "winner": winner}, f"winner {winner!r}")
-
-
-def test_achievement_claims_are_the_team_id_and_the_award() -> None:
-    with mock_adapter(ROSTER) as (adapter, _, _):
-        record = adapter.get("/students/hack-2026-0001/transcript").json()
-    assert claims(ACHIEVEMENT, record) == {"teamId": "team-01", "award": "Best Use of Verifiable Credentials"}
 
 
 if __name__ == "__main__":
