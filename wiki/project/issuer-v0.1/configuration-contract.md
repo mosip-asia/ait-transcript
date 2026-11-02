@@ -11,7 +11,7 @@ How to read it: `vc-stack/` has one folder per deployment, each with its own `co
 | Deployment | Folder | Holds |
 |---|---|---|
 | [Issuer](#issuer) | `vc-stack/issuer/` | Postgres, Certify, certify-nginx, the mock VDR |
-| [Gateway](#gateway) | `vc-stack/gateway/` | the Gateway (the checklist runner behind Certify's plugin) |
+| [Gateway](#gateway) | `vc-stack/gateway/` | the Gateway (the optional Approval gate Certify's Data-provider plugin asks) |
 | [Verify](#verify) | `vc-stack/verify/` | Verify's Postgres, the verifier service, the Verify UI |
 | [Mock Adapter](#mock-adapter) | `vc-stack/mock-adapter/` | the mock Adapter |
 | [Demo](#demo) | `vc-stack/demo/` | everything else: Keycloak, the Portal, Mimoto, Inji Web, the public gateway |
@@ -30,7 +30,7 @@ Two servers run the stack, each a Compose file that includes some of the five fo
 | Server | Compose file | Deployments | What it is |
 |---|---|---|---|
 | transcript-demo | `vc-stack/compose.yaml` | Issuer, Gateway, Verify, Mock Adapter, Demo | The demo server: the whole stack, with the stand-in Keycloak, for showing the journey end to end. Host `*.transcript-demo.ait-vc.dpi.ait.ac.th` (the infra team's), which was the Dev environment before the split |
-| issuer-dev | `vc-stack/issuer-dev.yaml` | Issuer, Gateway, Mock Adapter | The dev server, for integrating real components with the Issuer. It runs against infra's Keycloak (`AUTH_SERVER_*` set to it, [Authorization Server](#authorization-server)), and drops the Mock Adapter once infra's Adapter serves credential data: the include of `mock-adapter/` leaves `issuer-dev.yaml` and `GATEWAY_ADAPTER_URL` in `vc-stack/.env` names infra's Adapter |
+| issuer-dev | `vc-stack/issuer-dev.yaml` | Issuer, Gateway, Mock Adapter | The dev server, for integrating real components with the Issuer. It runs against infra's Keycloak (`AUTH_SERVER_*` set to it, [Authorization Server](#authorization-server)), and drops the Mock Adapter once infra's Adapter serves credential data: the include of `mock-adapter/` leaves `issuer-dev.yaml`, and `CERTIFY_ADAPTER_URL` and `GATEWAY_ADAPTER_URL` in `vc-stack/.env` name infra's Adapter |
 
 Each stack has a no-Gateway form: the same Compose file with `gateway/` left out, merging `vc-stack/issuer/no-gateway.yaml` over the Issuer's file, which sets Certify's plugin switch off in its environment. The Issuer then asks no Gateway and issues every record the Adapter serves to whoever may sign in at the Authorization Server. Every script runs the form `COMPOSE_FILE` names (relative to `vc-stack/`), for example `COMPOSE_FILE=compose-no-gateway.yaml ./run-demo.sh`, so a run without the Gateway edits no committed file.
 
@@ -39,7 +39,7 @@ Each stack has a no-Gateway form: the same Compose file with `gateway/` left out
 | `vc-stack/compose-no-gateway.yaml` | `vc-stack/compose.yaml` | `MOSIP_CERTIFY_GATEWAY_ENABLED=false`, `MOSIP_CERTIFY_GATEWAY_URL=NO GATEWAY` |
 | `vc-stack/issuer-dev-no-gateway.yaml` | `vc-stack/issuer-dev.yaml` | `MOSIP_CERTIFY_GATEWAY_ENABLED=false`, `MOSIP_CERTIFY_GATEWAY_URL=NO GATEWAY` |
 
-issuer-dev runs `docker compose --env-file vc-stack/.env -f vc-stack/issuer-dev.yaml up -d --build`, then `./vc-stack/bootstrap.sh --did-refresh`, after every `compose up`. It writes Certify's live `did:key` (a fresh keystore's new key) to every `credential_config` row and to `CERTIFY_DID` in `vc-stack/.env`, which a credential's issuer reads, and moves the AIT row's context URL to `<CERTIFY_PUBLIC_BASE_URL>/contexts/transcript/v1.json` (an `https` base, the ingress's hostname); it recreates Certify only when something changed. Without it Certify signs as the seed's placeholder DID, and no verifier accepts the credential. The plain `compose up` leaves the seed's `http://host.docker.internal:9098`, which is Demo's `public-gateway` and does not exist on issuer-dev. The refresh covers only the AIT row: the hackathon rows keep the seed's URLs ([URLs](#urls-in-credentials-or-fetched-by-verifiers) has the workaround). `./vc-stack/issuer-smoke.sh` checks it (Certify with the Gateway plugin, the DID it signs as, the issuer metadata, the contexts, every persona through the Gateway, and `gateway_error` with the Adapter down). It has no Authorization Server of its own, so it issues no credential; the full-stack `smoke.sh` does.
+issuer-dev runs `docker compose --env-file vc-stack/.env -f vc-stack/issuer-dev.yaml up -d --build`, then `./vc-stack/bootstrap.sh --did-refresh`, after every `compose up`. It writes Certify's live `did:key` (a fresh keystore's new key) to every `credential_config` row and to `CERTIFY_DID` in `vc-stack/.env`, which a credential's issuer reads, and moves the AIT row's context URL to `<CERTIFY_PUBLIC_BASE_URL>/contexts/transcript/v1.json` (an `https` base, the ingress's hostname); it recreates Certify only when something changed. Without it Certify signs as the seed's placeholder DID, and no verifier accepts the credential. The plain `compose up` leaves the seed's `http://host.docker.internal:9098`, which is Demo's `public-gateway` and does not exist on issuer-dev. The refresh covers only the AIT row: the hackathon rows keep the seed's URLs ([URLs](#urls-in-credentials-or-fetched-by-verifiers) has the workaround). `./vc-stack/issuer-smoke.sh` checks it (Certify with the Data-provider plugin and the gate as configured, the DID it signs as, the issuer metadata, the contexts, and with the gate on every persona through the Gateway and `gateway_error` with the Adapter down). It has no Authorization Server of its own, so it issues no credential; the full-stack `smoke.sh` does.
 
 issuer-dev's ingress is infra's. It routes the OpenID4VCI paths, `/.well-known/` and `/contexts/` to `certify-nginx`, the Issuer's single entry point, which proxies `/contexts/` to `vdr`, and its hostname is the public base URL, `CERTIFY_PUBLIC_BASE_URL` in `vc-stack/.env`. [Issuer → Ingress the Issuer needs](#ingress-the-issuer-needs) lists the paths. On transcript-demo the same routes are `public-gateway`'s, in Demo.
 
@@ -49,7 +49,7 @@ issuer-dev's hostname is not recorded here yet.
 
 **Deploy:** `vc-stack/issuer/` (`vc-stack/issuer/compose.yaml`; `vc-stack/issuer-dev.yaml` runs it beside the Gateway and the Mock Adapter).
 
-The Issuer is the deployment of Certify and what it needs to sign: Postgres, Certify with the Gateway data-provider plugin, certify-nginx, and the mock VDR that serves the Issuer's JSON-LD contexts until the real VDR does. Every service it depends on is in the folder, so it runs alone. With the gate on, as each installation's properties set it, Certify's plugin calls the Gateway ([Gateway](#gateway)) on every credential request, so a request is refused with `gateway_error` unless the Gateway folder runs beside this one. With the gate off (`mosip.certify.gateway.enabled=false` and `mosip.certify.gateway.url=NO GATEWAY`, set through Certify's environment as the [no-Gateway forms](#servers) do), it calls no Gateway.
+The Issuer is the deployment of Certify and what it needs to sign: Postgres, Certify with the Data-provider plugin, certify-nginx, and the mock VDR that serves the Issuer's JSON-LD contexts until the real VDR does. Every service it depends on is in the folder, so it runs alone. With the gate on, as each installation's properties set it, Certify's plugin calls the Gateway ([Gateway](#gateway)) on every credential request, so a request is refused with `gateway_error` unless the Gateway folder runs beside this one. With the gate off (`mosip.certify.gateway.enabled=false` and `mosip.certify.gateway.url=NO GATEWAY`, set through Certify's environment as the [no-Gateway forms](#servers) do), it calls no Gateway.
 
 **Needs from the other deployments:**
 
@@ -64,7 +64,7 @@ The Issuer is the deployment of Certify and what it needs to sign: Postgres, Cer
 | Compose service | Component | Image | Deployed |
 |---|---|---|---|
 | `database` | Postgres: Certify's database | `postgres:15` | yes |
-| `certify` | Inji Certify, with the Gateway data-provider plugin | `injistack/inji-certify-with-plugins:0.14.0` | yes |
+| `certify` | Inji Certify, with the Data-provider plugin | `injistack/inji-certify-with-plugins:0.14.0` | yes |
 | `certify-nginx` | Certify's nginx | `nginx:stable` | yes |
 | `vdr` | The static mock VDR (JSON-LD contexts) | `nginx:stable` | yes |
 
@@ -212,7 +212,7 @@ Every committed value below is a local or CI fixture; a deployment replaces each
 
 **Deploy:** `vc-stack/gateway/` (`vc-stack/gateway/compose.yaml`; the full stack and `vc-stack/issuer-dev.yaml` both include it beside the Issuer).
 
-The Gateway is the checklist runner behind Certify's data-provider plugin (`contracts.md` section 2a). It is its own folder so a stack without it leaves the folder out. Every service it depends on is in the folder, so it runs alone.
+The Gateway is the optional Approval gate: with the gate on, Certify's Data-provider plugin asks its `POST /evaluations` before it fetches a record (`contracts.md` section 2a). It is its own folder so a stack without it leaves the folder out. Every service it depends on is in the folder, so it runs alone.
 
 **Needs from the other deployments:**
 
@@ -344,9 +344,9 @@ Runs as `root` with `host.docker.internal` mapped to the host (it fetches the lo
 
 **Deploy:** `vc-stack/mock-adapter/` (`vc-stack/mock-adapter/compose.yaml`).
 
-The mock Adapter serves credential data to the Gateway (`contracts.md` section 2b), read-only, from the installation's CSV. It is its own folder because issuer-dev needs it until infra's Adapter, which today handles only sign-in, serves credential data. Dropping it means removing the folder from `issuer-dev.yaml` and pointing `GATEWAY_ADAPTER_URL` at infra's Adapter.
+The mock Adapter serves records to Certify's Data-provider plugin and eligibility attributes to the Gateway (`contracts.md` section 2b), read-only, from the installation's CSV. It is its own folder because issuer-dev needs it until infra's Adapter, which today handles only sign-in, serves credential data. Dropping it means removing the folder from `issuer-dev.yaml` and pointing `CERTIFY_ADAPTER_URL` and `GATEWAY_ADAPTER_URL` at infra's Adapter.
 
-**Needs from the other deployments:** nothing. The Gateway in the Issuer is its only caller, as `http://adapter:8000` on the shared Docker network, and the Adapter holds no token and no Authorization Server setting.
+**Needs from the other deployments:** nothing. Certify's plugin in the Issuer and the Gateway are its only callers, as `http://adapter:8000` on the shared Docker network, and the Adapter holds no token and no Authorization Server setting.
 
 ### Services
 
@@ -375,7 +375,7 @@ No host port; reached as `http://adapter:8000`.
 |---|---|---|
 | The CSV, its whole content | `installations/<name>/adapter/student_identity_data.csv` | `ait`: generated from `data/students.json` (git-ignored), one row per degree; `hackathon`: the committed roster, edited by hand |
 
-The Mock Adapter itself is the fixture: the real Adapter (`contracts.md` section 2b) replaces it by changing `GATEWAY_ADAPTER_URL`.
+The Mock Adapter itself is the fixture: the real Adapter (`contracts.md` section 2b) replaces it by changing `CERTIFY_ADAPTER_URL` and `GATEWAY_ADAPTER_URL`.
 
 ## Demo
 

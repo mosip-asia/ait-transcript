@@ -144,12 +144,12 @@ Certify's app log pinpoints it further: `org.json.JSONException: Expected a ',' 
 
 **Root cause:** [data/generate_csv.py](../../data/generate_csv.py) wrote every claim — including the then-current Python-rendered HTML course `<table>` claim (since removed by the context fix) — straight into the CSV with **no JSON-string escaping**. Certify's `vc_template` does naive Velocity string substitution, not JSON-aware templating: `"<claim>": "${<claim>}"` just drops the raw value between the quotes. That claim's markup contained attribute quotes (`<table style="width:100%;...">`), and those unescaped `"` characters terminated the JSON string early, corrupting everything after them. This is exactly the gotcha [Transcript Credential Design](../concepts/transcript-credential.md#gotchas-already-hit-upstream--do-not-re-discover) already documented (and the same class of issue `~/Developer/inji/wiki/guides/credential-lab-pdf-csv-gotchas.md` calls out under "AIT Transcript preset") — it was written down as a rule but never actually implemented in this repo's CSV generator.
 
-**Fix:** added `escape_vc_quoted_claim()` to `generate_csv.py` (since removed; the Gateway escapes now) — `json.dumps(value)[1:-1]` (JSON-encode, then strip the surrounding quotes the template already supplies) — applied to every claim **except** `courses`, which is the one field deliberately embedded unquoted as raw JSON (`"courses": ${courses}`, no surrounding quotes to protect, and escaping it would corrupt the array itself).
+**Fix:** added `escape_vc_quoted_claim()` to `generate_csv.py` (since removed; the Data-provider plugin escapes now, `plugin/`) — `json.dumps(value)[1:-1]` (JSON-encode, then strip the surrounding quotes the template already supplies) — applied to every claim **except** `courses`, which is the one field deliberately embedded unquoted as raw JSON (`"courses": ${courses}`, no surrounding quotes to protect, and escaping it would corrupt the array itself).
 
 **Verify:**
 
 ```sh
-python3 gateway/tests/test_credential_types.py && python3 gateway/tests/test_issuances.py
+docker run --rm -v "$PWD/plugin:/src" -w /src maven:3.9-eclipse-temurin-21 mvn -q package   # the plugin's escaper tests
 ```
 
 Then reproduce Certify's substitution locally against the regenerated CSV (swap in the real `vc_template` from `installations/ait/certify_seed.sql`, base64-decoded) and confirm `json.loads()` succeeds on the rendered document — this is how the bug was originally isolated to line 32 without needing a live claim attempt for every iteration.

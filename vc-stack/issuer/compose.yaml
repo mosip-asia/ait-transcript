@@ -67,7 +67,7 @@ services:
       - ../../installations/${INSTALLATION}/certify-installation.properties:/home/mosip/config/certify-installation.properties
       - ../data/CERTIFY_PKCS12:/home/inji/CERTIFY_PKCS12
       - ../config/vp_request_config.json:/home/mosip/config/vp_request_config.json
-      # The Gateway data-provider plugin, built by run-demo.sh. A single file, never the directory, so the four
+      # The Data-provider plugin, built by run-demo.sh. A single file, never the directory, so the four
       # jars bundled in additional_jars/ stay visible; a missing jar fails here instead of mounting an empty directory.
       - type: bind
         source: ../plugins/issuer-data-provider-plugin.jar

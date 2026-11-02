@@ -12,7 +12,7 @@ Status: accepted by the team on 2026-10-20; first written 2026-10-11, extended 2
 | 6 | `did:web:credentials.ait.ac.th` on AIT domains (§5.2) | `did:web` on a temporary hostname | AIT domains need ITserv; a DID cannot move, so credentials are re-issued at the move | When ITserv delegates the domain |
 | 7 | JSON-LD or SD-JWT (§2.1) | JSON-LD (W3C VC 2.0) only | One format for v0.1 by decision; more later | Next release |
 | 8 | Admin portal, walletless catalog and Cloud Run verifier are Milestone 1 deliverables (§7) | Stand-ins: the existing FastAPI app, stock Inji Web guest mode, stock Inji Verify | Not Thas's responsibility in v0.1; Thas's work stops at the issuer admin API | When owners are named |
-| 9 | `GET /students/:id/transcript` (§5.1(3)) | Adds `degreeId` and a degrees list | A student can hold more than one degree, each its own credential (§5.1(3)) | With ITserv when the SIS adapter is built |
+| 9 | `GET /students/:id/transcript` (§5.1(3)) | Lists a student's records (`GET /records?sub&scope`) and reads one by `recordId` (`GET /records/{recordId}?scope`), since 2026-11-02 (row 22); before that, a `degreeId` and a degrees list | A student can hold more than one degree, each its own credential (§5.1(3)) | With ITserv when the SIS adapter is built |
 | 10 | Not mentioned | Mimoto runs beside Inji Web and renders the PDF | Inji Web cannot run without it | Add to the proposal's component list |
 
 ## Changes on 2026-10-19
@@ -46,3 +46,11 @@ Source: [`spec-part-2.md`](spec-part-2.md). Not yet put to the team.
 | # | Proposal says | v0.1 does | Why | Revisit |
 |---|---|---|---|---|
 | 21 | `did:web:credentials.ait.ac.th` on AIT domains (§5.2); the conformance profile's `did:web` with the DID document on the VDR (responsibilities.md section 6) | v0.1 issues under Certify's `did:key`, refreshed after a wipe, so a wipe changes the issuer identifier; nothing is published at the VDR's `/.well-known/did.json`; supersedes the `did:web` part of row 6 for v0.1 | Removes the DID publishing step and the question of `did:web` over plain HTTP from v0.1; credentials through v0.1 carry no compatibility promise anyway | After v0.1, with a stable public VDR hostname |
+
+## Changes on 2026-11-02
+
+Source: [ADR 0001](../../../docs/adr/0001-approval-gate-beside-the-data-path.md) and [`contracts.md`](contracts.md) section 2. Not yet put to the team. This row departs from v0.1's own part 1, not from the proposal: stories 21 and 22 of the hackathon chain spec (retired: `git show 1d68d74:wiki/project/issuer-v0.1/spec-hackathon-chain.md`) said the plugin knows one URL, one secret and two timeouts and nothing about claims, and the Gateway owns the error vocabulary. Both are reversed.
+
+| # | Proposal says | v0.1 does | Why | Revisit |
+|---|---|---|---|---|
+| 22 | An approval gate in the issuance path (§3.3), which row 12 put in the Gateway, with the Gateway fetching the record and returning the claims | The Data-provider plugin fetches the record from the Adapter itself and asks the Gateway's `POST /evaluations` only whether to issue. The Gateway is optional, switched off by `mosip.certify.gateway.enabled`; without it, every record the Adapter serves is issued to whoever may sign in at the Authorization Server. The errors are split by owner: the plugin's `invalid_access_token`, `no_record` and `adapter_error`, the Gateway's `checklist_failed`, `unknown_scope` and `gateway_error`. The issuance record is Certify's ledger (the token's `sub` and `client_id` indexed), not a Gateway table; amends rows 2 and 12 | The Gateway can be switched off by configuration, and later replaced by checks at the Authorization Server, without touching how records reach Certify | When checks at the Authorization Server (Keycloak or Authentik) replace the Gateway |

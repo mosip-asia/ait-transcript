@@ -29,7 +29,7 @@ Run every command from the repo root, in WSL2 on Windows (see Prerequisites). Th
 | Folder | Containers | Host ports |
 |---|---|---|
 | `issuer/` | `database` (Postgres), `certify`, `certify-nginx`, `vdr` (the mock VDR) | 6440, 9090, 9091 |
-| `gateway/` | `gateway` (the checklist runner; runs beside `issuer/`) | none |
+| `gateway/` | `gateway` (the optional Approval gate, which runs the Checklist) | none |
 | `mock-adapter/` | `adapter` (the mock data Adapter) | none |
 | `verify/` | `verify-database`, `verify-service`, `verify-ui` | 9095, 4007 |
 | `demo/` | `demo-database`, `mimoto-service`, `inji-web`, `keycloak-server`, `keycloak`, `public-gateway`, `demo-app` | 9099, 4004, 9080, 9098, 4100 |
@@ -38,6 +38,8 @@ Two top-level files pull the folders in with `include:`:
 
 - `vc-stack/compose.yaml`: all five folders, the whole journey.
 - `vc-stack/issuer-dev.yaml`: `issuer/`, `gateway/` and `mock-adapter/`, the Issuer alone.
+
+Each has a no-Gateway form, `vc-stack/compose-no-gateway.yaml` and `vc-stack/issuer-dev-no-gateway.yaml`: the same folders without `gateway/`, with the Data-provider plugin's switch set off in Certify's environment. Every script runs the file `COMPOSE_FILE` names, relative to `vc-stack/`, so `COMPOSE_FILE=compose-no-gateway.yaml ./run-demo.sh` runs the whole stack without the Gateway and edits no committed file.
 
 What each service is configured with, and which values a deployment replaces, is in [the configuration contract](./wiki/project/issuer-v0.1/configuration-contract.md); this README does not repeat it. How the folders fit together is in [wiki/architecture/vc-stack.md](./wiki/architecture/vc-stack.md).
 
@@ -52,7 +54,7 @@ chmod +x run-demo.sh vc-stack/bootstrap.sh vc-stack/smoke.sh vc-stack/issuer-smo
 INSTALLATION=ait ./run-demo.sh
 ```
 
-`run-demo.sh` builds the demo app, adapter and gateway images, regenerates `installations/ait/adapter/student_identity_data.csv` from `data/students.json`, renders Mimoto's issuer list, builds the Certify plugin jar into `vc-stack/plugins/`, then runs `vc-stack/bootstrap.sh`, which brings the folders up in order and checks the result. A pass ends with `Stack is healthy.` and the URLs under [Accessing the demo locally](#accessing-the-demo-locally). Run it again whenever `data/students.json` changes, so the adapter CSV stays in sync.
+`run-demo.sh` builds the demo app, adapter and (unless a no-Gateway form runs) gateway images, regenerates `installations/ait/adapter/student_identity_data.csv` from `data/students.json`, renders Mimoto's issuer list, builds the Certify plugin jar into `vc-stack/plugins/`, then runs `vc-stack/bootstrap.sh`, which brings the folders up in order and checks the result. A pass ends with `Stack is healthy.` and the URLs under [Accessing the demo locally](#accessing-the-demo-locally). Run it again whenever `data/students.json` changes, so the adapter CSV stays in sync.
 
 After the first run has written `vc-stack/.env` and created the Docker network, the plain Compose form works too (it needs the plugin jar and the CSV `run-demo.sh` made):
 
@@ -63,7 +65,7 @@ docker compose -f vc-stack/compose.yaml up -d --build
 
 ### The Issuer alone
 
-`vc-stack/issuer-dev.yaml` runs the Issuer and the mock Adapter, with no Keycloak, wallet or verifier. It is what the dev server runs until a real Adapter serves credential data.
+`vc-stack/issuer-dev.yaml` runs the Issuer, the Gateway and the mock Adapter, with no Keycloak, wallet or verifier (`vc-stack/issuer-dev-no-gateway.yaml` without the Gateway). It is what the dev server runs until a real Adapter serves credential data.
 
 ```sh
 export INSTALLATION=ait                     # or hackathon
@@ -126,8 +128,9 @@ INSTALLATION=ait python3 data/render_mimoto_issuers_config.py
 |---|---|---|
 | Gateway | `python3 gateway/tests/test_credential_types.py` | each credential type's eligibility model and checklist |
 | Gateway | `python3 gateway/tests/test_evaluations.py` | `POST /evaluations` against the mock Adapter in-process, for every type in every Installation's `smoke.json`: 200, 403 with exactly the failing checks, 404 for the unknown persona, 400, 401, 502 for an Adapter down or bad eligibility, 500 for a check that raises, and a start from the three settings with no database |
-| Adapter | `python3 adapter/test_adapter.py` | the mock Adapter on the generated CSV and on the hackathon roster, and `adapter/openapi.yaml` requiring every field a Gateway model requires |
-| Plugin | `docker run --rm -v "$PWD/plugin:/src" -w /src maven:3.9-eclipse-temurin-21 mvn -q package` | needs Docker; prints nothing, exits 0, and leaves `plugin/target/issuer-data-provider-plugin.jar` |
+| Adapter | `python3 adapter/test_adapter.py` | the mock Adapter's `/records` paths on the generated CSV and on the hackathon roster, each record schema of `adapter/openapi.yaml` listing exactly its template's claims, every field a Gateway eligibility model requires being required there, and the contract mode passing the mock and failing broken Adapters. `--contract URL SUB SCOPE` checks any running Adapter |
+| SIS bridge | `python3 sis-bridge/test_bridge.py` | the temporary bridge against a stand-in SIS: the `/records` contract, 404 for an unknown student, 502 for a SIS that is down or answers something else |
+| Plugin | `docker run --rm -v "$PWD/plugin:/src" -w /src maven:3.9-eclipse-temurin-21 mvn -q package` | needs Docker; prints nothing, exits 0, and leaves `plugin/target/issuer-data-provider-plugin.jar`. Its JUnit tests run a stand-in Adapter and Gateway, with the gate on and off, and every bad switch setting |
 | `vc-stack/` | `python3 vc-stack/test_installation_guard.py` | the scripts refuse a missing `INSTALLATION` |
 | `vc-stack/` | `python3 vc-stack/test_installations.py` | each Installation's realm users match its adapter CSV, and its `smoke.json` personas are among them |
 | `vc-stack/` | `python3 vc-stack/test_authorization_server.py` | Certify's properties and Mimoto's issuer list for the stand-in and the campus realm |
@@ -147,12 +150,14 @@ A smoke test needs the stack up (see [Deploy locally](#deploy-locally)) with the
 | Issuer-only | `vc-stack/issuer-dev.yaml` up | `./vc-stack/issuer-smoke.sh` | `All Issuer-only smoke checks passed.` |
 | Full stack | `vc-stack/compose.yaml` up | `./vc-stack/smoke.sh` | `All smoke checks passed.` |
 
-- **Issuer-only** checks that Certify loaded the Gateway plugin and lists exactly the Installation's credential types with the Gateway's claims, that certify-nginx serves their contexts from the VDR, and that the Gateway answers every persona of `installations/<name>/smoke.json`: 200 for the eligible, 403 `checklist_failed` for the refused, 404 `no_record` for the unknown, and 502 `gateway_error` with the Adapter stopped. It issues no credential, because there is no Authorization Server.
-- **Full stack** runs the Gateway checks directly and through Certify, and adds Mimoto, Keycloak and Inji Web configuration checks, a bootstrap re-run, `issue_and_verify.py` (issue each type with the Keycloak `smoke` client, verify it, then verify tampered copies and expect `ERR_SIGNATURE_VERIFICATION_FAILED`), and `test_inji_web_vc_readiness.py --live`. It runs only against the stand-in Keycloak, not a campus realm.
+Without the Gateway, bring up the no-Gateway form and run the same smoke with `COMPOSE_FILE` naming it (`issuer-dev-no-gateway.yaml` or `compose-no-gateway.yaml`).
+
+- **Issuer-only** checks that Certify's log names `IssuerDataProviderPlugin` with the gate as configured, that the plugin's ten keys are as committed, that Certify lists exactly the Installation's credential types with the claims of the Adapter contract's record schemas, and that certify-nginx serves their contexts from the VDR. With the gate on it also checks that the Gateway answers every persona of `installations/<name>/smoke.json` on `POST /evaluations` (200 for the eligible, 403 `checklist_failed` for the refused, 404 `no_record` for the unknown) and 502 `gateway_error` with the Adapter stopped; with it off, that no `gateway` runs. It issues no credential, because there is no Authorization Server.
+- **Full stack** runs those checks, then issues through Certify: with the gate on, each eligible persona is issued and verifies, each refused one gets `checklist_failed`, and the Gateway stopped gives `gateway_error`; with it off, the refused personas are issued too and the Adapter stopped gives `adapter_error`. The unknown persona gets `no_record` either way, and each issued credential adds one ledger row carrying `tokenSub` and `tokenClientId`. It adds Mimoto, Keycloak and Inji Web configuration checks, a bootstrap re-run, `issue_and_verify.py` (issue each type with the Keycloak `smoke` client, verify it, then verify tampered copies and expect `ERR_SIGNATURE_VERIFICATION_FAILED`), and `test_inji_web_vc_readiness.py --live`. It runs only against the stand-in Keycloak, not a campus realm.
 
 The browser OAuth login and the PDF download are still manual.
 
-CI runs the host tests, then the full-stack smoke and the Issuer-only smoke once per Installation, each on a fresh runner (`.github/workflows/test.yml`).
+CI runs the host tests, then the full-stack smoke and the Issuer-only smoke once per Installation and switch setting, each on a fresh runner (`.github/workflows/test.yml`).
 
 ## Deploying to GCP
 
