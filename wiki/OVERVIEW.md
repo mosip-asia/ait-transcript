@@ -7,15 +7,15 @@ tags:
 ---
 # Wiki
 
-This repo is the Issuer (Inji Certify with the Gateway and an Adapter behind it) and the demo stack that runs the whole journey around it: sign in, claim a credential into a wallet, verify it, revoke it.
+This repo is the Issuer (Inji Certify with its Data-provider plugin, an Adapter behind it and the optional Gateway beside it) and the demo stack that runs the whole journey around it: sign in, claim a credential into a wallet, verify it, revoke it.
 
 ## Start here, in this order
 
 1. [README](../README.md): run it, test it, deploy it.
 2. [CONTEXT.md](../CONTEXT.md): the terms every other page uses.
 3. [Responsibilities](./project/issuer-v0.1/responsibilities.md): who owns which part of the Issuer.
-4. [Local stack](./architecture/vc-stack.md): the four deployments and their containers.
-5. [Credential request](./concepts/credential-request.md): what a wallet sends, what the token carries, how the Gateway turns it into a record.
+4. [Local stack](./architecture/vc-stack.md): the five deployments and their containers.
+5. [Credential request](./concepts/credential-request.md): what a wallet sends, what the token carries, how the Data-provider plugin turns it into a record.
 6. [Interface contracts](./project/issuer-v0.1/contracts.md), with [`adapter/openapi.yaml`](../adapter/openapi.yaml): what each side provides.
 7. [Part 2 spec](./project/issuer-v0.1/spec-part-2.md): what is being built next.
 8. [Configuration contract](./project/issuer-v0.1/configuration-contract.md): what infra deploys. For infra, or anyone changing a `compose.yaml`.
@@ -23,6 +23,7 @@ This repo is the Issuer (Inji Certify with the Gateway and an Adapter behind it)
 ## When you need it
 
 - [Deviations from the proposal](./project/issuer-v0.1/deviations.md): where v0.1 departs from the issuer proposal (PR 4), and why.
+- Decisions, in [`docs/adr/`](../docs/adr/): [0001, the Approval gate sits beside the data path](../docs/adr/0001-approval-gate-beside-the-data-path.md), why the plugin reads the record and the Gateway is optional.
 - [Transcript JSON-LD context](./concepts/transcript-context.md): the rules that get every claim signed.
 - [Transcript credential](./concepts/transcript-credential.md): the claim shape and its gotchas.
 - [VC revocation](./concepts/vc-revocation.md): revoke and reissue, and their gotchas.

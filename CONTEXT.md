@@ -1,6 +1,6 @@
 # AIT Issuer platform
 
-The Issuer platform, the product that AIT's transcript service and the sandbox hackathon each deploy as an Installation. Terms agreed on 2026-10-19; Hard copy, Pilot and Adapter added 2026-10-20; Issuer and Issuer platform told apart on 2026-10-30.
+The Issuer platform, the product that AIT's transcript service and the sandbox hackathon each deploy as an Installation. Terms agreed on 2026-10-19; Hard copy, Pilot and Adapter added 2026-10-20; Issuer and Issuer platform told apart on 2026-10-30; Data-provider plugin added, and the Gateway made optional, on 2026-11-02 ([ADR 0001](docs/adr/0001-approval-gate-beside-the-data-path.md)).
 
 ## Language
 
@@ -9,7 +9,7 @@ The product Thas's team owns: one codebase of the Issuer, the Verifier, the Admi
 _Avoid_: Issuer (when the whole product is meant), Issuer product, issuing engine, institutional issuer, Certify (when the whole product is meant)
 
 **Issuer**:
-The deployment that `vc-stack/issuer/` brings up: the Issuer's Postgres (holding Certify's and the Gateway's schemas), Certify, certify-nginx, the Gateway, and the mock VDR, which serves the Issuer's JSON-LD contexts until Jo's VDR does (Certify needs them to sign). The Gateway is part of the Issuer and always deployed with it. Certify has one data provider, the Gateway plugin, set by `mosip.certify.integration.data-provider-plugin` in each Installation's properties. The Certify image bundles other providers, so the guarantee is that `smoke.sh` pins the plugin's keys and its log line: nothing the Adapter serves can skip the Checklist.
+The deployment that `vc-stack/issuer/` brings up: the Issuer's Postgres (holding Certify's schema), Certify, certify-nginx, and the mock VDR, which serves the Issuer's JSON-LD contexts until Jo's VDR does (Certify needs them to sign). Certify's one data provider is the Data-provider plugin, set by `mosip.certify.integration.data-provider-plugin` in each Installation's properties; the Certify image bundles other providers, so the smokes pin the plugin's keys and its log line. With the Gateway enabled, nothing the Adapter serves skips the Checklist; without it, the Issuer issues every record the Adapter serves to whoever may sign in at the Authorization Server.
 _Avoid_: the product (that is the Issuer platform), Certify (when the whole deployment is meant)
 
 **Installation**:
@@ -20,9 +20,13 @@ _Avoid_: project (when the deployment is meant), profile, tenant
 Inji Certify, the signing engine inside the Issuer. It signs credentials and keeps the ledger and the status lists.
 _Avoid_: issuer (when the engine is meant), signing service
 
+**Data-provider plugin**:
+The Issuer's piece inside Certify that obtains a credential's record from the Adapter, after the Gateway approves it when the Installation runs one.
+_Avoid_: Gateway plugin, Gateway (when the plugin is meant), connector
+
 **Gateway**:
-The Issuer's own service around Certify, always deployed with it: the data-provider plugin, the checklist runner and the admin API.
-_Avoid_: middleware, policy engine, adapter (when the gateway is meant)
+The Issuer's optional Approval gate, which evaluates the Checklist when a credential is requested. An Installation may run without it.
+_Avoid_: middleware, policy engine, adapter (when the gateway is meant), data-provider plugin
 
 **Checklist**:
 The ordered list of checks an organisation sets per credential type, evaluated when a credential is requested, that decides whether it may be issued.
@@ -33,7 +37,7 @@ One entry in a checklist. Its kind says what evidence it needs: a predicate over
 _Avoid_: rule, step, policy
 
 **Approval gate**:
-The point in the issuance protocol where a failed checklist stops the credential from being released.
+The point in the issuance protocol where a failed checklist stops the credential from being released: the Gateway's `POST /evaluations`, which the Data-provider plugin asks before it fetches the record.
 _Avoid_: UI-gated approval, approval enforcement
 
 **Admin Portal**:
@@ -49,8 +53,8 @@ The Issuer platform's template authoring and publishing: the files and the publi
 _Avoid_: Card Display Lab, presentation template designer
 
 **Adapter**:
-The read-only service that serves an organisation's records and eligibility attributes to the Gateway under the adapter contract; one per installation. The CSV-backed mock stands in until the organisation's own adapter exists.
-_Avoid_: data source, SIS integration (that is what the real adapter wraps), plugin (that is the Gateway's piece inside Certify)
+The read-only service that serves an organisation's records to the Data-provider plugin and their eligibility attributes to the Gateway under the adapter contract; one per installation. The CSV-backed mock stands in until the organisation's own adapter exists.
+_Avoid_: data source, SIS integration (that is what the real adapter wraps), plugin (that is the Data-provider plugin)
 
 **VDR**:
 The public host, owned by Track 3, for the DID document, status lists and JSON-LD contexts that verifiers fetch, and for the templates the Portal fetches. Verifiers never use its templates.

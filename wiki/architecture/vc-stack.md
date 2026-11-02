@@ -45,9 +45,9 @@ flowchart TD
   end
 
   Mimoto --> CertifyNginx
-  Certify -->|"data-provider plugin, POST /issuances"| Gateway
-  Gateway --> DB
-  Gateway --> Adapter
+  Certify -->|"Data-provider plugin: GET /records"| Adapter
+  Certify -.->|"Data-provider plugin, gate on: POST /evaluations"| Gateway
+  Gateway -->|"GET /records/.../eligibility"| Adapter
   PublicGateway -->|/contexts/| VDR
   CertifyNginx -->|/contexts/| VDR
   PublicGateway --> CertifyNginx
@@ -61,8 +61,8 @@ flowchart TD
 
 | Folder | Containers | Host ports |
 |---|---|---|
-| `issuer/` | `database` (Postgres, with Certify's schema and the `gateway` schema the Gateway creates), `certify`, `certify-nginx`, `vdr` (the mock VDR, which serves the Issuer's JSON-LD contexts) | 6440, 9090, 9091 |
-| `gateway/` | `gateway`, the checklist runner behind Certify's plugin; a folder of its own so a stack can leave it out. It still names the Issuer's `database` in `depends_on`, so it runs only beside `issuer/` | none |
+| `issuer/` | `database` (Postgres, with Certify's schema), `certify`, `certify-nginx`, `vdr` (the mock VDR, which serves the Issuer's JSON-LD contexts) | 6440, 9090, 9091 |
+| `gateway/` | `gateway`, the optional Approval gate the Data-provider plugin asks before it fetches a record; a folder of its own so a stack can leave it out. It needs no database, so it runs alone | none |
 | `mock-adapter/` | `adapter`, the mock data Adapter; a folder of its own because the Issuer-only run needs it until infra's Adapter serves credential data | none |
 | `verify/` | `verify-database`, `verify-service`, `verify-ui` | 9095, 4007 |
 | `demo/` | `demo-database` (Mimoto's Postgres), `mimoto-service`, `inji-web`, `keycloak-server`, `keycloak` (its nginx), `public-gateway`, `demo-app` | 9099, 4004, 9080, 9098, 4100 |
@@ -71,6 +71,10 @@ flowchart TD
 |---|---|---|
 | `vc-stack/compose.yaml` | all five folders | the whole journey; `run-demo.sh`, `bootstrap.sh`, `smoke.sh` and the `stack-smoke` CI job |
 | `vc-stack/issuer-dev.yaml` | `issuer/`, `gateway/`, `mock-adapter/` | the Issuer alone, as the issuer-dev server runs it; `issuer-smoke.sh` and the `issuer-smoke` CI job. It has no Keycloak, so the smoke issues no credential |
+| `vc-stack/compose-no-gateway.yaml` | all but `gateway/`, with `issuer/no-gateway.yaml` over the Issuer's file | the whole journey without the Gateway: the overlay sets Certify's `MOSIP_CERTIFY_GATEWAY_ENABLED=false` and `MOSIP_CERTIFY_GATEWAY_URL=NO GATEWAY`; the `stack-smoke` CI job's gate-off legs |
+| `vc-stack/issuer-dev-no-gateway.yaml` | `issuer/` (with the same overlay), `mock-adapter/` | the Issuer alone without the Gateway; the `issuer-smoke` CI job's gate-off legs |
+
+The scripts run the file `COMPOSE_FILE` names, relative to `vc-stack/` (`compose.yaml` by default; `issuer-dev.yaml` for `issuer-smoke.sh`), so `COMPOSE_FILE=compose-no-gateway.yaml ./run-demo.sh` runs a stack without the Gateway. `vc-stack/sis-bridge/` holds the temporary SIS bridge, which no top-level file includes ([contracts](../project/issuer-v0.1/contracts.md) section 2b).
 
 Each of the three groups that needs a Postgres brings its own, under its own service name, for now. `public-gateway` is two nginx servers: the public one on port 80, and Mimoto's Spring config server and issuer-list host on port 8080, which has no host port because the directory it serves holds passwords. certify-nginx no longer does that job. How to run each is in the [README](../../README.md#deploy-locally); every service's variables, files and ports are in the [configuration contract](../project/issuer-v0.1/configuration-contract.md).
 

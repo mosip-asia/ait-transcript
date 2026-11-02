@@ -23,8 +23,9 @@ flowchart LR
   Wallet["Wallet: Patong and WAA"]
   Infra["Infra team"]
   Wallet -->|OpenID4VCI| Certify
-  Certify -->|data-provider plugin| Gateway
-  Gateway -->|adapter contract| Adapter
+  Certify -->|Data-provider plugin: records| Adapter
+  Certify -.->|Data-provider plugin: approval, when the Gateway runs| Gateway
+  Gateway -->|adapter contract: eligibility| Adapter
   Portal --> Gateway
   Portal -->|credential request for the hard copy, revoke| Certify
   Gateway -->|publish| VDR
@@ -38,7 +39,8 @@ flowchart LR
 
 | Component | Thas's | Not Thas's | Counterpart |
 |---|---|---|---|
-| Gateway: data-provider plugin, checklist runner, admin API, mock VDR publisher | Code, image, configuration | | |
+| Data-provider plugin, Certify's piece that reads the record from the Adapter | Code, jar, configuration | | |
+| Gateway, the optional Approval gate: checklist runner, admin API, mock VDR publisher | Code, image, configuration | | |
 | Portal: staff side (search, revoke), student side (request, result, credential offer, hard-copy PDF in the student's own session) | Code, image, configuration | | |
 | Certify 0.14, the signing engine | Configuration: credential configurations, plugin wiring, allowed audiences, status lists | The image, key custody | Infra team |
 | Checklist, per credential type, evaluated at request time | The runner; the AIT and hackathon checklists as v0.1 content | The content in production | AIT registrar or OSA; hackathon organiser |
@@ -78,8 +80,8 @@ The hackathon's issuance page and policy service stay in `ait-vc`, outside the I
 
 - **Instant decisions.** A request is decided when it is made. Human judgement lives in the organisation's data (a hold, a winner flag), never in a queue inside the Issuer platform.
 - **Two check kinds.** A predicate over the record, or a required presentation; v0.1 uses predicates only.
-- **The gate is in the Gateway.** The wallet runs the ordinary authorization-code flow; Certify calls the Gateway through the data-provider plugin; the Gateway runs the checklist and returns the record or refuses.
-- **The Portal is the hard copy's wallet.** Inside the student's own sign-in, the Portal (a confidential client) takes the session's access token, signs a proof JWT with a Portal-held key and redeems the credential at Certify like any wallet, so the gate and the search row are unchanged. It puts the credential in the PDF's QR and stores nothing. No pre-authorized offer in v0.1: one Certify 0.14 instance cannot serve both pre-authorized offers and wallet-initiated issuance, so staff-triggered printing would take a second, hard-copy-only Certify ([`certify-preauth-flow.md`](../../reference/certify-preauth-flow.md)).
+- **The gate sits beside the data path** (2026-11-02, [ADR 0001](../../../docs/adr/0001-approval-gate-beside-the-data-path.md)). The wallet runs the ordinary authorization-code flow; Certify's Data-provider plugin reads the record from the Adapter, and when the installation runs the Gateway it asks the Gateway first, which runs the checklist and passes or refuses.
+- **The Portal is the hard copy's wallet.** Inside the student's own sign-in, the Portal (a confidential client) takes the session's access token, signs a proof JWT with a Portal-held key and redeems the credential at Certify like any wallet, so the gate and the issuance record in Certify's ledger are as for any wallet. It puts the credential in the PDF's QR and stores nothing. No pre-authorized offer in v0.1: one Certify 0.14 instance cannot serve both pre-authorized offers and wallet-initiated issuance, so staff-triggered printing would take a second, hard-copy-only Certify ([`certify-preauth-flow.md`](../../reference/certify-preauth-flow.md)).
 - **Hard-copy QR.** PixelPass (JSON, CBOR, zlib level 9, Base45) in the Portal, scan-tested against the Verify UI; numeric claims are strings; alphanumeric mode, at least 4 px per module.
 - **Student page shows reasons for now.** A failed request shows the checklist reasons on the Portal's student side, a debugging aid to be masked later.
 - **Signing coverage.** Top-level claim terms, `courses` as a JSON literal ([`transcript-context.md`](../../concepts/transcript-context.md)), checked by `vc-stack/smoke.sh`. The context URL is versioned (`/contexts/transcript/v1.json`); v1 may change in place during v0.1, after which every published version stays. The hashing method is a placeholder until an official design exists.

@@ -1,6 +1,6 @@
 ---
 title: Credential request
-description: What a wallet sends to request a credential, what the access token carries (sub, scope), how Keycloak signs it and Certify checks it, and how the Gateway turns it into a record lookup.
+description: What a wallet sends to request a credential, what the access token carries (sub, scope), how Keycloak signs it and Certify checks it, and how the Data-provider plugin turns it into a record lookup, with the Gateway's approval when it runs.
 tags:
   - concept
   - openid4vci
@@ -8,7 +8,7 @@ tags:
 ---
 # Credential request
 
-A credential request needs three things: an access token from the authorization server (Keycloak), a statement of what is requested (the scope), and a proof of the holder's key. The token carries who is asking (`sub`) and what it was granted (`scope`). The adapter never sees the wallet or the token.
+A credential request needs three things: an access token from the authorization server (Keycloak), a statement of what is requested (the scope), and a proof of the holder's key. The token carries who is asking (`sub`) and what it was granted (`scope`). The adapter never sees the wallet or the token, only the `sub` and `scope` the Data-provider plugin passes on.
 
 For the endpoints and the full contracts see [Connecting a non-Inji OpenID4VCI wallet](../guides/other-openid4vci-wallets.md) and [Interface contracts](../project/issuer-v0.1/contracts.md); this page explains how the pieces fit.
 
@@ -17,8 +17,8 @@ For the endpoints and the full contracts see [Connecting a non-Inji OpenID4VCI w
 | Item | Where it comes from | What it decides |
 |---|---|---|
 | Access token | Keycloak, after the user logs in | Who is asking (`sub`) and what was granted (`scope`); Certify validates it |
-| `scope` | Asked for by the wallet at login, granted by Keycloak (`ait_transcript_vc_ldp` is an optional client scope of `wallet-demo`) | Which credential type; the Gateway picks the type from it |
-| `sub` | Keycloak mapper `sub-from-username` in `installations/ait/keycloak-realm.json`, so `sub` is the Keycloak username, for example `ait-2026-0001` | Whose record is read: the Gateway fetches the adapter's `/students/{sub}/...` paths |
+| `scope` | Asked for by the wallet at login, granted by Keycloak (`ait_transcript_vc_ldp` is an optional client scope of `wallet-demo`) | Which credential type; the plugin passes it to the adapter unchanged, and the Gateway picks the type's checklist from it |
+| `sub` | Keycloak mapper `sub-from-username` in `installations/ait/keycloak-realm.json`, so `sub` is the Keycloak username, for example `ait-2026-0001` | Whose record is read: the plugin lists it with the adapter's `GET /records?sub=...&scope=...` |
 | Proof JWT | The wallet, signed with its own key, identified as `did:jwk` | The holder id placed in the credential; it says which wallet receives it, not which student the data is about |
 
 Identity is per degree: a student with two degrees has two Keycloak users and so two `sub` values (`ait-2026-0005` and `ait-2026-0005-phd` in the test realm).
@@ -54,27 +54,30 @@ There are two signatures in the system and verifiers see only one. Keycloak sign
 sequenceDiagram
     participant W as Wallet
     participant K as Keycloak
-    participant C as Certify + plugin
-    participant G as Gateway
+    participant C as Certify + Data-provider plugin
+    participant G as Gateway (when the gate is on)
     participant A as Adapter
     W->>K: login, scope=ait_transcript_vc_ldp
     K-->>W: access token (sub, scope)
     W->>C: credential request + token + proof JWT
-    C->>G: POST /issuances (token claims minus accessTokenHash, bearer)
-    G->>A: GET /students/{sub}/degrees, then /eligibility
-    A-->>G: degree + eligibility
+    C->>A: GET /records?sub&scope
+    A-->>C: [ { recordId } ], the first one used
+    C->>G: POST /evaluations { sub, scope, recordId } (bearer)
+    G->>A: GET /records/{recordId}/eligibility?scope
+    A-->>G: eligibility
     G->>G: run the checklist for the scope
-    G->>A: GET /students/{sub}/transcript (checks passed)
-    A-->>G: record
-    G-->>C: claims (200) or refusal
+    G-->>C: 200 or refusal
+    C->>A: GET /records/{recordId}?scope (passed)
+    A-->>C: record
     C-->>W: signed credential
 ```
 
-- Certify's data-provider plugin posts the token's claims to the Gateway's `POST /issuances`; the Gateway requires `sub` and `scope`. A token with no `sub` makes the plugin answer `invalid_access_token`.
-- The Gateway picks the credential type from the first served scope inside `scope`. No match is `unknown_scope` (400).
-- The Gateway fetches from the adapter on the private network, with no authentication in v0.1, and parses each answer with the credential type's Pydantic models: an answer that does not parse is `gateway_error` (502), never an empty claim. The adapter sees no wallet and no user token.
-- The checklist (for example `on_roster`, `winner`) can refuse at issuance with `checklist_failed` (403). Registrar approval is not part of the token: the demo app enforces it in its own UI only, by showing the claim link after approval.
+- Certify hands the plugin the token's claims; the plugin reads only `sub` and `scope`. A token with no `sub` makes the plugin answer `invalid_access_token`, before any call.
+- The plugin lists the student's records at the adapter and takes the first; none is `no_record`. It reads the record only after the Gateway passed it, or straight away when the installation runs without the Gateway (`mosip.certify.gateway.enabled=false`).
+- The Gateway picks the credential type from the first served scope inside `scope`. No match is `unknown_scope` (400). It parses the eligibility with the type's Pydantic model: an answer that does not parse is `gateway_error` (502). The checklist (for example `on_roster`, `winner`) can refuse at issuance with `checklist_failed` (403).
+- Both reach the adapter on the private network, with no authentication in v0.1. An adapter answer the plugin cannot use is `adapter_error`, never an empty claim. The adapter sees no wallet and no user token.
+- The plugin escapes the record for Certify's template and adds `tokenSub` and `tokenClientId`, which Certify's ledger indexes and no credential carries. Registrar approval is not part of the token: the demo app enforces it in its own UI only, by showing the claim link after approval.
 
 ## What this means for a real adapter
 
-`sub` selects the record, so the identity provider's `sub` must equal the adapter's record id, or the Gateway needs a mapping step. In the demo this holds because Keycloak's `sub` is mapped from the username, which equals the CSV `id`. Swapping the authorization server (eSignet, Authentik) must keep that equality and the `client_id` claim Certify requires; see contracts section 1.
+`sub` selects the record, so the adapter must resolve the identity provider's `sub` to its records. In the demo this holds because Keycloak's `sub` is mapped from the username, which equals the CSV `id`. Swapping the authorization server (eSignet, Authentik) must keep that and the `client_id` claim Certify requires; see contracts sections 1 and 2b.
