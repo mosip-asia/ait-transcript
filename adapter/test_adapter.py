@@ -301,8 +301,11 @@ def test_the_contract_mode_passes_against_the_mock() -> None:
         csv_path = Path(td) / "student_identity_data.csv"
         gc.write_csv(gc.build_rows(gc.load_students()["students"]), csv_path)
         get = host_get(csv_path)
-        check_contract(get, "ait-2026-0001", "ait_transcript_vc_ldp")
+        for sub in ("ait-2026-0001", "st123456"):  # st123456: the SIS test student, so issuer-dev can gate it
+            check_contract(get, sub, "ait_transcript_vc_ldp")
         check_contract(get, "ait-2026-0001", "openid ait_transcript_vc_ldp")  # the token's scope claim, whole
+        assert get("/records/st123456/eligibility?scope=ait_transcript_vc_ldp") == (200, {
+            "holds": [], "conferralStatus": "Conferred", "balance": "0.00"})  # eligible: it passes every check
         csv_path.write_bytes(ROSTER.read_bytes())
         for scope in ROSTER_SCOPES:
             check_contract(get, "hack-2026-0001", scope)

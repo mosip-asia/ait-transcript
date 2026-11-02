@@ -22,7 +22,7 @@ def test_row_count_and_columns() -> None:
     rows = gc.build_rows(data["students"])
     degree_count = sum(len(s["degrees"]) for s in data["students"])
     assert len(rows) == degree_count
-    assert len(data["students"]) == 5
+    assert len(data["students"]) == 6
     assert set(rows[0].keys()) == set(gc.CSV_COLUMNS)
 
 
