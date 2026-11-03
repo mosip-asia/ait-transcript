@@ -142,8 +142,7 @@ issuer_checks() {
     gateway python tests/test_evaluations.py adapter-down http://gateway:8000 /smoke.json || adapter_down_rc=$?
   docker compose start adapter >/dev/null || fail "cannot restart the adapter"
   eligible=$(jq -r '.[0].eligible | if type == "array" then .[0] else . end' "$FIXTURES")
-  scope=$(jq -r '.[0].scope' "$FIXTURES")
-  retry 30 in_network "http://adapter:8000/records/$eligible/eligibility?scope=$scope" || fail "adapter did not answer again after restart"
+  retry 30 in_network "http://adapter:8000/student/$eligible/eligibility" || fail "adapter did not answer again after restart"
   [[ "$adapter_down_rc" == 0 ]] || fail "Gateway with the adapter down must answer 502 gateway_error (test_evaluations.py adapter-down)"
   ok "Gateway: adapter down is a 502 gateway_error on /evaluations, and the adapter is back"
 }
