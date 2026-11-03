@@ -343,6 +343,7 @@ def test_the_contract_mode_fails_an_adapter_that_breaks_the_contract() -> None:
                 {**{k: v for k, v in term.items() if k != "gpa"}, "courses": [course]}]})),
             "a date that is not YYYY-MM-DD": broken(record, lambda s, b: (s, {**b, "dateGraduation": "31/08/2026"})),
             "a year that is not four digits": broken(record, lambda s, b: (s, {**b, "yearAwarded": "'23"})),
+            "an empty registration number": broken(record, lambda s, b: (s, {**b, "registrationNo": ""})),
             "credits with a unit": broken(record, lambda s, b: (s, {**b, "totalCredits": "49 credits"})),
             "a GPA with a decimal comma": broken(record, lambda s, b: (s, {**b, "courses": [
                 {**term, "gpa": "3,67", "courses": [course]}]})),
@@ -459,7 +460,7 @@ def test_the_plugin_refuses_exactly_the_structured_fields_openapi_yaml_forbids()
 
 def shape_of(schema: dict, resolve_ref, top: bool = True) -> object:
     """A schema's field tree, for comparing two schema languages: an object's required names, each to its own tree,
-    an array's item tree, else the type name and the pattern (None without one). Below the top, an object's tree also
+    an array's item tree, else the type name, the pattern and the minLength (None without one). Below the top, an object's tree also
     says whether it allows other keys: the template picks the top-level claims it names, but `courses` goes into the
     credential verbatim, so a key its terms or courses do not name would be signed."""
     schema = resolve_ref(schema)
@@ -470,13 +471,13 @@ def shape_of(schema: dict, resolve_ref, top: bool = True) -> object:
         return tree
     if schema.get("type") == "array":
         return [shape_of(schema["items"], resolve_ref, False)]
-    return schema.get("type"), schema.get("pattern")
+    return schema.get("type"), schema.get("pattern"), schema.get("minLength")
 
 
 def test_the_transcript_record_is_the_credential_schemas_subject_less_the_holder() -> None:
     """The two master files agree: openapi.yaml's TranscriptRecord requires exactly the claims, terms and courses that
     wiki/schemas/ait-transcript-credential.v2.schema.json requires of the signed credentialSubject, with the same
-    types and formats (patterns), and terms and courses that allow no other key, except the holder's `id`, which
+    types and formats (patterns and minimum lengths), and terms and courses that allow no other key, except the holder's `id`, which
     Certify sets."""
     contract = load_contract()
     credential = json.loads(CREDENTIAL_SCHEMA.read_text(encoding="utf-8"))
@@ -493,6 +494,8 @@ def test_the_transcript_record_is_the_credential_schemas_subject_less_the_holder
     narrower = {"type": "object", "required": ["courses"], "properties": {"courses": {"type": "array", "items": {
         "type": "object", "required": ["no"], "properties": {"no": {"type": "string"}}}}}}
     assert shape_of(narrower, lambda s: s) != {"courses": [{"no": "string", "title": "string"}]}
+    # It also sees a minimum length one file has and the other lacks.
+    assert shape_of({"type": "string", "minLength": 1}, lambda s: s) != shape_of({"type": "string"}, lambda s: s)
 
 
 def getter(base: str):

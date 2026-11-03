@@ -186,7 +186,7 @@ components:
         fullName: {type: string}
         dateOfBirth: {$ref: '#/components/schemas/Date'}
         country: {type: string}
-        registrationNo: {type: string, examples: [st125001]}
+        registrationNo: {type: string, minLength: 1, examples: [st125001]}
         previousDegree: {type: string}
         yearAwarded: {type: string, pattern: '^[0-9]{4}$', examples: ['2023']}
         dateAdmitted: {$ref: '#/components/schemas/Date'}
