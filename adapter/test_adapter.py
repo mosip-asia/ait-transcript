@@ -208,7 +208,9 @@ TYPES = {"string": str, "array": list, "object": dict, "boolean": bool, "number"
 
 def violations(value, schema: dict, contract: dict, where: str) -> list[str]:
     """How `value` breaks `schema`, for the keywords openapi.yaml uses on answers: type (one name or a list of them),
-    required, properties, additionalProperties, items, propertyNames, enum, not, minLength and pattern."""
+    required, properties, additionalProperties (a schema, or false), items, propertyNames, enum, not, minLength and
+    pattern. A pattern must match the whole value: the contract's patterns are anchored, and Python's `$` would also
+    match before a final newline, which ECMA-262's (JSON Schema's) does not."""
     schema = resolve(schema, contract)
     types = schema.get("type", [])
     types = [types] if isinstance(types, str) else types
@@ -221,7 +223,7 @@ def violations(value, schema: dict, contract: dict, where: str) -> list[str]:
         found.append(f"{where}: {value!r} is excluded by openapi.yaml")
     if isinstance(value, str) and len(value) < schema.get("minLength", 0):
         found.append(f"{where}: {value!r} is too short")
-    if isinstance(value, str) and "pattern" in schema and not re.search(schema["pattern"], value):
+    if isinstance(value, str) and "pattern" in schema and not re.fullmatch(schema["pattern"], value):
         found.append(f"{where}: {value!r} does not match {schema['pattern']}")
     if isinstance(value, list):
         for i, item in enumerate(value):
@@ -233,6 +235,8 @@ def violations(value, schema: dict, contract: dict, where: str) -> list[str]:
                 found += violations(key, schema["propertyNames"], contract, f"{where} key")
             if key in schema.get("properties", {}):
                 found += violations(item, schema["properties"][key], contract, f"{where}.{key}")
+            elif schema.get("additionalProperties") is False:
+                found.append(f"{where}.{key}: a key openapi.yaml does not allow here")
             elif "additionalProperties" in schema:
                 found += violations(item, schema["additionalProperties"], contract, f"{where}.{key}")
     return found
@@ -344,6 +348,11 @@ def test_the_contract_mode_fails_an_adapter_that_breaks_the_contract() -> None:
                 {**term, "gpa": "3,67", "courses": [course]}]})),
             "empty lab hours": broken(record, lambda s, b: (s, {**b, "courses": [
                 {**term, "courses": [{**course, "lab": ""}]}]})),
+            "a date with a trailing newline": broken(record, lambda s, b: (s, {**b, "dateGraduation": "2026-08-31\n"})),
+            "a course with a key the credential schema does not name": broken(record, lambda s, b: (s, {**b, "courses": [
+                {**term, "courses": [{**course, "remark": "late"}]}]})),
+            "a term with a key the credential schema does not name": broken(record, lambda s, b: (s, {**b, "courses": [
+                {**term, "standing": "Good", "courses": [course]}]})),
             "a 200 for an unknown sub": broken("/student/no-such", lambda s, b: (200, b)),
         }
         check_contract(broken(record, lambda s, b: (s, {**b, "courses": [{**term, "courses": [course]}]})),
@@ -448,21 +457,27 @@ def test_the_plugin_refuses_exactly_the_structured_fields_openapi_yaml_forbids()
     assert re.findall(r'\bCOURSES\s*=\s*"([^"]*)"', 'private static final String COURSES = "terms";') == ["terms"]
 
 
-def shape_of(schema: dict, resolve_ref) -> object:
+def shape_of(schema: dict, resolve_ref, top: bool = True) -> object:
     """A schema's field tree, for comparing two schema languages: an object's required names, each to its own tree,
-    an array's item tree, else the type name and the pattern (None without one)."""
+    an array's item tree, else the type name and the pattern (None without one). Below the top, an object's tree also
+    says whether it allows other keys: the template picks the top-level claims it names, but `courses` goes into the
+    credential verbatim, so a key its terms or courses do not name would be signed."""
     schema = resolve_ref(schema)
     if schema.get("type") == "object":
-        return {name: shape_of(schema["properties"][name], resolve_ref) for name in schema.get("required", [])}
+        tree = {name: shape_of(schema["properties"][name], resolve_ref, False) for name in schema.get("required", [])}
+        if not top:
+            tree[None] = schema.get("additionalProperties", True)  # None: no field can have that name
+        return tree
     if schema.get("type") == "array":
-        return [shape_of(schema["items"], resolve_ref)]
+        return [shape_of(schema["items"], resolve_ref, False)]
     return schema.get("type"), schema.get("pattern")
 
 
 def test_the_transcript_record_is_the_credential_schemas_subject_less_the_holder() -> None:
     """The two master files agree: openapi.yaml's TranscriptRecord requires exactly the claims, terms and courses that
     wiki/schemas/ait-transcript-credential.v2.schema.json requires of the signed credentialSubject, with the same
-    types and formats (patterns), except the holder's `id`, which Certify sets."""
+    types and formats (patterns), and terms and courses that allow no other key, except the holder's `id`, which
+    Certify sets."""
     contract = load_contract()
     credential = json.loads(CREDENTIAL_SCHEMA.read_text(encoding="utf-8"))
 

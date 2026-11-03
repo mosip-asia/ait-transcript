@@ -247,6 +247,18 @@ class IssuerDataProviderPluginTest {
         assertEquals(List.of("/evaluations"), seen.stream().map(Seen::path).toList());
     }
 
+    @ParameterizedTest
+    @ValueSource(strings = {"{checks: [{check: \"no_holds\", passed: true}]}",
+            "{'checks': [{'check': 'no_holds', 'passed': true}]}",
+            "{\"checks\": [{\"check\": \"no_holds\", \"passed\": true}]} trailing text"})
+    void aPassingEvaluationThatIsNotStrictJsonIsGatewayErrorAndTheRecordIsNeverFetched(String body) throws Exception {
+        IssuerDataProviderPlugin plugin = plugin();
+        gatewayReplies.put("/evaluations", Reply.of(200, body));
+
+        assertEquals("gateway_error", refused(plugin, CLAIMS).getErrorCode());
+        assertEquals(List.of("/evaluations"), seen.stream().map(Seen::path).toList());
+    }
+
     @Test
     void aGatewayThatStallsItsBodyPastItsReadTimeoutIsGatewayError() throws Exception {
         IssuerDataProviderPlugin plugin = plugin(10000, 200);
@@ -332,6 +344,18 @@ class IssuerDataProviderPluginTest {
 
         assertEquals("adapter_error", refused(plugin, CLAIMS).getErrorCode());
         assertEquals(List.of("/evaluations", RECORD_PATH), seen.stream().map(Seen::path).toList());
+    }
+
+    /** The contract's answers are JSON: org.json's lenient forms are not, nor is text after the object. */
+    @ParameterizedTest
+    @ValueSource(strings = {"{fullName: \"Somchai Jaidee\"}", "{'fullName': 'Somchai Jaidee'}",
+            "{\"fullName\": \"Somchai Jaidee\",}", "{\"fullName\": \"Somchai Jaidee\"} trailing text",
+            "{\"fullName\": Somchai}"})
+    void aRecordThatIsNotStrictJsonIsAdapterError(String body) throws Exception {
+        IssuerDataProviderPlugin plugin = plugin();
+        adapterReplies.put(RECORD_PATH, Reply.of(200, body));
+
+        assertEquals("adapter_error", refused(plugin, CLAIMS).getErrorCode());
     }
 
     @ParameterizedTest

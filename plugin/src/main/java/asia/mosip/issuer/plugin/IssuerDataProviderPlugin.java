@@ -21,6 +21,7 @@ import java.util.function.Function;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
+import org.json.JSONParserConfiguration;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -115,7 +116,7 @@ public class IssuerDataProviderPlugin implements DataProviderPlugin {
         /** An evaluation listing at least one check, each with {@code passed} exactly {@code true}. */
         private static boolean passes(String body) {
             try {
-                JSONArray checks = new JSONObject(body).getJSONArray("checks");
+                JSONArray checks = strictObject(body).getJSONArray("checks");
                 for (int i = 0; i < checks.length(); i++) {
                     if (!Boolean.TRUE.equals(checks.getJSONObject(i).opt("passed"))) {
                         return false;
@@ -126,6 +127,16 @@ public class IssuerDataProviderPlugin implements DataProviderPlugin {
                 return false;
             }
         }
+    }
+
+    private static final JSONParserConfiguration STRICT = new JSONParserConfiguration().withStrictMode();
+
+    /**
+     * A JSON object as the contract types the answers: strict JSON only. org.json's lenient forms (unquoted keys or
+     * values, single quotes, a trailing comma) and any text after the object throw {@link JSONException}.
+     */
+    static JSONObject strictObject(String body) {
+        return new JSONObject(body, STRICT);
     }
 
     /** The record URL's placeholder for the token's {@code sub}. */
@@ -229,7 +240,8 @@ public class IssuerDataProviderPlugin implements DataProviderPlugin {
     /** The record URL with {@code sub} filled in as one path segment: the record, a JSON object with no forbidden key. */
     private JSONObject record(String sub) throws DataProviderExchangeException {
         URI uri = URI.create(adapter.url().replace(SUB, pathSegment(sub)));
-        JSONObject record = adapterAnswer(adapter.send(HttpRequest.newBuilder(uri).GET()), JSONObject::new);
+        JSONObject record = adapterAnswer(adapter.send(HttpRequest.newBuilder(uri).GET()),
+                IssuerDataProviderPlugin::strictObject);
         for (String key : record.keySet()) {
             if (FORBIDDEN_KEYS.contains(key)) {
                 log.warn("the Adapter's record carries the forbidden key {}", key);

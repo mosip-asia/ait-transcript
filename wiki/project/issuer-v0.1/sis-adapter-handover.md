@@ -48,7 +48,7 @@ What must match:
 
 A JSON object holding the 24 fields `TranscriptRecord` lists in `adapter/openapi.yaml`. The rules:
 
-- **Every field is present, and none is `null`.** The Issuer refuses a record with a `null`. A field that is missing altogether is caught only by the contract check below, not at issuance (see "Known gaps"), so it is the Adapter's job never to drop one.
+- **Every field is present, and none is `null`.** The Issuer refuses a record with a `null` among the 24 fields. A `null` inside `courses`, or a field missing altogether, is caught only by the contract check below, not at issuance (see "Known gaps"), so it is the Adapter's job never to send one.
 - **Every value is a string, numbers included.** The only exception is `courses`, which is a list.
 - **Dates** (`dateOfBirth`, `dateAdmitted`, `dateGraduation`, `issueDate`): year-month-day with dashes, like `2026-08-31`. No time, no time zone, no `31/08/2026`.
 - **Year** (`yearAwarded`): four digits, like `2023`.
@@ -85,7 +85,7 @@ The student passes when there are no holds, the degree is conferred, and the bal
 ## Answers, errors and time
 
 - **Unknown student:** answer `404`. The Issuer doesn't read the body and tells the wallet "no record".
-- **Anything else** that isn't a `200` with the shape above makes the Issuer refuse the claim: another status, a body it can't read, or no answer at all.
+- **The Issuer refuses the claim** for another status, no answer at all, or a body that isn't one strict JSON object (no single quotes, no trailing comma, nothing after the closing brace).
 - **Time:** the transcript's whole answer, body included, must arrive within 10 seconds. For eligibility, the Gateway waits at most 3 seconds to connect and at most 3 seconds for each next piece of the answer. Slower than that, and the claim is refused.
 - **Security:** there is no password or key on these calls. The private network (NetBird) is the only boundary, so the SIS Adapter must not be reachable from anywhere else.
 
@@ -110,4 +110,5 @@ It fetches that student's record and checks every rule above that a schema can s
 
 ## Known gaps on the Issuer's side
 
+- The Issuer doesn't check the rules above when it issues: a date written `31/08/2026`, a number sent as a JSON number, an empty name or a wrong key inside `courses` would be signed exactly as sent. Only the contract check catches them, so run it before go-live and after every change to the Adapter.
 - The Issuer can't tell when a field is missing altogether: Certify's template knows the field list, and the Issuer's plugin doesn't. A missing field would be signed as the literal placeholder (`${thesisGrade}`). The guard is the Adapter always sending every field, and the contract check above proving it before go-live.
