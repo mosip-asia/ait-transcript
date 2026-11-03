@@ -67,12 +67,10 @@ A JSON object holding the 24 fields `TranscriptRecord` lists in `adapter/openapi
 - **Extra fields** beyond the 24 are allowed if each is a plain string, number or true/false. The Issuer passes them on unused.
 - **Forbidden keys:** a record must never carry `id`, `_holderId`, `_issuer`, `validFrom`, `validUntil`, `credentialStatus`, `tokenSub` or `tokenClientId`. Certify and the Issuer set those themselves, and they refuse a record that has one.
 
-**Today's gaps** in the current SIS route, seen through the temporary bridge (`sis-bridge/`):
+**Today's gaps** in the current SIS route, seen through the temporary bridge (`sis-bridge/`). The route has no field for any of these, so the bridge sends each as an empty string, for every student:
 
-- missing altogether: lecture and lab hours, and each term's credits, GPA and cumulative GPA;
-- missing in the sample student's record: the year awarded, the issue date, and the coursework and thesis credits.
-
-The bridge sends each of these as an empty string, so its records fail the contract check until the SIS fills them in.
+- **dates and numbers:** the year awarded, the issue date, the coursework and thesis credits, lecture and lab hours, and each term's credits, GPA and cumulative GPA. These fail the contract check until the SIS fills them in.
+- **text:** `country`, `previousDegree`, `option`, `areaOfSpecialization`, `notes`, `programCommittee` and `thesisExamination`. Empty text passes the contract check, so nothing flags these, and the transcript prints them blank. `notes` should be `-` when there are none.
 
 ## What an eligibility answer looks like
 
@@ -97,7 +95,7 @@ Campus asked consumers not to store its `sub` during the PoC. Three things to kn
 
 - **The SIS Adapter** should keep `sub` out of its own storage and access logs.
 - **The Issuer itself stores it.** Certify keeps every issued credential in its ledger, and the Issuer records the token's `sub` there as `tokenSub`. That is how a credential can later be traced to the sign-in that claimed it. Revocation itself goes by `registrationNo`.
-- **Certify also logs it.** Each issued credential adds one INFO line from `io.mosip.certify.utils.LedgerUtils` that holds the `sub`. That's Certify's own code, not the Issuer's.
+- **Certify also logs it, and more.** For each issued credential, `io.mosip.certify.utils.LedgerUtils` writes one INFO line per value the ledger indexes, in plain text: `fullName`, `academicProgram`, `registrationNo`, `tokenSub` and `tokenClientId`. So the log holds the student's name and programme too, and the `sub` twice when the `sub` is the student number (`registrationNo` is then the same value). The logging is Certify's own code. Which claims get indexed is the Issuer's choice, the `mosip.certify.indexed-mappings.*` lines in the Installation's `certify-installation.properties`.
 
 If campus's `sub` is an internal account id they don't want stored, they need to say so before go-live. The fix on Thas's side is small: trace by `registrationNo` from the record instead of `sub`. The question is in [`spec-part-2.md`](spec-part-2.md) under "If campus picks (b)".
 
