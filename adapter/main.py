@@ -6,8 +6,7 @@ so one degree. A missing row is a 404, nothing else is an error.
 
 It is column-driven, so the same image serves every installation's CSV. On the AIT transcript CSV the record
 paths serve every column but `id` and the eligibility columns, and the eligibility path those columns; a CSV without
-them (the hackathon roster) is served whole on every path. The two record paths serve the same row: each
-installation's Certify reads the one its CERTIFY_RECORD_URL names.
+them (the hackathon roster) is served whole on both paths.
 """
 
 from __future__ import annotations
@@ -38,7 +37,6 @@ def find_row(sub: str) -> dict:
 
 
 @app.get("/student/{sub}/transcript")
-@app.get("/student/{sub}/roster")
 def record(sub: str) -> dict:
     return {k: v for k, v in find_row(sub).items() if k not in NOT_IN_RECORD}
 

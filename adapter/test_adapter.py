@@ -65,7 +65,7 @@ def check_adapter(get, csv_path: Path) -> None:
         check_roster_rows(get, rows)
 
     # An unknown sub is a 404 on every path.
-    for path in ("/student/nobody/transcript", "/student/nobody/roster", "/student/nobody/eligibility"):
+    for path in ("/student/nobody/transcript", "/student/nobody/eligibility"):
         assert get(path)[0] == 404, path
 
 
@@ -109,7 +109,7 @@ def check_roster_rows(get, rows: list[dict]) -> None:
     for row in rows:
         sub = row["id"]
         columns = {k: v for k, v in row.items() if k != "id"}
-        assert get(f"/student/{sub}/roster") == (200, columns), sub
+        assert get(f"/student/{sub}/transcript") == (200, columns), sub
         assert get(f"/student/{sub}/eligibility") == (200, columns), sub
 
 
@@ -147,8 +147,8 @@ def test_mock_adapter_on_the_hackathon_roster() -> None:
         get = host_get(csv_path)
         check_adapter(get, csv_path)
         check_edit(get, csv_path)
-        assert get("/student/hack-2026-0001/roster")[1]["teamName"] == "Sandbox Pioneers"
-        assert get("/student/hack-2026-0002/roster")[1]["teamName"] == 'Chain "Gang"\nof two'
+        assert get("/student/hack-2026-0001/transcript")[1]["teamName"] == "Sandbox Pioneers"
+        assert get("/student/hack-2026-0002/transcript")[1]["teamName"] == 'Chain "Gang"\nof two'
         # The participant without a team is on the roster, with an empty teamId.
         assert get("/student/hack-2026-0003/eligibility")[1]["teamId"] == ""
 
@@ -172,16 +172,15 @@ def resolve(schema: dict, contract: dict) -> dict:
 
 
 ELIGIBILITY_PATH = "/student/{sub}/eligibility"
-# The record URLs each Installation's Certify reads on the mock, as paths.
+# The record URL both Installations' Certify reads on the mock, as a path.
 TRANSCRIPT_URL = "/student/{sub}/transcript"
-ROSTER_URL = "/student/{sub}/roster"
 CREDENTIAL_SCHEMA = Path(__file__).parent.parent / "wiki" / "schemas" / "ait-transcript-credential.v2.schema.json"
 
 
 def answer_schemas(contract: dict, path: str) -> list[dict]:
-    """The schemas the contract gives for a 200 at `path`, resolved: one, or each of a oneOf or an allOf."""
+    """The schemas the contract gives for a 200 at `path`, resolved: one, or each of a oneOf."""
     schema = contract["paths"][path]["get"]["responses"]["200"]["content"]["application/json"]["schema"]
-    return [resolve(s, contract) for s in schema.get("oneOf", schema.get("allOf", [schema]))]
+    return [resolve(s, contract) for s in schema.get("oneOf", [schema])]
 
 
 def record_schemas(contract: dict) -> list[dict]:
@@ -209,7 +208,7 @@ TYPES = {"string": str, "array": list, "object": dict, "boolean": bool, "number"
 
 def violations(value, schema: dict, contract: dict, where: str) -> list[str]:
     """How `value` breaks `schema`, for the keywords openapi.yaml uses on answers: type (one name or a list of them),
-    required, properties, additionalProperties, items, propertyNames, enum, not and minLength."""
+    required, properties, additionalProperties, items, propertyNames, enum, not, minLength and pattern."""
     schema = resolve(schema, contract)
     types = schema.get("type", [])
     types = [types] if isinstance(types, str) else types
@@ -222,6 +221,8 @@ def violations(value, schema: dict, contract: dict, where: str) -> list[str]:
         found.append(f"{where}: {value!r} is excluded by openapi.yaml")
     if isinstance(value, str) and len(value) < schema.get("minLength", 0):
         found.append(f"{where}: {value!r} is too short")
+    if isinstance(value, str) and "pattern" in schema and not re.search(schema["pattern"], value):
+        found.append(f"{where}: {value!r} does not match {schema['pattern']}")
     if isinstance(value, list):
         for i, item in enumerate(value):
             found += violations(item, schema.get("items", {}), contract, f"{where}[{i}]")
@@ -301,7 +302,7 @@ def test_the_contract_mode_passes_against_the_mock() -> None:
             "holds": [], "conferralStatus": "Conferred", "balance": "0.00"})  # eligible: it passes every check
         csv_path.write_bytes(ROSTER.read_bytes())
         for scope in ROSTER_SCOPES:
-            check_contract(get, ROSTER_URL, "hack-2026-0001", scope)
+            check_contract(get, TRANSCRIPT_URL, "hack-2026-0001", scope)
 
 
 def test_the_contract_mode_fails_an_adapter_that_breaks_the_contract() -> None:
@@ -336,6 +337,13 @@ def test_the_contract_mode_fails_an_adapter_that_breaks_the_contract() -> None:
                 {**term, "courses": [{k: v for k, v in course.items() if k != "lec"}]}]})),
             "a term without its GPA": broken(record, lambda s, b: (s, {**b, "courses": [
                 {**{k: v for k, v in term.items() if k != "gpa"}, "courses": [course]}]})),
+            "a date that is not YYYY-MM-DD": broken(record, lambda s, b: (s, {**b, "dateGraduation": "31/08/2026"})),
+            "a year that is not four digits": broken(record, lambda s, b: (s, {**b, "yearAwarded": "'23"})),
+            "credits with a unit": broken(record, lambda s, b: (s, {**b, "totalCredits": "49 credits"})),
+            "a GPA with a decimal comma": broken(record, lambda s, b: (s, {**b, "courses": [
+                {**term, "gpa": "3,67", "courses": [course]}]})),
+            "empty lab hours": broken(record, lambda s, b: (s, {**b, "courses": [
+                {**term, "courses": [{**course, "lab": ""}]}]})),
             "a 200 for an unknown sub": broken("/student/no-such", lambda s, b: (200, b)),
         }
         check_contract(broken(record, lambda s, b: (s, {**b, "courses": [{**term, "courses": [course]}]})),
@@ -360,7 +368,7 @@ def test_the_contract_mode_fails_a_courses_that_is_not_an_array_in_any_scope() -
             return (status, {**body, "courses": "CS601"}) if path.startswith("/student/hack") else (status, body)
 
         try:
-            check_contract(get, ROSTER_URL, "hack-2026-0001", ROSTER_SCOPES[0])
+            check_contract(get, TRANSCRIPT_URL, "hack-2026-0001", ROSTER_SCOPES[0])
         except AssertionError:
             return
         raise AssertionError("the contract mode passed a roster record whose courses is a string")
@@ -442,19 +450,19 @@ def test_the_plugin_refuses_exactly_the_structured_fields_openapi_yaml_forbids()
 
 def shape_of(schema: dict, resolve_ref) -> object:
     """A schema's field tree, for comparing two schema languages: an object's required names, each to its own tree,
-    an array's item tree, else the type name."""
+    an array's item tree, else the type name and the pattern (None without one)."""
     schema = resolve_ref(schema)
     if schema.get("type") == "object":
         return {name: shape_of(schema["properties"][name], resolve_ref) for name in schema.get("required", [])}
     if schema.get("type") == "array":
         return [shape_of(schema["items"], resolve_ref)]
-    return schema.get("type")
+    return schema.get("type"), schema.get("pattern")
 
 
 def test_the_transcript_record_is_the_credential_schemas_subject_less_the_holder() -> None:
     """The two master files agree: openapi.yaml's TranscriptRecord requires exactly the claims, terms and courses that
     wiki/schemas/ait-transcript-credential.v2.schema.json requires of the signed credentialSubject, with the same
-    types, except the holder's `id`, which Certify sets."""
+    types and formats (patterns), except the holder's `id`, which Certify sets."""
     contract = load_contract()
     credential = json.loads(CREDENTIAL_SCHEMA.read_text(encoding="utf-8"))
 

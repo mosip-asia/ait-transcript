@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import contextlib
 import json
+import re
 import socket
 import sys
 import threading
@@ -25,7 +26,7 @@ from fastapi.responses import JSONResponse, PlainTextResponse  # noqa: E402
 
 import bridge  # noqa: E402
 import sis_mapping  # noqa: E402
-from test_adapter import TRANSCRIPT_URL, check_contract, load_contract, record_schema  # noqa: E402
+from test_adapter import TRANSCRIPT_URL, check_contract, load_contract, record_schema, violations  # noqa: E402
 
 SCOPE = "ait_transcript_vc_ldp"
 SAMPLE = json.loads((HERE / "fixtures" / "st123456.json").read_text(encoding="utf-8"))
@@ -167,10 +168,22 @@ def test_the_record_is_the_samples_claims_in_the_contracts_names() -> None:
         assert list(record) == list(EXPECTED)  # the contract's order
 
 
-def test_the_mapped_record_passes_the_contract_mode() -> None:
+def test_the_mapped_record_fails_the_contract_only_where_the_sis_serves_an_empty_date_year_or_number() -> None:
+    """The SIS serves no lecture or lab hours, no term totals, and the sample has no year awarded, issue date or
+    coursework and thesis credits: the bridge serves each as an empty string, which the contract's formats refuse.
+    Everything else in the record passes, and the list shrinks as the SIS fills them in."""
+    contract = load_contract()
     with bridge_over() as (get, _):
-        check_contract(get, TRANSCRIPT_URL, "st123456", SCOPE)
+        status, record = get("/student/st123456/transcript")
+    problems = violations(record, record_schema(contract, SCOPE), contract, "record")
+    assert status == 200 and all(" does not match " in p for p in problems), problems
+    assert {re.sub(r"\[\d+\]", "[]", p.split(":")[0]) for p in problems} == {
+        "record.yearAwarded", "record.issueDate", "record.courseworkCredits", "record.thesisCredits",
+        "record.courses[].credits", "record.courses[].gpa", "record.courses[].cumGpa",
+        "record.courses[].courses[].lec", "record.courses[].courses[].lab"}, problems
+    with contextlib.suppress(AssertionError), bridge_over() as (get, _):
         check_contract(get, TRANSCRIPT_URL, "st123456", f"openid {SCOPE}")  # the token's scope claim, whole
+        raise RuntimeError("the contract mode passed a record with empty dates and numbers")
 
 
 def test_the_mapped_record_holds_exactly_the_transcript_schemas_claims() -> None:

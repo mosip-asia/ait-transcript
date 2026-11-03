@@ -23,6 +23,7 @@ This repo is the Issuer (Inji Certify with its Data-provider plugin, an Adapter 
 ## When you need it
 
 - [Deviations from the proposal](./project/issuer-v0.1/deviations.md): where v0.1 departs from the issuer proposal (PR 4), and why.
+- [SIS Adapter handover](./project/issuer-v0.1/sis-adapter-handover.md): what the SIS Adapter and the server's settings must provide, in plain words. For infra and the Adapter's builders.
 - Decisions, in [`docs/adr/`](../docs/adr/): [0001, the Approval gate sits beside the data path](../docs/adr/0001-approval-gate-beside-the-data-path.md), why the plugin reads the record and the Gateway is optional.
 - [Transcript JSON-LD context](./concepts/transcript-context.md): the rules that get every claim signed.
 - [Transcript credential](./concepts/transcript-credential.md): the claim shape and its gotchas.

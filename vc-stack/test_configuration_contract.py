@@ -261,11 +261,11 @@ def test_the_gateway_has_a_folder_of_its_own_that_both_stacks_include() -> None:
 
 def test_the_record_url_reaches_certify_from_the_environment_with_the_mock_adapter_as_the_fallback() -> None:
     """CERTIFY_RECORD_URL is passed to Certify only when vc-stack/.env sets it, so the one fallback is the
-    installation's properties: the mock Adapter's path for the installation's record."""
+    installation's properties: the mock Adapter's record path, the same for both installations."""
     assert "CERTIFY_RECORD_URL" in passed_through(services()["certify"][1]), services()["certify"][1]["environment"]
-    for name, path in (("ait", "transcript"), ("hackathon", "roster")):
+    for name in ("ait", "hackathon"):
         props = (INSTALLATIONS / name / "certify-installation.properties").read_text(encoding="utf-8").splitlines()
-        assert f"mosip.certify.adapter.record-url=${{CERTIFY_RECORD_URL:http://adapter:8000/student/{{sub}}/{path}}}" in props, name
+        assert "mosip.certify.adapter.record-url=${CERTIFY_RECORD_URL:http://adapter:8000/student/{sub}/transcript}" in props, name
 
 
 def test_mimoto_config_comes_from_demo() -> None:

@@ -81,7 +81,7 @@ Plugin configuration, per installation, the same jar everywhere (ten keys):
 |---|---|
 | `mosip.certify.integration.data-provider-plugin` | `IssuerDataProviderPlugin` |
 | `mosip.certify.integration.scan-base-package` | `asia.mosip.issuer.plugin` |
-| `mosip.certify.adapter.record-url` | The record URL, an `http(s)` URL holding `{sub}`; each installation reads `CERTIFY_RECORD_URL`, falling back to the mock's, `http://adapter:8000/student/{sub}/transcript` (ait) or `.../roster` (hackathon) |
+| `mosip.certify.adapter.record-url` | The record URL, an `http(s)` URL holding `{sub}`; each installation reads `CERTIFY_RECORD_URL`, falling back to the mock's, `http://adapter:8000/student/{sub}/transcript` (both installations) |
 | `mosip.certify.adapter.connect-timeout-ms` | Default `2000` |
 | `mosip.certify.adapter.read-timeout-ms` | Default `10000` |
 | `mosip.certify.gateway.enabled` | Required, `true` or `false`, no default: the gate's switch |
@@ -100,13 +100,12 @@ The Adapter is where an organisation's records enter the Issuer platform: the Da
 
 ```
 GET /student/{sub}/transcript    the AIT transcript         read by the plugin
-GET /student/{sub}/roster        the hackathon roster row   read by the plugin, served by the mock only
 GET /student/{sub}/eligibility   what the Checklist reads   read by the Gateway; not served by the SIS Adapter yet
 ```
 
 - `{sub}` is the access token's `sub`, unchanged, URL-encoded as one path segment. It is the one value the Issuer needs from the Authorization Server and the only one it sends the Adapter.
 - Each caller is set with the whole URL, so the deployment chooses the path: `CERTIFY_RECORD_URL` for the plugin, `GATEWAY_ELIGIBILITY_URL` for the Gateway ([`configuration-contract.md`](configuration-contract.md)). A URL that is not `http(s)` or holds no `{sub}` stops its caller at startup.
-- **The record schemas**, one per scope (its `x-scope`): `TranscriptRecord` (`ait_transcript_vc_ldp`), `PassportRecord` (`developer_passport_vc_ldp`), `AchievementRecord` (`achievement_certificate_vc_ldp`); the roster row holds the claims of both hackathon schemas. Each requires exactly the claims its Certify template substitutes, the transcript's `courseList` included as a plain string. Every claim is a string, numbers included, except `courses`: terms of `{ term, courses: [ { no, title, lec, lab, credits, grade } ], credits, gpa, cumGpa }`. A record may carry more fields, each a string, number or boolean (`ExtraField`), which the plugin passes on unrendered; it refuses any other object or array (section 2a, step 4). `RecordKey` names the keys no record may carry: Certify's reserved keys and the plugin's trace keys (section 2a).
+- **The record schemas**, one per scope (its `x-scope`): `TranscriptRecord` (`ait_transcript_vc_ldp`), `PassportRecord` (`developer_passport_vc_ldp`), `AchievementRecord` (`achievement_certificate_vc_ldp`); the hackathon's two are served by the mock alone, at the same path, one roster row holding the claims of both. Dates are `Date` (`YYYY-MM-DD`), credits, hours and GPAs `Decimal` (`27.0`, `3.67`), the year awarded four digits: the credential schema pins the same formats, and [`sis-adapter-handover.md`](sis-adapter-handover.md) explains them. Each requires exactly the claims its Certify template substitutes, the transcript's `courseList` included as a plain string. Every claim is a string, numbers included, except `courses`: terms of `{ term, courses: [ { no, title, lec, lab, credits, grade } ], credits, gpa, cumGpa }`. A record may carry more fields, each a string, number or boolean (`ExtraField`), which the plugin passes on unrendered; it refuses any other object or array (section 2a, step 4). `RecordKey` names the keys no record may carry: Certify's reserved keys and the plugin's trace keys (section 2a).
 - **The eligibility schemas**, one per scope: `TranscriptEligibility` (`holds`, `conferralStatus`, `balance`), `PassportEligibility` (`teamId`), `AchievementEligibility` (`teamId`, `winner`). The Gateway's eligibility models must keep matching them; `adapter/test_adapter.py` checks it.
 - A `404` means no such student; its body is not read. Any other answer that is not as the contract types it is `adapter_error` from the plugin and `gateway_error` from the Gateway, never an empty claim.
 - No secret on either hop: NetBird membership is the boundary to the SIS Adapter. The Adapter keeps `sub` out of its storage and access logs.

@@ -14,9 +14,9 @@ info:
     unchanged. What `sub` holds is for the Authorization Server and the Adapter to agree on; the Adapter accepts
     whatever the Authorization Server puts there.
 
-    - `GET /student/{sub}/transcript`: the AIT transcript record, read by the Data-provider plugin.
-    - `GET /student/{sub}/roster`: the hackathon roster row, the Developer Passport's and the Achievement's record,
-      served by the mock only.
+    - `GET /student/{sub}/transcript`: the AIT transcript record, read by the Data-provider plugin. The mock also
+      serves the hackathon installation's record here (the Developer Passport's and the Achievement's), which the SIS
+      Adapter does not serve.
     - `GET /student/{sub}/eligibility`: what the Checklist reads, read by the Gateway. The SIS Adapter does not serve
       it yet; until it does, the Gateway reads the mock's.
 
@@ -48,26 +48,14 @@ paths:
         - $ref: '#/components/parameters/Sub'
       responses:
         '200':
-          description: The record in the transcript's record schema
+          description: |
+            The record in the record schema of the installation's scope (its `x-scope`): `TranscriptRecord` from the
+            SIS Adapter; the hackathon's two from the mock only, one roster row holding the claims of both.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/TranscriptRecord'
-        '404':
-          $ref: '#/components/responses/NoRecord'
-  /student/{sub}/roster:
-    get:
-      operationId: getRosterRow
-      summary: The participant's roster row, the record of both hackathon credential types
-      parameters:
-        - $ref: '#/components/parameters/Sub'
-      responses:
-        '200':
-          description: One row holding the claims of both record schemas
-          content:
-            application/json:
-              schema:
-                allOf:
+                oneOf:
+                  - $ref: '#/components/schemas/TranscriptRecord'
                   - $ref: '#/components/schemas/PassportRecord'
                   - $ref: '#/components/schemas/AchievementRecord'
         '404':
@@ -136,6 +124,17 @@ components:
         Data-provider plugin's trace keys, which it adds to every record.
       not:
         enum: [id, _holderId, _issuer, validFrom, validUntil, credentialStatus, tokenSub, tokenClientId]
+    Date:
+      type: string
+      pattern: '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
+      description: A calendar date as `YYYY-MM-DD`, for example `2026-08-31`. No time, no time zone.
+    Decimal:
+      type: string
+      pattern: '^[0-9]+(\.[0-9]+)?$'
+      description: |
+        A number of zero or more written as a string: digits, then optionally a point and more digits, for example
+        `3`, `27.0` or `3.67`. No sign, no thousands separator, no unit. The Issuer prints it as it is, so the
+        Adapter chooses the decimals it means (a GPA as `3.67`, credits as `27.0`).
     ExtraField:
       description: |
         A field a record schema does not name: a scalar. The Data-provider plugin refuses an object or an array here
@@ -146,8 +145,9 @@ components:
       x-scope: ait_transcript_vc_ldp
       description: |
         The AIT transcript: the claims the ait-transcript template substitutes, every one required and none `null`.
-        Strings throughout, numbers included; only `courses` is structured. Each claim's meaning and format is in
-        `wiki/schemas/ait-transcript-credential.v2.schema.json`. Which fields may leave the student information system
+        Strings throughout, numbers included; only `courses` is structured. Dates are `Date`, credits, hours and
+        GPAs `Decimal`. Each claim's meaning is in `wiki/schemas/ait-transcript-credential.v2.schema.json`, which
+        pins the same formats; `wiki/project/issuer-v0.1/sis-adapter-handover.md` explains them in prose. Which fields may leave the student information system
         is OSA's decision.
       propertyNames:
         $ref: '#/components/schemas/RecordKey'
@@ -180,20 +180,20 @@ components:
         - thesisExamination
       properties:
         fullName: {type: string}
-        dateOfBirth: {type: string, format: date}
+        dateOfBirth: {$ref: '#/components/schemas/Date'}
         country: {type: string}
         registrationNo: {type: string, examples: [st125001]}
         previousDegree: {type: string}
-        yearAwarded: {type: string, examples: ['2023']}
-        dateAdmitted: {type: string, format: date}
+        yearAwarded: {type: string, pattern: '^[0-9]{4}$', examples: ['2023']}
+        dateAdmitted: {$ref: '#/components/schemas/Date'}
         option: {type: string, examples: [Thesis]}
         degreeAwarded: {type: string}
-        dateGraduation: {type: string, format: date}
+        dateGraduation: {$ref: '#/components/schemas/Date'}
         faculty: {type: string}
         academicProgram: {type: string}
         areaOfSpecialization: {type: string}
         notes: {type: string, description: '`-` when there are none'}
-        issueDate: {type: string, format: date}
+        issueDate: {$ref: '#/components/schemas/Date'}
         courses:
           type: array
           description: Terms in order, each with its courses in order.
@@ -207,9 +207,9 @@ components:
         thesisTitle: {type: string}
         thesisGrade: {type: string}
         programCommittee: {type: string}
-        courseworkCredits: {type: string, examples: ['27.0']}
-        thesisCredits: {type: string}
-        totalCredits: {type: string}
+        courseworkCredits: {$ref: '#/components/schemas/Decimal'}
+        thesisCredits: {$ref: '#/components/schemas/Decimal'}
+        totalCredits: {$ref: '#/components/schemas/Decimal'}
         thesisExamination: {type: string, examples: [Passed]}
     PassportRecord:
       type: object
@@ -283,16 +283,16 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Course'
-        credits: {type: string, description: Credits taken in the term, examples: ['9.0']}
-        gpa: {type: string, description: The term's GPA on the 4.00 scale, examples: ['3.67']}
-        cumGpa: {type: string, description: The cumulative GPA at the end of the term, examples: ['3.75']}
+        credits: {$ref: '#/components/schemas/Decimal', description: Credits taken in the term}
+        gpa: {$ref: '#/components/schemas/Decimal', description: The term's GPA on the 4.00 scale}
+        cumGpa: {$ref: '#/components/schemas/Decimal', description: The cumulative GPA at the end of the term}
     Course:
       type: object
       required: ['no', title, lec, lab, credits, grade]
       properties:
         'no': {type: string, examples: [CS601]}
         title: {type: string}
-        lec: {type: string, description: Lecture hours}
-        lab: {type: string, description: Lab hours}
-        credits: {type: string}
+        lec: {$ref: '#/components/schemas/Decimal', description: Lecture hours}
+        lab: {$ref: '#/components/schemas/Decimal', description: Lab hours}
+        credits: {$ref: '#/components/schemas/Decimal'}
         grade: {type: string}
