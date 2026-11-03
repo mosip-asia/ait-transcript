@@ -47,9 +47,9 @@ services:
       # Certify's DID: a credential's issuer and did.json's id. A fresh keystore makes a new key, so the value is only
       # known once Certify runs; bootstrap.sh --did-refresh writes it to .env. Until then, the seed's placeholder.
       - CERTIFY_DID=${CERTIFY_DID:-did:key:z6MkpPLACEHOLDERreplaceMeViaBootstrapDidRefreshScript1}
-      # The plugin's Adapter, passed only when .env sets it; unset, the installation's properties fall back to the
+      # The plugin's record URL, passed only when .env sets it; unset, the installation's properties fall back to the
       # mock Adapter.
-      - CERTIFY_ADAPTER_URL
+      - CERTIFY_RECORD_URL
       # The plugin's switch, passed only when .env sets it (false with NO GATEWAY, or true with a Gateway URL); unset,
       # the installation's properties keep the gate on at http://gateway:8000. The no-Gateway stack forms set it off.
       - MOSIP_CERTIFY_GATEWAY_ENABLED

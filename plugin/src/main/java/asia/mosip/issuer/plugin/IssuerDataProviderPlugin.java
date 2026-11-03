@@ -25,12 +25,12 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 /**
- * Certify's data provider for the Issuer. For each credential request it lists the token's records at the Adapter
- * ({@code GET /records}), asks the Gateway whether the first one passes its Checklist ({@code POST /evaluations}) when
- * the gate is on ({@code mosip.certify.gateway.enabled}), fetches that record ({@code GET /records/{recordId}}) and
- * hands it to Certify shaped for its quoted Velocity template, with the token's {@code sub} and {@code client_id} added
- * as trace keys for the ledger. It knows no claim name but {@code courses}, maps no scope, and makes no call until
- * Certify asks for data, so Certify starts whatever is down.
+ * Certify's data provider for the Issuer. For each credential request it asks the Gateway whether the token's student
+ * passes the Checklist ({@code POST /evaluations}) when the gate is on ({@code mosip.certify.gateway.enabled}), reads the
+ * student's record at the record URL with the token's {@code sub} filled in ({@code mosip.certify.adapter.record-url})
+ * and hands it to Certify shaped for its quoted Velocity template, with the token's {@code sub} and {@code client_id}
+ * added as trace keys for the ledger. It knows no path, no claim name but {@code courses}, maps no scope, and makes no
+ * call until Certify asks for data, so Certify starts whatever is down.
  */
 @Component
 @ConditionalOnProperty(value = "mosip.certify.integration.data-provider-plugin", havingValue = "IssuerDataProviderPlugin")
@@ -50,14 +50,17 @@ public class IssuerDataProviderPlugin implements DataProviderPlugin {
     static final Set<String> FORBIDDEN_KEYS = Set.of("id", "_holderId", "_issuer", "validFrom", "validUntil",
             "credentialStatus", "tokenSub", "tokenClientId");
 
-    /** One HTTP peer: its base URL, a client holding its connect timeout, its read timeout and the code its failures get. */
-    private record Peer(String base, HttpClient http, Duration readTimeout, String failure) {
+    /**
+     * One HTTP peer: its URL as configured, a client holding its connect timeout, its read timeout and the code its
+     * failures get.
+     */
+    private record Peer(String url, HttpClient http, Duration readTimeout, String failure) {
         static Peer of(String url, long connectTimeoutMs, long readTimeoutMs, String failure) {
             HttpClient http = HttpClient.newBuilder()
                     .version(HttpClient.Version.HTTP_1_1)
                     .connectTimeout(Duration.ofMillis(connectTimeoutMs))
                     .build();
-            return new Peer(url.replaceAll("/+$", ""), http, Duration.ofMillis(readTimeoutMs), failure);
+            return new Peer(url, http, Duration.ofMillis(readTimeoutMs), failure);
         }
 
         /** The answer, or {@link #failure} when the peer cannot be reached or is slower than the read timeout. */
@@ -65,25 +68,22 @@ public class IssuerDataProviderPlugin implements DataProviderPlugin {
             try {
                 return http.send(request.timeout(readTimeout).build(), HttpResponse.BodyHandlers.ofString());
             } catch (IOException e) {
-                log.warn("{} not reached at {}: {}", failure, base, e.toString());
+                log.warn("{} not reached at {}: {}", failure, url, e.toString());
                 throw new DataProviderExchangeException(failure);
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
                 throw new DataProviderExchangeException(failure);
             }
         }
-
-        HttpResponse<String> get(String pathAndQuery) throws DataProviderExchangeException {
-            return send(HttpRequest.newBuilder(URI.create(base + pathAndQuery)).GET());
-        }
     }
 
     /** The Approval gate: the Gateway's {@code POST /evaluations}, asked with the shared bearer secret. */
     private record Gate(Peer gateway, String authorization) {
         /** Any 2xx passes; any other answer is refused with its {@code error}. Fails closed. */
-        void evaluate(String sub, String scope, String recordId) throws DataProviderExchangeException {
-            String body = new JSONObject(Map.of("sub", sub, "scope", scope, "recordId", recordId)).toString();
-            HttpResponse<String> response = gateway.send(HttpRequest.newBuilder(URI.create(gateway.base() + "/evaluations"))
+        void evaluate(String sub, String scope) throws DataProviderExchangeException {
+            String body = new JSONObject(Map.of("sub", sub, "scope", scope)).toString();
+            HttpResponse<String> response = gateway.send(HttpRequest.newBuilder(
+                            URI.create(gateway.url().replaceAll("/+$", "") + "/evaluations"))
                     .header("Authorization", authorization)
                     .header("Content-Type", "application/json")
                     .POST(HttpRequest.BodyPublishers.ofString(body)));
@@ -95,20 +95,25 @@ public class IssuerDataProviderPlugin implements DataProviderPlugin {
         }
     }
 
+    /** The record URL's placeholder for the token's {@code sub}. */
+    static final String SUB = "{sub}";
+
     /** What {@code mosip.certify.gateway.url} must say when the gate is off. */
     static final String NO_GATEWAY = "NO GATEWAY";
 
+    /** The Adapter, its URL the record URL with {@code {sub}} still in it. */
     private final Peer adapter;
     /** Empty when {@code mosip.certify.gateway.enabled} is false: every record the Adapter serves is issued. */
     private final Optional<Gate> gate;
 
     /**
-     * @throws IllegalArgumentException for a switch that is missing, not {@code true} or {@code false}, or
-     *     contradicts the Gateway's URL (on with {@code NO GATEWAY} or no {@code http(s)} URL, off with anything but
-     *     {@code NO GATEWAY}), or the gate on without a token; Certify then does not start
+     * @throws IllegalArgumentException for a record URL that is not an {@code http(s)} URL holding {@code {sub}}, a
+     *     switch that is missing, not {@code true} or {@code false}, or contradicts the Gateway's URL (on with
+     *     {@code NO GATEWAY} or no {@code http(s)} URL, off with anything but {@code NO GATEWAY}), or the gate on
+     *     without a token; Certify then does not start
      */
     public IssuerDataProviderPlugin(
-            @Value("${mosip.certify.adapter.url}") String adapterUrl,
+            @Value("${mosip.certify.adapter.record-url}") String recordUrl,
             @Value("${mosip.certify.adapter.connect-timeout-ms:2000}") long adapterConnectTimeoutMs,
             @Value("${mosip.certify.adapter.read-timeout-ms:10000}") long adapterReadTimeoutMs,
             @Value("${mosip.certify.gateway.enabled:}") String gatewayEnabled,
@@ -116,7 +121,11 @@ public class IssuerDataProviderPlugin implements DataProviderPlugin {
             @Value("${mosip.certify.gateway.auth-token:}") String gatewayAuthToken,
             @Value("${mosip.certify.gateway.connect-timeout-ms:2000}") long gatewayConnectTimeoutMs,
             @Value("${mosip.certify.gateway.read-timeout-ms:10000}") long gatewayReadTimeoutMs) {
-        this.adapter = Peer.of(adapterUrl, adapterConnectTimeoutMs, adapterReadTimeoutMs, ADAPTER_ERROR);
+        if (!recordUrl.contains(SUB) || !isHttpUrl(recordUrl.replace(SUB, "sub"))) {
+            throw new IllegalArgumentException("mosip.certify.adapter.record-url must be an http(s) URL holding "
+                    + SUB + ", not '" + recordUrl + "'");
+        }
+        this.adapter = Peer.of(recordUrl, adapterConnectTimeoutMs, adapterReadTimeoutMs, ADAPTER_ERROR);
         boolean enabled = switchSetting(gatewayEnabled);
         if (enabled) {
             if (!isHttpUrl(gatewayUrl)) {
@@ -137,7 +146,7 @@ public class IssuerDataProviderPlugin implements DataProviderPlugin {
             this.gate = Optional.empty();
         }
         log.info("IssuerDataProviderPlugin selected: gateway.enabled={}, Gateway {}, Adapter {}", enabled,
-                gate.map(g -> g.gateway().base()).orElse(NO_GATEWAY), adapter.base());
+                gate.map(g -> g.gateway().url()).orElse(NO_GATEWAY), adapter.url());
     }
 
     /** {@code mosip.certify.gateway.enabled}: exactly {@code true} or {@code false}, with no default. */
@@ -159,24 +168,23 @@ public class IssuerDataProviderPlugin implements DataProviderPlugin {
     }
 
     /**
-     * The token's first record, after the Gateway passed it when the gate is on, shaped for Certify's template and
-     * extended with {@code tokenSub} and {@code tokenClientId}.
+     * The token's student's record, after the Gateway passed the student when the gate is on, shaped for Certify's
+     * template and extended with {@code tokenSub} and {@code tokenClientId}.
      *
      * @throws DataProviderExchangeException {@code invalid_access_token} for claims without {@code sub}, before any
-     *     call; {@code no_record} for an empty list or a 404; the Gateway refusal's {@code error}, else
-     *     {@code gateway_error}; {@code adapter_error} for an Adapter that fails or serves a record Certify cannot take
+     *     call; the Gateway refusal's {@code error}, else {@code gateway_error}, before the record is read;
+     *     {@code no_record} for a 404; {@code adapter_error} for an Adapter that fails or serves a record Certify
+     *     cannot take
      */
     @Override
     public JSONObject fetchData(Map<String, Object> claims) throws DataProviderExchangeException {
         if (!(claims.get("sub") instanceof String sub) || sub.isEmpty()) {
             throw new DataProviderExchangeException(INVALID_ACCESS_TOKEN);
         }
-        String scope = claims.get("scope") instanceof String s ? s : "";
-        String recordId = firstRecordId(sub, scope);
         if (gate.isPresent()) {
-            gate.get().evaluate(sub, scope, recordId);
+            gate.get().evaluate(sub, claims.get("scope") instanceof String scope ? scope : "");
         }
-        JSONObject record = record(recordId, scope);
+        JSONObject record = record(sub);
         JSONObject data = shape(record);
         data.put("tokenSub", sub);
         if (claims.get("client_id") != null) {
@@ -185,24 +193,10 @@ public class IssuerDataProviderPlugin implements DataProviderPlugin {
         return data;
     }
 
-    /** {@code GET /records?sub=&scope=}: the first entry's {@code recordId}, without selecting. */
-    private String firstRecordId(String sub, String scope) throws DataProviderExchangeException {
-        HttpResponse<String> response = adapter.get("/records?sub=" + query(sub) + "&scope=" + query(scope));
-        JSONArray list = adapterAnswer(response, JSONArray::new);
-        if (list.isEmpty()) {
-            throw new DataProviderExchangeException(NO_RECORD);
-        }
-        if (!(list.get(0) instanceof JSONObject first) || !(first.opt("recordId") instanceof String id) || id.isEmpty()) {
-            log.warn("the Adapter's list has no recordId in its first entry");
-            throw new DataProviderExchangeException(ADAPTER_ERROR);
-        }
-        return id;
-    }
-
-    /** {@code GET /records/{recordId}?scope=}: the record, a JSON object with no forbidden key. */
-    private JSONObject record(String recordId, String scope) throws DataProviderExchangeException {
-        JSONObject record = adapterAnswer(adapter.get("/records/" + path(recordId) + "?scope=" + query(scope)),
-                JSONObject::new);
+    /** The record URL with {@code sub} filled in as one path segment: the record, a JSON object with no forbidden key. */
+    private JSONObject record(String sub) throws DataProviderExchangeException {
+        URI uri = URI.create(adapter.url().replace(SUB, pathSegment(sub)));
+        JSONObject record = adapterAnswer(adapter.send(HttpRequest.newBuilder(uri).GET()), JSONObject::new);
         for (String key : record.keySet()) {
             if (FORBIDDEN_KEYS.contains(key)) {
                 log.warn("the Adapter's record carries the forbidden key {}", key);
@@ -285,12 +279,8 @@ public class IssuerDataProviderPlugin implements DataProviderPlugin {
         return out.toString();
     }
 
-    private static String query(String value) {
-        return URLEncoder.encode(value, StandardCharsets.UTF_8);
-    }
-
-    private static String path(String segment) {
-        return URLEncoder.encode(segment, StandardCharsets.UTF_8).replace("+", "%20");
+    private static String pathSegment(String value) {
+        return URLEncoder.encode(value, StandardCharsets.UTF_8).replace("+", "%20");
     }
 
     /** The {@code error} string of a refusal's JSON body, else {@code gateway_error}. */
