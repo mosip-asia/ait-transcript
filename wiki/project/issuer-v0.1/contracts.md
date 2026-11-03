@@ -39,7 +39,7 @@ Data-provider plugin --POST /evaluations--> Gateway --GET /student/{sub}/eligibi
 The plugin's sequence, `fetchData(claims)`, in order:
 
 1. No `sub`, or an empty one: `invalid_access_token`, before any call.
-2. Only with the gate on: `POST {gateway}/evaluations` (below) with `{ sub, scope }` and the shared bearer secret. Any `2xx` passes. Any other answer throws the body's `error`; no JSON `error`, an unreachable Gateway or one slower than the read timeout is `gateway_error`. The gate fails closed.
+2. Only with the gate on: `POST {gateway}/evaluations` (below) with `{ sub, scope }` and the shared bearer secret. Only a `200` evaluation listing its checks, each `passed: true`, passes. Any other status throws the body's `error`; no JSON `error`, any other `200`, an unreachable Gateway or a whole answer slower than the read timeout is `gateway_error`. The gate fails closed.
 3. `GET` the record URL, `mosip.certify.adapter.record-url` with `{sub}` replaced by the token's `sub`, URL-encoded as one path segment (for the SIS Adapter, `.../student/{sub}/transcript`). A `404` is `no_record`.
 4. The record becomes Certify's claims. It must be a JSON object holding none of Certify's reserved keys (`id`, `_holderId`, `_issuer`, `validFrom`, `validUntil`, `credentialStatus`) and neither trace key below. Every top-level string is escaped for Certify's quoted Velocity template (JSON string escaping without the surrounding quotes); `courses`, which must be an array, becomes its JSON text, unescaped, which the template's unquoted `${courses}` needs; any other top-level object or array, or a `courses` that is not an array, is `adapter_error`; other values pass unchanged. Then the plugin adds the token's `sub` as `tokenSub` and its `client_id` as `tokenClientId` (left out when the token has none). Each installation indexes both in Certify's ledger, which is the issuance record; no template renders them, so no credential carries them.
 
@@ -70,10 +70,10 @@ The plugin's sequence, `fetchData(claims)`, in order:
 |---|---|---|
 | `invalid_access_token` | Data-provider plugin | The token has no `sub` |
 | `no_record` | Data-provider plugin; the Gateway, forwarded | The record is `404`; the Gateway's eligibility path is `404` |
-| `adapter_error` | Data-provider plugin | The Adapter is unreachable, slower than the read timeout, answers a status other than `200` or `404`, a body that is not the expected JSON shape, or a record holding a reserved or trace key |
+| `adapter_error` | Data-provider plugin | The Adapter is unreachable, its whole answer slower than the read timeout, answers a status other than `200` or `404`, a body that is not the expected JSON shape, or a record holding a reserved or trace key or a `null` |
 | `checklist_failed` | Gateway | A check failed |
 | `unknown_scope`, `invalid_request` | Gateway | The scope or the body, as above |
-| `gateway_error` | Gateway; the Data-provider plugin | The Adapter failed the Gateway; the Gateway is unreachable, slow, or answers without an `error` |
+| `gateway_error` | Gateway; the Data-provider plugin | The Adapter failed the Gateway; the Gateway is unreachable, slow, answers a refusal without an `error`, or a `200` that is not a passing evaluation |
 
 Plugin configuration, per installation, the same jar everywhere (ten keys):
 

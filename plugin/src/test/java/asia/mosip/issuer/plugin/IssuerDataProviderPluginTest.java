@@ -45,7 +45,12 @@ class IssuerDataProviderPluginTest {
     record Seen(String server, String method, String path, Map<String, String> query, String authorization,
             String contentType, String body) {}
 
-    record Reply(int status, String body, long delayMs) {
+    /** {@code delayMs} before the headers; {@code stallBodyMs} after them, before the body. */
+    record Reply(int status, String body, long delayMs, long stallBodyMs) {
+        Reply(int status, String body, long delayMs) {
+            this(status, body, delayMs, 0);
+        }
+
         static Reply of(int status, String body) {
             return new Reply(status, body, 0);
         }
@@ -67,19 +72,25 @@ class IssuerDataProviderPluginTest {
                     exchange.getRequestHeaders().getFirst("Content-Type"),
                     new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8)));
             Reply reply = replies.getOrDefault(path, Reply.of(599, "no reply for " + path));
-            try {
-                Thread.sleep(reply.delayMs());
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-            }
+            sleep(reply.delayMs());
             byte[] bytes = reply.body().getBytes(StandardCharsets.UTF_8);
             exchange.sendResponseHeaders(reply.status(), bytes.length == 0 ? -1 : bytes.length);
+            exchange.getResponseBody().flush();
+            sleep(reply.stallBodyMs());
             exchange.getResponseBody().write(bytes);
             exchange.close();
         });
         server.start();
         servers.add(server);
         return "http://127.0.0.1:" + server.getAddress().getPort();
+    }
+
+    private static void sleep(long ms) {
+        try {
+            Thread.sleep(ms);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
     }
 
     private static Map<String, String> query(String raw) {
@@ -216,6 +227,37 @@ class IssuerDataProviderPluginTest {
         assertEquals(List.of("/evaluations"), seen.stream().map(Seen::path).toList());
     }
 
+    /** Only the Gateway's own pass gets through: a 200 evaluation listing its checks, every one passed. */
+    @ParameterizedTest(name = "{0}")
+    @CsvSource(delimiter = '|', textBlock = """
+            a web page                       | 200 | <html>It works!</html>
+            an empty object                  | 200 | {}
+            no checks                        | 200 | {"credentialType": "AitTranscriptCredential", "checks": []}
+            a failed check in a 200          | 200 | {"error": "checklist_failed", "checks": [{"check": "no_holds", "passed": false}]}
+            a passed that is not true        | 200 | {"checks": [{"check": "no_holds", "passed": "true"}]}
+            a pass as a 201                  | 201 | {"checks": [{"check": "no_holds", "passed": true}]}
+            no content                       | 204 | ''
+            """)
+    void aGatewayAnswerThatIsNotAPassingEvaluationIsGatewayErrorAndTheRecordIsNeverFetched(String name, int status,
+            String body) throws Exception {
+        IssuerDataProviderPlugin plugin = plugin();
+        gatewayReplies.put("/evaluations", Reply.of(status, body));
+
+        assertEquals("gateway_error", refused(plugin, CLAIMS).getErrorCode());
+        assertEquals(List.of("/evaluations"), seen.stream().map(Seen::path).toList());
+    }
+
+    @Test
+    void aGatewayThatStallsItsBodyPastItsReadTimeoutIsGatewayError() throws Exception {
+        IssuerDataProviderPlugin plugin = plugin(10000, 200);
+        gatewayReplies.computeIfPresent("/evaluations", (p, reply) -> new Reply(reply.status(), reply.body(), 0, 3000));
+
+        long start = System.nanoTime();
+        assertEquals("gateway_error", refused(plugin, CLAIMS).getErrorCode());
+        assertTrue(System.nanoTime() - start < 1_500_000_000L, "the read timeout did not cut the body short");
+        assertEquals(List.of("/evaluations"), seen.stream().map(Seen::path).toList());
+    }
+
     @ParameterizedTest
     @CsvSource({"http://127.0.0.1:1", "http://gateway.invalid:8000"})
     void aGatewayThatCannotBeReachedIsGatewayErrorAndTheRecordIsNeverFetched(String gatewayUrl) throws Exception {
@@ -310,6 +352,8 @@ class IssuerDataProviderPluginTest {
             courses as a string        | {"fullName": "Somchai Jaidee", "courses": "CS601"}
             courses as an object       | {"fullName": "Somchai Jaidee", "courses": {"term": "2025/1"}}
             courses as null            | {"fullName": "Somchai Jaidee", "courses": null}
+            a null claim               | {"fullName": null}
+            a null extra field         | {"fullName": "Somchai Jaidee", "level": null}
             """)
     void aRecordWithAnObjectOrArrayOtherThanCoursesOrCoursesThatIsNotAnArrayIsAdapterError(String name, String body)
             throws Exception {
@@ -336,6 +380,16 @@ class IssuerDataProviderPluginTest {
         long start = System.nanoTime();
         assertEquals("adapter_error", refused(plugin, CLAIMS).getErrorCode());
         assertTrue(System.nanoTime() - start < 800_000_000L, "the read timeout did not cut the call short");
+    }
+
+    @Test
+    void anAdapterThatStallsItsBodyPastItsReadTimeoutIsAdapterError() throws Exception {
+        IssuerDataProviderPlugin plugin = plugin(200, 10000);
+        adapterReplies.computeIfPresent(RECORD_PATH, (p, reply) -> new Reply(reply.status(), reply.body(), 0, 3000));
+
+        long start = System.nanoTime();
+        assertEquals("adapter_error", refused(plugin, CLAIMS).getErrorCode());
+        assertTrue(System.nanoTime() - start < 1_500_000_000L, "the read timeout did not cut the body short");
     }
 
     @Test

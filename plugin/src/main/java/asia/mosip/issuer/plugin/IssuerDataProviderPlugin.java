@@ -2,7 +2,6 @@ package asia.mosip.issuer.plugin;
 
 import io.mosip.certify.api.exception.DataProviderExchangeException;
 import io.mosip.certify.api.spi.DataProviderPlugin;
-import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URLEncoder;
@@ -14,6 +13,10 @@ import java.time.Duration;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.function.Function;
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -63,14 +66,22 @@ public class IssuerDataProviderPlugin implements DataProviderPlugin {
             return new Peer(url, http, Duration.ofMillis(readTimeoutMs), failure);
         }
 
-        /** The answer, or {@link #failure} when the peer cannot be reached or is slower than the read timeout. */
+        /**
+         * The answer, or {@link #failure} when the peer cannot be reached or the whole answer, its body included,
+         * takes longer than the read timeout. {@code HttpRequest.timeout} alone stops at the headers.
+         */
         HttpResponse<String> send(HttpRequest.Builder request) throws DataProviderExchangeException {
+            CompletableFuture<HttpResponse<String>> answer =
+                    http.sendAsync(request.timeout(readTimeout).build(), HttpResponse.BodyHandlers.ofString());
             try {
-                return http.send(request.timeout(readTimeout).build(), HttpResponse.BodyHandlers.ofString());
-            } catch (IOException e) {
-                log.warn("{} not reached at {}: {}", failure, url, e.toString());
+                return answer.get(readTimeout.toMillis(), TimeUnit.MILLISECONDS);
+            } catch (ExecutionException | TimeoutException e) {
+                answer.cancel(true);
+                Throwable cause = e instanceof ExecutionException ? e.getCause() : e;
+                log.warn("{} not reached at {}: {}", failure, url, cause.toString());
                 throw new DataProviderExchangeException(failure);
             } catch (InterruptedException e) {
+                answer.cancel(true);
                 Thread.currentThread().interrupt();
                 throw new DataProviderExchangeException(failure);
             }
@@ -79,7 +90,10 @@ public class IssuerDataProviderPlugin implements DataProviderPlugin {
 
     /** The Approval gate: the Gateway's {@code POST /evaluations}, asked with the shared bearer secret. */
     private record Gate(Peer gateway, String authorization) {
-        /** Any 2xx passes; any other answer is refused with its {@code error}. Fails closed. */
+        /**
+         * Only a 200 evaluation that lists its checks, each {@code passed: true}, passes. Any other status is refused
+         * with its {@code error}, and any other 200 is {@code gateway_error}. Fails closed.
+         */
         void evaluate(String sub, String scope) throws DataProviderExchangeException {
             String body = new JSONObject(Map.of("sub", sub, "scope", scope)).toString();
             HttpResponse<String> response = gateway.send(HttpRequest.newBuilder(
@@ -87,10 +101,29 @@ public class IssuerDataProviderPlugin implements DataProviderPlugin {
                     .header("Authorization", authorization)
                     .header("Content-Type", "application/json")
                     .POST(HttpRequest.BodyPublishers.ofString(body)));
-            if (response.statusCode() / 100 != 2) {
+            if (response.statusCode() != 200) {
                 String code = errorCode(response.body());
                 log.warn("the Gateway answered {} with error {}", response.statusCode(), code);
                 throw new DataProviderExchangeException(code);
+            }
+            if (!passes(response.body())) {
+                log.warn("the Gateway answered 200 without a passing evaluation");
+                throw new DataProviderExchangeException(GATEWAY_ERROR);
+            }
+        }
+
+        /** An evaluation listing at least one check, each with {@code passed} exactly {@code true}. */
+        private static boolean passes(String body) {
+            try {
+                JSONArray checks = new JSONObject(body).getJSONArray("checks");
+                for (int i = 0; i < checks.length(); i++) {
+                    if (!Boolean.TRUE.equals(checks.getJSONObject(i).opt("passed"))) {
+                        return false;
+                    }
+                }
+                return !checks.isEmpty();
+            } catch (JSONException e) {
+                return false;
             }
         }
     }
@@ -228,12 +261,17 @@ public class IssuerDataProviderPlugin implements DataProviderPlugin {
      * The record for Certify's template, which substitutes every claim into a quoted slot ({@code "${fullName}"})
      * except {@code courses} ({@code ${courses}}): every top-level string escaped, {@code courses} as its JSON text,
      * any other value as it is. The contract allows no other object or array at the top, and a {@code courses} that is
-     * not an array would reach the unquoted slot as something else, so both are {@code adapter_error}.
+     * not an array would reach the unquoted slot as something else, so both are {@code adapter_error}; so is a
+     * {@code null}, which Certify would sign as the template's literal placeholder.
      */
     private static JSONObject shape(JSONObject record) throws DataProviderExchangeException {
         JSONObject data = new JSONObject();
         for (String key : record.keySet()) {
             Object value = record.get(key);
+            if (value == JSONObject.NULL) {
+                log.warn("the Adapter's record has null for {}", key);
+                throw new DataProviderExchangeException(ADAPTER_ERROR);
+            }
             boolean structured = value instanceof JSONObject || value instanceof JSONArray;
             if (COURSES.equals(key) ? !(value instanceof JSONArray) : structured) {
                 log.warn("the Adapter's record has a {} for {}", value.getClass().getSimpleName(), key);

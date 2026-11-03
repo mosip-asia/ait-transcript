@@ -121,7 +121,10 @@ issuer_checks() {
 
   # With the gate off the stack form leaves the Gateway out: no gateway service runs, and nothing below asks one.
   if [[ "$GATE_ENABLED" == false ]]; then
-    ! docker compose config --services | grep -qx gateway || fail "the gate is off, but the stack form defines a gateway service"
+    # Read once, then match: grep -q under pipefail can end the pipe early and fail it whatever matched.
+    local services
+    services=$(docker compose config --services)
+    ! grep -qx gateway <<<"$services" || fail "the gate is off, but the stack form defines a gateway service"
     [[ -z "$(docker ps -q --filter name='^gateway$')" ]] || fail "the gate is off, but a gateway container is running"
     ok "the gate is off and no gateway service is running"
     return 0
