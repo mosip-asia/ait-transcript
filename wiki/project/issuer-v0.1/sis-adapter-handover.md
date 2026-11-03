@@ -86,7 +86,7 @@ The student passes when there are no holds, the degree is conferred, and the bal
 
 - **Unknown student:** answer `404`. The Issuer doesn't read the body and tells the wallet "no record".
 - **Anything else** that isn't a `200` with the shape above makes the Issuer refuse the claim: another status, a body it can't read, or no answer at all.
-- **Time:** the whole answer, body included, must arrive within 3 seconds for eligibility and 10 seconds for the transcript, or the claim is refused.
+- **Time:** the transcript's whole answer, body included, must arrive within 10 seconds. For eligibility, the Gateway waits at most 3 seconds to connect and at most 3 seconds for each next piece of the answer. Slower than that, and the claim is refused.
 - **Security:** there is no password or key on these calls. The private network (NetBird) is the only boundary, so the SIS Adapter must not be reachable from anywhere else.
 
 ## Privacy: the Issuer stores `sub`
