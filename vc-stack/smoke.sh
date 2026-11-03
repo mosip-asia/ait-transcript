@@ -113,7 +113,7 @@ auth_aud=$(curl -sf "http://localhost:4004/v1/mimoto/issuers/$ISSUER_ID" | jq -r
   || fail "authorization_audience must be AUTH_SERVER_TOKEN_ENDPOINT, $AUTH_SERVER_TOKEN_ENDPOINT (got: ${auth_aud:-<empty>})"
 ok "Issuer authorization_audience is the configured token endpoint"
 
-# The mock adapter answers the Adapter contract's three /records paths and a 404 on each, and serves an edited CSV
+# The mock adapter answers the Adapter contract's three /student paths and a 404 on each, and serves an edited CSV
 # value at once. The edit case runs on a copy of the CSV served by a second adapter container, so the installation's
 # file is never rewritten.
 adapter_copy_dir="$REPO_ROOT/.demo-state/adapter-copy"
@@ -131,12 +131,16 @@ adapter_test http://adapter:8000 "/demo/installations/$INSTALLATION/adapter/stud
 docker rm -f adapter-copy >/dev/null 2>&1 || true
 rm -rf "$adapter_copy_dir"
 [[ "$adapter_rc" == 0 ]] || fail "mock adapter (adapter/test_adapter.py)"
-ok "mock adapter serves the three /records paths, a 404 on each for an unknown student, and an edited value at once"
+ok "mock adapter serves the three /student paths, a 404 on each for an unknown student, and an edited value at once"
 
-# The contract mode (adapter/openapi.yaml), as any Adapter is checked: every type's first eligible persona.
+# The contract mode (adapter/openapi.yaml), as any Adapter is checked: every type's first eligible persona, at the
+# record URL the installation's properties default to, the mock's.
+record_url=$(tr -d '\r' <"$INSTALLATION_DIR/certify-installation.properties" \
+  | sed -n 's/^mosip\.certify\.adapter\.record-url=${CERTIFY_RECORD_URL:\(.*\)}$/\1/p')
+[[ -n "$record_url" ]] || fail "certify-installation.properties has no default mosip.certify.adapter.record-url"
 for ((i = 0; i < TYPE_COUNT; i++)); do
   load_type "$i"
-  adapter_test --contract http://adapter:8000 "${ELIGIBLE[0]}" "$SCOPE" \
+  adapter_test --contract "$record_url" "${ELIGIBLE[0]}" "$SCOPE" \
     || fail "the mock adapter fails the Adapter contract for $SCOPE (adapter/test_adapter.py --contract)"
   ok "the mock adapter passes the Adapter contract for $SCOPE"
 done

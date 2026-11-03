@@ -30,7 +30,7 @@ Two servers run the stack, each a Compose file that includes some of the five fo
 | Server | Compose file | Deployments | What it is |
 |---|---|---|---|
 | transcript-demo | `vc-stack/compose.yaml` | Issuer, Gateway, Verify, Mock Adapter, Demo | The demo server: the whole stack, with the stand-in Keycloak, for showing the journey end to end. Host `*.transcript-demo.ait-vc.dpi.ait.ac.th` (the infra team's), which was the Dev environment before the split |
-| issuer-dev | `vc-stack/issuer-dev.yaml` | Issuer, Gateway, Mock Adapter | The dev server, for integrating real components with the Issuer. It runs against infra's Keycloak (`AUTH_SERVER_*` set to it, [Authorization Server](#authorization-server)), and drops the Mock Adapter once infra's Adapter serves credential data: the include of `mock-adapter/` leaves `issuer-dev.yaml`, and `CERTIFY_ADAPTER_URL` and `GATEWAY_ADAPTER_URL` in `vc-stack/.env` name infra's Adapter |
+| issuer-dev | `vc-stack/issuer-dev.yaml` | Issuer, Gateway, Mock Adapter | The dev server, for integrating real components with the Issuer. It runs against infra's Keycloak (`AUTH_SERVER_*` set to it, [Authorization Server](#authorization-server)), and drops the Mock Adapter once infra's Adapter serves both the record and the eligibility: the include of `mock-adapter/` leaves `issuer-dev.yaml`, and `CERTIFY_RECORD_URL` and `GATEWAY_ELIGIBILITY_URL` in `vc-stack/.env` name infra's Adapter |
 
 Each stack has a no-Gateway form: the same Compose file with `gateway/` left out, merging `vc-stack/issuer/no-gateway.yaml` over the Issuer's file, which sets Certify's plugin switch off in its environment. The Issuer then asks no Gateway and issues every record the Adapter serves to whoever may sign in at the Authorization Server. Every script runs the form `COMPOSE_FILE` names (relative to `vc-stack/`), for example `COMPOSE_FILE=compose-no-gateway.yaml ./run-demo.sh`, so a run without the Gateway edits no committed file.
 
@@ -54,7 +54,7 @@ The Issuer is the deployment of Certify and what it needs to sign: Postgres, Cer
 **Needs from the other deployments:**
 
 - **The Authorization Server**: the five `AUTH_SERVER_*` settings ([Authorization Server](#authorization-server)). The stand-in is Keycloak in Demo; issuer-dev uses infra's Keycloak.
-- **The Adapter**: `CERTIFY_ADAPTER_URL`, where the plugin lists and fetches records (`/records`); unset, the Mock Adapter, `http://adapter:8000` ([Mock Adapter](#mock-adapter)). With no Adapter answer, the Issuer fails with `adapter_error`.
+- **The Adapter**: `CERTIFY_RECORD_URL`, the whole URL of the student's record with `{sub}` where the plugin puts the token's `sub` (for the SIS Adapter, `.../student/{sub}/transcript`); unset, the Mock Adapter's, `http://adapter:8000/student/{sub}/transcript` for ait and `.../roster` for hackathon ([Mock Adapter](#mock-adapter)). A URL that is not `http(s)` or holds no `{sub}` stops Certify at startup; with no Adapter answer, the Issuer fails with `adapter_error`.
 - **The Gateway** ([Gateway](#gateway)), with the gate on only, by name on the shared Docker network: `http://gateway:8000`, the URL in the installation's Certify properties. The plugin asks its `POST /evaluations` before it fetches a record; with no Gateway answer, the Issuer fails closed with `gateway_error`.
 - **The Gateway token**, with the gate on only: the plugin's `mosip.certify.gateway.auth-token` (in the Issuer) equals the Gateway's `GATEWAY_AUTH_TOKEN`, and no other deployment holds it.
 - **URLs**: `CERTIFY_PUBLIC_BASE_URL`, the hostname of the ingress in front of the Issuer, which also serves `/contexts/` (through `certify-nginx` to `vdr`). Nothing from Verify.
@@ -81,7 +81,7 @@ Compose substitutes these from `vc-stack/.env` (written by `bootstrap.sh` with t
 | `INSTALLATION` | every per-installation mount and env file | none, required | `ait` or `hackathon` |
 | `CERTIFY_PUBLIC_BASE_URL` | `certify` (domain URL, allowed audience) | `http://certify-nginx` | Certify's public base URL: the ingress's hostname (ask 1, [URLs](#urls-in-credentials-or-fetched-by-verifiers)) |
 | `CERTIFY_DID` | `certify` (the properties' `did-url`: a credential's issuer, `did.json`'s id) | the seed's placeholder `did:key`, until `bootstrap.sh --did-refresh` writes the live one | nothing: `--did-refresh` writes it after every `compose up` |
-| `CERTIFY_ADAPTER_URL` | `certify` (the properties' `mosip.certify.adapter.url`, where the plugin reads records), passed only when set | unset: the properties fall back to `http://adapter:8000`, the Mock Adapter | the Adapter the plugin reads records from, once it serves `/records` (issuer-dev sets it in `app.env`) |
+| `CERTIFY_RECORD_URL` | `certify` (the properties' `mosip.certify.adapter.record-url`, the record URL with `{sub}`), passed only when set | unset: the properties fall back to the Mock Adapter's, `http://adapter:8000/student/{sub}/transcript` (ait) or `.../roster` (hackathon) | the SIS Adapter's `.../student/{sub}/transcript` (issuer-dev sets it in `app.env`) |
 | `MOSIP_CERTIFY_GATEWAY_ENABLED` | `certify` (the plugin's switch, `mosip.certify.gateway.enabled`, over the properties' value), passed only when set | unset: the properties' `true`, the gate on | `false` for a run without the Gateway, with `MOSIP_CERTIFY_GATEWAY_URL=NO GATEWAY`; the no-Gateway forms set both whatever `.env` says |
 | `MOSIP_CERTIFY_GATEWAY_URL` | `certify` (`mosip.certify.gateway.url`, over the properties' value), passed only when set | unset: the properties' `http://gateway:8000` | `NO GATEWAY` with the gate off, or another Gateway's `http(s)` URL with it on |
 | `AUTH_SERVER_ISSUER` | `certify`, through `authorization-server.env` | the stand-in realm's ([Authorization Server](#authorization-server)) | the environment's Authorization Server, when it is not the stand-in (ask 1) |
@@ -111,7 +111,7 @@ The Issuer reads only the issuer, the JWKS URL and the wallet client; the other 
 
 ### Plugin jar
 
-- **One generic artifact**, `issuer-data-provider-plugin.jar`, built from `plugin/` against `io.inji.certify:certify-integration-api:0.14.0` (Java 21, every dependency `provided`, so the jar carries one class). The same jar serves every installation; ten keys in the installation's Certify properties configure it: the plugin selection and scan package, `mosip.certify.adapter.url` (from `CERTIFY_ADAPTER_URL`) and its two timeouts, the switch `mosip.certify.gateway.enabled`, and the Gateway's URL, token and two timeouts. The switch is required, `true` or `false`: with `true` the URL is an `http(s)` URL and the token is required; with `false` the URL is the literal `NO GATEWAY` and the token and timeouts are not read. A missing, non-boolean or contradictory setting stops Certify at startup. Certify's log names the setting: `IssuerDataProviderPlugin selected: gateway.enabled=<true|false>, Gateway <URL or NO GATEWAY>, Adapter <URL>`.
+- **One generic artifact**, `issuer-data-provider-plugin.jar`, built from `plugin/` against `io.inji.certify:certify-integration-api:0.14.0` (Java 21, every dependency `provided`, so the jar carries one class). The same jar serves every installation; ten keys in the installation's Certify properties configure it: the plugin selection and scan package, `mosip.certify.adapter.record-url` (from `CERTIFY_RECORD_URL`, an `http(s)` URL holding `{sub}`) and its two timeouts, the switch `mosip.certify.gateway.enabled`, and the Gateway's URL, token and two timeouts. The switch is required, `true` or `false`: with `true` the URL is an `http(s)` URL and the token is required; with `false` the URL is the literal `NO GATEWAY` and the token and timeouts are not read. A missing, non-boolean or contradictory setting stops Certify at startup. Certify's log names the setting: `IssuerDataProviderPlugin selected: gateway.enabled=<true|false>, Gateway <URL or NO GATEWAY>, Adapter <URL>`.
 - **How infra receives it** (proposed default): the `Plugin` workflow's artifact of the tagged commit. The workflow runs on every push to a branch other than `main`, on pull requests and by hand; for a tag, run it by hand on the tag (Actions → Plugin → Run workflow). The artifact is named `issuer-data-provider-plugin-<commit sha>` and holds the jar; it expires with the repository's artifact retention, so infra keeps its own copy. The same jar can be built from the commit: `docker run --rm -v "$PWD/plugin:/src" -w /src maven:3.9-eclipse-temurin-21 mvn -q package` writes `plugin/target/issuer-data-provider-plugin.jar`.
 - **Mount**: a single file, read-only, at `/home/inji/additional_jars/issuer-data-provider-plugin.jar`, never the directory, which would hide the four jars bundled in the image. Compose refuses to start Certify when the file is missing. A changed jar needs Certify recreated and its nginx restarted. (The spec wrote `/home/mosip/additional_jars/`; the image's path is `/home/inji/`.)
 
@@ -155,7 +155,7 @@ Runs as `root` with `host.docker.internal` mapped to the host (the local context
 | env | `download_hsm_client` | | shared | `false`; a PKCS#11 deployment changes it (ask 2) |
 | env | `mosip_certify_domain_url` | | environment | From `CERTIFY_PUBLIC_BASE_URL`: the credential issuer and the host of every status-list URL |
 | env | `CERTIFY_DID` | | environment | The properties' `did-url`, Certify's DID (a credential's issuer, `did.json`'s id): the live `did:key`, which `bootstrap.sh --did-refresh` writes to `vc-stack/.env`; the seed's placeholder until then |
-| env | `CERTIFY_ADAPTER_URL` | | environment | The properties' `mosip.certify.adapter.url`, passed only when `vc-stack/.env` sets it; unset, the properties fall back to the Mock Adapter |
+| env | `CERTIFY_RECORD_URL` | | environment | The properties' `mosip.certify.adapter.record-url`, passed only when `vc-stack/.env` sets it; unset, the properties fall back to the Mock Adapter's record URL |
 | env | `MOSIP_CERTIFY_GATEWAY_ENABLED` | | environment | The plugin's switch over the properties' `true`, passed only when `vc-stack/.env` sets it; the no-Gateway forms set it to `false` |
 | env | `MOSIP_CERTIFY_GATEWAY_URL` | | environment | The Gateway's URL over the properties' `http://gateway:8000`, passed only when `vc-stack/.env` sets it; the no-Gateway forms set it to `NO GATEWAY` |
 | env_file | `installations/<name>/authorization-server.env` | | installation | The Authorization Server's five settings ([Authorization Server](#authorization-server)), each overridable in `vc-stack/.env` |
@@ -216,7 +216,7 @@ The Gateway is the optional Approval gate: with the gate on, Certify's Data-prov
 
 **Needs from the other deployments:**
 
-- **The Adapter**: `GATEWAY_ADAPTER_URL`, set per environment in `vc-stack/.env`: infra's Adapter URL once it serves credential data. The installation's `gateway.env` defaults it to `http://adapter:8000`, the Mock Adapter. With no Adapter answer, the Gateway answers `502 gateway_error`.
+- **The Adapter**: `GATEWAY_ELIGIBILITY_URL`, the whole URL of the student's eligibility with `{sub}` where the Gateway puts the request's `sub`, set per environment in `vc-stack/.env`: infra's Adapter once it serves eligibility, which it does not yet. The installation's `gateway.env` defaults it to the Mock Adapter's, `http://adapter:8000/student/{sub}/eligibility`. A URL that is not `http(s)` or holds no `{sub}` stops the Gateway at startup; with no Adapter answer, the Gateway answers `502 gateway_error`.
 - **The Gateway token** is shared with the Issuer: `GATEWAY_AUTH_TOKEN` equals the plugin's `mosip.certify.gateway.auth-token`, which Certify holds. Nothing else holds it.
 - **The Authorization Server and URLs**: neither.
 
@@ -233,7 +233,7 @@ Compose substitutes these from `vc-stack/.env`, in the Compose file and in the i
 | Variable | Used by | Local default | A deployment sets |
 |---|---|---|---|
 | `INSTALLATION` | the `gateway.env` path | none, required | `ait` or `hackathon` |
-| `GATEWAY_ADAPTER_URL` | `gateway`, through `gateway.env` | `http://adapter:8000`, the Mock Adapter | infra's Adapter URL, once it serves credential data |
+| `GATEWAY_ELIGIBILITY_URL` | `gateway`, through `gateway.env` | `http://adapter:8000/student/{sub}/eligibility`, the Mock Adapter | infra's Adapter's eligibility URL, once it serves one |
 
 ### `gateway`
 
@@ -243,7 +243,7 @@ No host port; reached as `http://gateway:8000`. Its startup touches nothing exte
 |---|---|---|---|---|
 | env_file | `installations/<name>/gateway.env` | | installation | The Gateway's three settings below |
 | env | `GATEWAY_ENABLED_SCOPES` | | installation | Space-separated scopes the Gateway serves |
-| env | `GATEWAY_ADAPTER_URL` | | environment | `http://adapter:8000`, the Mock Adapter, unless `vc-stack/.env` sets it; infra's Adapter URL when the Mock Adapter is dropped (`contracts.md` section 2b) |
+| env | `GATEWAY_ELIGIBILITY_URL` | | environment | The Mock Adapter's `http://adapter:8000/student/{sub}/eligibility` unless `vc-stack/.env` sets it; infra's Adapter's when the Mock Adapter is dropped (`contracts.md` section 2b) |
 | env | `GATEWAY_AUTH_TOKEN` | | installation | Secret: equals the plugin's `mosip.certify.gateway.auth-token` |
 
 ### Fixtures to replace
@@ -344,7 +344,7 @@ Runs as `root` with `host.docker.internal` mapped to the host (it fetches the lo
 
 **Deploy:** `vc-stack/mock-adapter/` (`vc-stack/mock-adapter/compose.yaml`).
 
-The mock Adapter serves records to Certify's Data-provider plugin and eligibility attributes to the Gateway (`contracts.md` section 2b), read-only, from the installation's CSV. It is its own folder because issuer-dev needs it until infra's Adapter, which today handles only sign-in, serves credential data. Dropping it means removing the folder from `issuer-dev.yaml` and pointing `CERTIFY_ADAPTER_URL` and `GATEWAY_ADAPTER_URL` at infra's Adapter.
+The mock Adapter serves records to Certify's Data-provider plugin and eligibility attributes to the Gateway (`contracts.md` section 2b), read-only, from the installation's CSV. It is its own folder because issuer-dev needs it until infra's Adapter serves both the record and the eligibility; it serves no eligibility yet. Dropping it means removing the folder from `issuer-dev.yaml` and pointing `CERTIFY_RECORD_URL` and `GATEWAY_ELIGIBILITY_URL` at infra's Adapter.
 
 **Needs from the other deployments:** nothing. Certify's plugin in the Issuer and the Gateway are its only callers, as `http://adapter:8000` on the shared Docker network, and the Adapter holds no token and no Authorization Server setting.
 
@@ -375,7 +375,7 @@ No host port; reached as `http://adapter:8000`.
 |---|---|---|
 | The CSV, its whole content | `installations/<name>/adapter/student_identity_data.csv` | `ait`: generated from `data/students.json` (git-ignored), one row per degree; `hackathon`: the committed roster, edited by hand |
 
-The Mock Adapter itself is the fixture: the real Adapter (`contracts.md` section 2b) replaces it by changing `CERTIFY_ADAPTER_URL` and `GATEWAY_ADAPTER_URL`.
+The Mock Adapter itself is the fixture: the real Adapter (`contracts.md` section 2b) replaces it by changing `CERTIFY_RECORD_URL` and `GATEWAY_ELIGIBILITY_URL`.
 
 ## Demo
 

@@ -1,13 +1,14 @@
 """The Gateway: the Approval gate's checklist runner, behind the shared bearer secret.
 
-`POST /evaluations` is the read-only Checklist evaluation: given `{sub, scope, recordId}` it picks the credential type
-by `scope`, reads `GET /records/{recordId}/eligibility?scope` from the adapter (adapter/openapi.yaml), parsing it into
-the type's eligibility model, evaluates every check in order and answers `{credentialType, checks}`: 200 when every
+`POST /evaluations` is the read-only Checklist evaluation: given `{sub, scope}` it picks the credential type by
+`scope`, reads the student's eligibility at GATEWAY_ELIGIBILITY_URL with `{sub}` filled in (adapter/openapi.yaml's
+`GET /student/{sub}/eligibility`), parsing it into the type's eligibility model, evaluates every check in order and answers `{credentialType, checks}`: 200 when every
 check passes, else 403 with `error: checklist_failed`. It writes nothing.
 
 It answers `unknown_scope` (400), `no_record` (404), and 502 `gateway_error` for an adapter that is unreachable,
 answers another status or answers data that does not parse; a check that raises is a bug, so a 500 with no body.
-Startup touches nothing external, so Certify, the adapter and the Gateway start in any order.
+Startup touches nothing external, so Certify, the adapter and the Gateway start in any order; it refuses an
+eligibility URL that is not an http(s) URL holding `{sub}`.
 
 Settings come from the environment, which Compose fills from installations/<name>/gateway.env.
 Run: uvicorn main:from_env --factory
@@ -19,7 +20,7 @@ import hmac
 import os
 from dataclasses import dataclass
 from typing import Annotated
-from urllib.parse import quote
+from urllib.parse import quote, urlsplit
 
 import httpx
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
@@ -32,14 +33,14 @@ import credential_types as ct
 @dataclass(frozen=True)
 class Settings:
     enabled_scopes: tuple[str, ...]
-    adapter_url: str
+    eligibility_url: str
     auth_token: str
 
     @classmethod
     def from_env(cls) -> Settings:
         return cls(
             enabled_scopes=tuple(os.environ["GATEWAY_ENABLED_SCOPES"].split()),
-            adapter_url=os.environ["GATEWAY_ADAPTER_URL"],
+            eligibility_url=os.environ["GATEWAY_ELIGIBILITY_URL"],
             auth_token=os.environ["GATEWAY_AUTH_TOKEN"],
         )
 
@@ -59,23 +60,31 @@ class Evaluation(BaseModel):
 
     sub: Annotated[StrictStr, Field(min_length=1)]
     scope: Annotated[StrictStr, Field(min_length=1)]  # the token's scope claim: space-separated scopes
-    recordId: Annotated[StrictStr, Field(min_length=1)]
 
 
 async def evaluation_body(request: Request) -> Evaluation:
-    """The request parsed at the seam: anything but exactly the three non-empty strings is invalid_request."""
+    """The request parsed at the seam: anything but exactly the two non-empty strings is invalid_request."""
     try:
         return Evaluation.model_validate_json(await request.body())
     except ValidationError as exc:
         raise Refusal(400, "invalid_request") from exc
 
 
+def eligibility_url(template: str) -> str:
+    """GATEWAY_ELIGIBILITY_URL, checked: an http(s) URL with a host that holds `{sub}`, else ValueError."""
+    parts = urlsplit(template.replace("{sub}", "sub"))
+    if "{sub}" not in template or parts.scheme not in ("http", "https") or not parts.hostname:
+        raise ValueError(f"GATEWAY_ELIGIBILITY_URL must be an http(s) URL holding {{sub}}, not {template!r}")
+    return template
+
+
 def create_app(settings: Settings, adapter: httpx.Client | None = None) -> FastAPI:
+    url = eligibility_url(settings.eligibility_url)
     unknown = set(settings.enabled_scopes) - ct.REGISTRY.keys()
     if unknown:
         raise ValueError(f"no credential type for the enabled scope(s) {sorted(unknown)}")
     enabled = {scope: ct.REGISTRY[scope] for scope in settings.enabled_scopes}
-    adapter = adapter or httpx.Client(base_url=settings.adapter_url, timeout=3)
+    adapter = adapter or httpx.Client(timeout=3)
     expected_auth = f"Bearer {settings.auth_token}".encode()
 
     app = FastAPI(title="Gateway")
@@ -93,11 +102,11 @@ def create_app(settings: Settings, adapter: httpx.Client | None = None) -> FastA
         if not hmac.compare_digest(authorization.encode(), expected_auth):
             raise HTTPException(401, "missing or wrong bearer token", headers={"WWW-Authenticate": "Bearer"})
 
-    def eligibility(ctype: ct.CredentialType, record_id: str, scope: str) -> BaseModel:
-        """The adapter's eligibility for the record, parsed into the type's model; no answer, another status than
+    def eligibility(ctype: ct.CredentialType, sub: str) -> BaseModel:
+        """The adapter's eligibility for the student, parsed into the type's model; no answer, another status than
         200 or 404, or malformed data is gateway_error."""
         try:
-            r = adapter.get(f"/records/{quote(record_id, safe='')}/eligibility", params={"scope": scope})
+            r = adapter.get(url.replace("{sub}", quote(sub, safe="")))
         except httpx.HTTPError as exc:
             raise Refusal(502, "gateway_error") from exc
         if r.status_code == 404:
@@ -119,7 +128,7 @@ def create_app(settings: Settings, adapter: httpx.Client | None = None) -> FastA
     @app.post("/evaluations", dependencies=[Depends(authenticate)])
     def evaluations(request: Evaluation = Depends(evaluation_body)) -> dict:
         ctype = credential_type(request.scope)
-        checks = ct.evaluate(ctype, eligibility(ctype, request.recordId, request.scope))
+        checks = ct.evaluate(ctype, eligibility(ctype, request.sub))
         result = {"credentialType": ctype.credential_type, "checks": checks}
         if not all(c["passed"] for c in checks):
             raise Refusal(403, "checklist_failed", **result)

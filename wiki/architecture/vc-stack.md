@@ -45,9 +45,9 @@ flowchart TD
   end
 
   Mimoto --> CertifyNginx
-  Certify -->|"Data-provider plugin: GET /records"| Adapter
+  Certify -->|"Data-provider plugin: GET /student/{sub}/transcript"| Adapter
   Certify -.->|"Data-provider plugin, gate on: POST /evaluations"| Gateway
-  Gateway -->|"GET /records/.../eligibility"| Adapter
+  Gateway -->|"GET /student/{sub}/eligibility"| Adapter
   PublicGateway -->|/contexts/| VDR
   CertifyNginx -->|/contexts/| VDR
   PublicGateway --> CertifyNginx

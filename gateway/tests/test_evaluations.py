@@ -11,8 +11,8 @@ Run: python3 gateway/tests/test_evaluations.py                         on the ho
      python3 gateway/tests/test_evaluations.py adapter-down URL FIXTURES   the same, with the adapter stopped: 502
 Host mode needs gateway/requirements.txt and portal/requirements.txt.
 
-A persona is both the `sub` and the `recordId` of its request: the mock adapter's recordId is the CSV row's id, which
-is the sign-in identity. test_credential_types.py imports the helpers above the tests.
+A persona is the `sub` of its request: the mock adapter's CSV row id, which is the sign-in identity.
+test_credential_types.py imports the helpers above the tests.
 """
 
 from __future__ import annotations
@@ -40,6 +40,7 @@ HOST_CSV = {"ait": None, "hackathon": ROSTER}
 # The edge cases run on the AIT installation.
 SCOPE = "ait_transcript_vc_ldp"
 ELIGIBLE = "ait-2026-0001"
+ELIGIBILITY_URL = "http://adapter:8000/student/{sub}/eligibility"
 TOKEN = "test-token"
 
 
@@ -99,7 +100,7 @@ def mock_adapter(csv_path: Path | None = None):
 def gateway_app(adapter, enabled_scopes: tuple[str, ...] = (SCOPE,)):
     import main
 
-    settings = main.Settings(enabled_scopes=enabled_scopes, adapter_url="http://adapter:8000", auth_token=TOKEN)
+    settings = main.Settings(enabled_scopes=enabled_scopes, eligibility_url=ELIGIBILITY_URL, auth_token=TOKEN)
     return main.create_app(settings, adapter=adapter)
 
 
@@ -113,8 +114,8 @@ def host_gateway(adapter, enabled_scopes: tuple[str, ...] = (SCOPE,)):
 
 
 def evaluation(sub: str, scope: str = SCOPE) -> dict:
-    """The request body: the persona is the sub and the recordId."""
-    return {"sub": sub, "scope": scope, "recordId": sub}
+    """The request body: the persona is the sub."""
+    return {"sub": sub, "scope": scope}
 
 
 def evaluate_with(client):
@@ -153,7 +154,7 @@ def check_personas(evaluate, token: str, fixture: dict) -> None:
 
 def check_refused_requests(evaluate, token: str, fixture: dict) -> None:
     """The refusals before any adapter call: 401 for a missing or wrong secret (whatever the body), 400
-    invalid_request for a body that is not exactly the three non-empty strings, 400 unknown_scope for a scope that
+    invalid_request for a body that is not exactly the two non-empty strings, 400 unknown_scope for a scope that
     names no enabled type."""
     request = evaluation(eligible_personas(fixture)[0], fixture["scope"])
     for secret in (None, "not-the-token"):
@@ -162,8 +163,9 @@ def check_refused_requests(evaluate, token: str, fixture: dict) -> None:
 
     invalid = [*({k: v for k, v in request.items() if k != missing} for missing in request),
                *({**request, k: ""} for k in request),
-               {**request, "recordId": 1}, {**request, "sub": None},
+               {**request, "scope": 1}, {**request, "sub": None},
                {**request, "client_id": "wallet-demo"},  # a token claim is not part of the request
+               {**request, "recordId": request["sub"]},  # the contract before 0.5.0
                [request], b"not json"]
     for body in invalid:
         assert evaluate(body, token) == (400, {"error": "invalid_request"}), body
@@ -214,11 +216,12 @@ def test_starts_while_the_adapter_is_down_and_answers_gateway_error() -> None:
 
 def test_starts_from_its_three_settings_and_touches_nothing_external() -> None:
     """The Gateway as Compose starts it, from the environment holding gateway.env's three settings and no database:
-    it starts with nothing listening at its adapter URL and answers 502 gateway_error."""
+    it starts with nothing listening at its eligibility URL and answers 502 gateway_error."""
     import main
     from fastapi.testclient import TestClient
 
-    settings = {"GATEWAY_ENABLED_SCOPES": SCOPE, "GATEWAY_ADAPTER_URL": "http://127.0.0.1:9", "GATEWAY_AUTH_TOKEN": TOKEN}
+    settings = {"GATEWAY_ENABLED_SCOPES": SCOPE, "GATEWAY_ELIGIBILITY_URL": "http://127.0.0.1:9/student/{sub}/eligibility",
+                "GATEWAY_AUTH_TOKEN": TOKEN}
     saved = {k: os.environ.pop(k, None) for k in settings}
     os.environ.update(settings)
     try:
@@ -249,14 +252,26 @@ def eligibility_answer(answer):
 GOOD = {"holds": [], "conferralStatus": "Conferred", "balance": "0"}
 
 
-def test_it_reads_only_the_eligibility_path_with_the_scope_claim_unchanged() -> None:
+def test_it_reads_only_its_eligibility_url_with_sub_as_one_path_segment() -> None:
     adapter, seen = eligibility_answer(GOOD)
-    scope = f"openid {SCOPE}"
     with host_gateway(adapter) as client:
-        status, _ = evaluate_with(client)({"sub": "s 1", "scope": scope, "recordId": "rec/1 2"}, TOKEN)
+        status, _ = evaluate_with(client)({"sub": "s/1 2", "scope": f"openid {SCOPE}"}, TOKEN)
     assert status == 200
-    assert [(r.method, r.url.raw_path.decode().split("?")[0], dict(r.url.params)) for r in seen] == [
-        ("GET", "/records/rec%2F1%202/eligibility", {"scope": scope})], seen
+    assert [(r.method, str(r.url)) for r in seen] == [("GET", "http://adapter:8000/student/s%2F1%202/eligibility")], seen
+
+
+def test_an_eligibility_url_without_sub_or_not_http_stops_startup() -> None:
+    import main
+
+    for url in ("", "http://adapter:8000/student/eligibility", "adapter:8000/student/{sub}/eligibility",
+                "ftp://adapter/student/{sub}/eligibility", "http:///student/{sub}/eligibility"):
+        settings = main.Settings(enabled_scopes=(SCOPE,), eligibility_url=url, auth_token=TOKEN)
+        try:
+            main.create_app(settings)
+        except ValueError as e:
+            assert "GATEWAY_ELIGIBILITY_URL" in str(e), (url, e)
+            continue
+        raise AssertionError(f"the Gateway started with the eligibility URL {url!r}")
 
 
 def test_malformed_eligibility_is_a_gateway_error_not_a_crash() -> None:

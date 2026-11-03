@@ -9,11 +9,12 @@ Run: python3 adapter/test_adapter.py                      on the host, no Docker
                                                           roster), and the edit case at COPY_URL, a second adapter
                                                           serving COPY_CSV, a copy, so CSV is never rewritten
      python3 adapter/test_adapter.py --contract URL SUB SCOPE
-                                                          the contract mode, against any Adapter at URL: the list
-                                                          for SUB, its first record against SCOPE's record schema
-                                                          (no reserved key), and a 404 or an empty
-                                                          list for an unknown sub.
-                                                          check_contract(get, sub, scope) is the same in-process
+                                                          the contract mode, against any Adapter: URL is the
+                                                          record URL as CERTIFY_RECORD_URL sets it, `{sub}`
+                                                          included; SUB's record against SCOPE's record schema
+                                                          (no reserved key), and a 404 for an unknown sub.
+                                                          check_contract(get, url, sub, scope) is the same
+                                                          in-process
      python3 adapter/test_adapter.py --record-claims SCOPE
                                                           the claim names of SCOPE's record schema, one per line
                                                           (issuer-checks.sh compares Certify's metadata with them)
@@ -35,8 +36,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "data"))
 import generate_csv as gc  # noqa: E402
 
 ROSTER = Path(__file__).parent.parent / "installations" / "hackathon" / "adapter" / "student_identity_data.csv"
-# The scopes each CSV's Installation enables. The mock serves the same row for every one of them.
-TRANSCRIPT_SCOPES = ("ait_transcript_vc_ldp",)
+# The scopes the hackathon Installation enables: both read the roster row.
 ROSTER_SCOPES = ("developer_passport_vc_ldp", "achievement_certificate_vc_ldp")
 ELIGIBILITY = ("holds", "conferralStatus", "balance")  # the transcript CSV's eligibility columns
 
@@ -64,8 +64,8 @@ def check_adapter(get, csv_path: Path) -> None:
     else:
         check_roster_rows(get, rows)
 
-    # An unknown sub or recordId is a 404 on every /records path.
-    for path in ("/records?sub=nobody&scope=any", "/records/nobody?scope=any", "/records/nobody/eligibility?scope=any"):
+    # An unknown sub is a 404 on every path.
+    for path in ("/student/nobody/transcript", "/student/nobody/roster", "/student/nobody/eligibility"):
         assert get(path)[0] == 404, path
 
 
@@ -76,7 +76,7 @@ def check_edit(get, csv_path: Path) -> None:
     edited = "balance" if "balance" in rows[0] else "teamId"
     first = rows[0]["id"]
     original = csv_path.read_bytes()
-    path = f"/records/{first}/eligibility?scope=any"
+    path = f"/student/{first}/eligibility"
     try:
         before = get(path)[1][edited]
         assert before != "777.00"
@@ -91,33 +91,26 @@ def check_transcript_rows(get, rows: list[dict]) -> None:
     assert len(rows) >= 7
     for row in rows:
         sub = row["id"]
-        for scope in TRANSCRIPT_SCOPES:
-            assert get(f"/records?sub={sub}&scope={scope}") == (200, [{
-                "recordId": sub, "level": row["level"], "degreeAwarded": row["degreeAwarded"],
-                "dateGraduation": row["dateGraduation"]}]), sub
-            # The record: every column but the id and the eligibility columns, the generator's courseList included.
-            status, body = get(f"/records/{sub}?scope={scope}")
-            assert status == 200 and "id" not in body and not set(ELIGIBILITY) & body.keys(), (sub, status, body)
-            assert body["courseList"] == row["courseList"] and "\n" in body["courseList"], sub
-            assert isinstance(body["courses"], list) and body["courses"][0]["term"] and body["courses"][0]["courses"][0]["no"]
-            # Every other cell exactly as written, a multiline one included: the adapter neither escapes nor un-escapes.
-            verbatim = {k: v for k, v in row.items() if k not in {"id", "courses", *ELIGIBILITY}}
-            assert body == {**verbatim, "courses": json.loads(row["courses"])}, sub
-            assert get(f"/records/{sub}/eligibility?scope={scope}") == (200, {
-                "holds": json.loads(row["holds"]), "conferralStatus": row["conferralStatus"],
-                "balance": row["balance"]}), sub
+        # The record: every column but the id and the eligibility columns, the generator's courseList included.
+        status, body = get(f"/student/{sub}/transcript")
+        assert status == 200 and "id" not in body and not set(ELIGIBILITY) & body.keys(), (sub, status, body)
+        assert body["courseList"] == row["courseList"] and "\n" in body["courseList"], sub
+        assert isinstance(body["courses"], list) and body["courses"][0]["term"] and body["courses"][0]["courses"][0]["no"]
+        # Every other cell exactly as written, a multiline one included: the adapter neither escapes nor un-escapes.
+        verbatim = {k: v for k, v in row.items() if k not in {"id", "courses", *ELIGIBILITY}}
+        assert body == {**verbatim, "courses": json.loads(row["courses"])}, sub
+        assert get(f"/student/{sub}/eligibility") == (200, {
+            "holds": json.loads(row["holds"]), "conferralStatus": row["conferralStatus"],
+            "balance": row["balance"]}), sub
 
 
 def check_roster_rows(get, rows: list[dict]) -> None:
-    """A roster (the hackathon installation): the list names the row, and the record and the eligibility paths both
-    serve the row's columns."""
+    """A roster (the hackathon installation): the record and the eligibility paths both serve the row's columns."""
     for row in rows:
         sub = row["id"]
         columns = {k: v for k, v in row.items() if k != "id"}
-        for scope in ROSTER_SCOPES:  # the roster has no degree columns, so the list names the row only
-            assert get(f"/records?sub={sub}&scope={scope}") == (200, [{"recordId": sub}]), (sub, scope)
-            assert get(f"/records/{sub}?scope={scope}") == (200, columns), (sub, scope)
-            assert get(f"/records/{sub}/eligibility?scope={scope}") == (200, columns), (sub, scope)
+        assert get(f"/student/{sub}/roster") == (200, columns), sub
+        assert get(f"/student/{sub}/eligibility") == (200, columns), sub
 
 
 def host_get(csv_path: Path):
@@ -154,11 +147,10 @@ def test_mock_adapter_on_the_hackathon_roster() -> None:
         get = host_get(csv_path)
         check_adapter(get, csv_path)
         check_edit(get, csv_path)
-        scope = ROSTER_SCOPES[0]
-        assert get(f"/records/hack-2026-0001?scope={scope}")[1]["teamName"] == "Sandbox Pioneers"
-        assert get(f"/records/hack-2026-0002?scope={scope}")[1]["teamName"] == 'Chain "Gang"\nof two'
+        assert get("/student/hack-2026-0001/roster")[1]["teamName"] == "Sandbox Pioneers"
+        assert get("/student/hack-2026-0002/roster")[1]["teamName"] == 'Chain "Gang"\nof two'
         # The participant without a team is on the roster, with an empty teamId.
-        assert get(f"/records/hack-2026-0003/eligibility?scope={scope}")[1]["teamId"] == ""
+        assert get("/student/hack-2026-0003/eligibility")[1]["teamId"] == ""
 
 
 OPENAPI = Path(__file__).parent / "openapi.yaml"
@@ -179,17 +171,37 @@ def resolve(schema: dict, contract: dict) -> dict:
     return schema
 
 
+ELIGIBILITY_PATH = "/student/{sub}/eligibility"
+# The record URLs each Installation's Certify reads on the mock, as paths.
+TRANSCRIPT_URL = "/student/{sub}/transcript"
+ROSTER_URL = "/student/{sub}/roster"
+CREDENTIAL_SCHEMA = Path(__file__).parent.parent / "wiki" / "schemas" / "ait-transcript-credential.v2.schema.json"
+
+
 def answer_schemas(contract: dict, path: str) -> list[dict]:
-    """The schemas the contract gives for a 200 at `path`, resolved."""
+    """The schemas the contract gives for a 200 at `path`, resolved: one, or each of a oneOf or an allOf."""
     schema = contract["paths"][path]["get"]["responses"]["200"]["content"]["application/json"]["schema"]
-    return [resolve(s, contract) for s in schema.get("oneOf", [schema])]
+    return [resolve(s, contract) for s in schema.get("oneOf", schema.get("allOf", [schema]))]
 
 
-def scope_schema(contract: dict, path: str, scope: str) -> dict:
-    """The schema the contract names at `path` for the token scope `scope` (space-separated scopes), by `x-scope`."""
-    (schema,) = [s for s in answer_schemas(contract, path) if s.get("x-scope") in scope.split()] or [None]
-    assert schema is not None, f"openapi.yaml names no schema for scope {scope} at {path}"
+def record_schemas(contract: dict) -> list[dict]:
+    """Every record schema: the answers of every path but the eligibility one."""
+    return [s for path in contract["paths"] if path != ELIGIBILITY_PATH for s in answer_schemas(contract, path)]
+
+
+def scope_schema(schemas: list[dict], scope: str) -> dict:
+    """The one of `schemas` for the token scope `scope` (space-separated scopes), by `x-scope`."""
+    (schema,) = [s for s in schemas if s.get("x-scope") in scope.split()] or [None]
+    assert schema is not None, f"openapi.yaml names no schema for scope {scope}"
     return schema
+
+
+def record_schema(contract: dict, scope: str) -> dict:
+    return scope_schema(record_schemas(contract), scope)
+
+
+def eligibility_schema(contract: dict, scope: str) -> dict:
+    return scope_schema(answer_schemas(contract, ELIGIBILITY_PATH), scope)
 
 
 TYPES = {"string": str, "array": list, "object": dict, "boolean": bool, "number": (int, float)}
@@ -225,32 +237,24 @@ def violations(value, schema: dict, contract: dict, where: str) -> list[str]:
     return found
 
 
-def check_contract(get, sub: str, scope: str) -> None:
-    """The contract mode: any Adapter, through `get(path)` -> (status, body), against openapi.yaml for one known
-    `sub` and one token `scope`. The list is a non-empty list of record summaries; its first entry's record follows
-    the scope's record schema, so it holds every claim, no reserved or trace key, no extra field but a scalar, and a
-    `courses` that is an array; an unknown sub is a 404 or an empty list."""
+def check_contract(get, url: str, sub: str, scope: str) -> None:
+    """The contract mode: any Adapter, through `get(url)` -> (status, body), against openapi.yaml for one known
+    `sub` and one token `scope`. `url` is the record URL as the plugin is set with it, `{sub}` included, which this
+    fills in as the plugin does. The record follows the scope's record schema, so it holds every claim, no reserved or
+    trace key, no extra field but a scalar, and a `courses` that is an array; an unknown sub is a 404."""
     from urllib.parse import quote
 
     contract = load_contract()
-    q = lambda value: quote(value, safe="")  # noqa: E731
-    status, entries = get(f"/records?sub={q(sub)}&scope={q(scope)}")
-    assert status == 200, f"GET /records for {sub}: {status} {entries!r}"
-    (list_schema,) = answer_schemas(contract, "/records")
-    problems = violations(entries, list_schema, contract, "list")
-    assert entries and not problems, f"GET /records for {sub}: {problems or 'an empty list'}"
-
-    status, record = get(f"/records/{q(entries[0]['recordId'])}?scope={q(scope)}")
-    assert status == 200, f"GET /records/{entries[0]['recordId']}: {status} {record!r}"
-    problems = violations(record, scope_schema(contract, "/records/{recordId}", scope), contract, "record")
+    status, record = get(url.replace("{sub}", quote(sub, safe="")))
+    assert status == 200, f"the record of {sub}: {status} {record!r}"
+    problems = violations(record, record_schema(contract, scope), contract, "record")
     if "courses" in record and not isinstance(record["courses"], list):  # the plugin's unquoted slot, in any scope
         problems.append(f"record.courses: {record['courses']!r} is not an array")
-    assert not problems, f"GET /records/{entries[0]['recordId']}: {problems}"
+    assert not problems, f"the record of {sub}: {problems}"
 
     unknown = "no-such-student-" + os.urandom(4).hex()
-    status, unknown_entries = get(f"/records?sub={unknown}&scope={q(scope)}")
-    assert status == 404 or (status == 200 and unknown_entries == []), (
-        f"GET /records for an unknown sub: {status} {unknown_entries!r}, not a 404 or an empty list")
+    status, body = get(url.replace("{sub}", unknown))
+    assert status == 404, f"the record of an unknown sub: {status} {body!r}, not a 404"
 
 
 def template_claims() -> dict[str, set[str]]:
@@ -269,14 +273,14 @@ def template_claims() -> dict[str, set[str]]:
 
 
 def test_every_record_schema_lists_exactly_the_claims_its_template_substitutes() -> None:
-    """GET /records/{recordId} names one record schema per scope, and each lists exactly the claims its Certify
-    template substitutes, every one required, a string but `courses`, and no reserved or trace key."""
+    """The record paths name one record schema per scope, and each lists exactly the claims its Certify template
+    substitutes, every one required, a string but `courses`, and no reserved or trace key."""
     contract = load_contract()
     claims = template_claims()
     assert set(claims) == {"ait_transcript_vc_ldp", "developer_passport_vc_ldp", "achievement_certificate_vc_ldp"}
-    assert {s.get("x-scope") for s in answer_schemas(contract, "/records/{recordId}")} == set(claims)
+    assert sorted(s.get("x-scope") for s in record_schemas(contract)) == sorted(claims)
     for scope, names in claims.items():
-        schema = scope_schema(contract, "/records/{recordId}", scope)
+        schema = record_schema(contract, scope)
         assert set(schema["required"]) == set(schema["properties"]) == names, (scope, names ^ set(schema["properties"]))
         for name, prop in schema["properties"].items():
             want = "array" if name == "courses" else "string"
@@ -291,27 +295,13 @@ def test_the_contract_mode_passes_against_the_mock() -> None:
         gc.write_csv(gc.build_rows(gc.load_students()["students"]), csv_path)
         get = host_get(csv_path)
         for sub in ("ait-2026-0001", "st123456"):  # st123456: the SIS test student, so issuer-dev can gate it
-            check_contract(get, sub, "ait_transcript_vc_ldp")
-        check_contract(get, "ait-2026-0001", "openid ait_transcript_vc_ldp")  # the token's scope claim, whole
-        assert get("/records/st123456/eligibility?scope=ait_transcript_vc_ldp") == (200, {
+            check_contract(get, TRANSCRIPT_URL, sub, "ait_transcript_vc_ldp")
+        check_contract(get, TRANSCRIPT_URL, "ait-2026-0001", "openid ait_transcript_vc_ldp")  # the scope claim, whole
+        assert get("/student/st123456/eligibility") == (200, {
             "holds": [], "conferralStatus": "Conferred", "balance": "0.00"})  # eligible: it passes every check
         csv_path.write_bytes(ROSTER.read_bytes())
         for scope in ROSTER_SCOPES:
-            check_contract(get, "hack-2026-0001", scope)
-
-
-def test_the_contract_mode_accepts_an_empty_list_for_an_unknown_sub() -> None:
-    """The contract (openapi.yaml, `GET /records`) says an empty list means the same as a 404."""
-    with tempfile.TemporaryDirectory() as td:
-        csv_path = Path(td) / "student_identity_data.csv"
-        gc.write_csv(gc.build_rows(gc.load_students()["students"]), csv_path)
-        mock = host_get(csv_path)
-
-        def get(path: str):
-            status, body = mock(path)
-            return (200, []) if path.startswith("/records?") and status == 404 else (status, body)
-
-        check_contract(get, "ait-2026-0001", "ait_transcript_vc_ldp")
+            check_contract(get, ROSTER_URL, "hack-2026-0001", scope)
 
 
 def test_the_contract_mode_fails_an_adapter_that_breaks_the_contract() -> None:
@@ -327,7 +317,9 @@ def test_the_contract_mode_fails_an_adapter_that_breaks_the_contract() -> None:
                 return change(status, body) if path.startswith(path_start) else (status, body)
             return get
 
-        record = "/records/ait-2026-0001?"
+        record = "/student/ait-2026-0001/"
+        term = {"term": "T", "credits": "3", "gpa": "4.00", "cumGpa": "4.00"}
+        course = {"no": "CS601", "title": "A", "lec": "3", "lab": "0", "credits": "3", "grade": "A"}
         breaks = {
             "a reserved key": broken(record, lambda s, b: (s, {**b, "id": "ait-2026-0001"})),
             "a trace key": broken(record, lambda s, b: (s, {**b, "tokenSub": "ait-2026-0001"})),
@@ -339,14 +331,18 @@ def test_the_contract_mode_fails_an_adapter_that_breaks_the_contract() -> None:
             "an extra field that is an object": broken(record, lambda s, b: (s, {**b, "committee": {"chair": "A"}})),
             "courses that is not an array": broken(record, lambda s, b: (s, {**b, "courses": "CS601"})),
             "a course without a grade": broken(record, lambda s, b: (s, {**b, "courses": [
-                {"term": "T", "courses": [{"no": "CS601", "title": "A", "credits": "3"}]}]})),
-            "a list entry without recordId": broken("/records?sub=ait", lambda s, b: (s, [{"level": "Masters"}])),
-            "an empty list for a known sub": broken("/records?sub=ait", lambda s, b: (s, [])),
-            "a 200 for an unknown sub": broken("/records?sub=no-such", lambda s, b: (200, [{"recordId": "x"}])),
+                {**term, "courses": [{k: v for k, v in course.items() if k != "grade"}]}]})),
+            "a course without its lecture hours": broken(record, lambda s, b: (s, {**b, "courses": [
+                {**term, "courses": [{k: v for k, v in course.items() if k != "lec"}]}]})),
+            "a term without its GPA": broken(record, lambda s, b: (s, {**b, "courses": [
+                {**{k: v for k, v in term.items() if k != "gpa"}, "courses": [course]}]})),
+            "a 200 for an unknown sub": broken("/student/no-such", lambda s, b: (200, b)),
         }
+        check_contract(broken(record, lambda s, b: (s, {**b, "courses": [{**term, "courses": [course]}]})),
+                       TRANSCRIPT_URL, "ait-2026-0001", "ait_transcript_vc_ldp")  # the term and course above pass
         for name, get in breaks.items():
             try:
-                check_contract(get, "ait-2026-0001", "ait_transcript_vc_ldp")
+                check_contract(get, TRANSCRIPT_URL, "ait-2026-0001", "ait_transcript_vc_ldp")
             except AssertionError:
                 continue
             raise AssertionError(f"the contract mode passed an Adapter with {name}")
@@ -361,10 +357,10 @@ def test_the_contract_mode_fails_a_courses_that_is_not_an_array_in_any_scope() -
 
         def get(path: str):
             status, body = mock(path)
-            return (status, {**body, "courses": "CS601"}) if path.startswith("/records/hack") else (status, body)
+            return (status, {**body, "courses": "CS601"}) if path.startswith("/student/hack") else (status, body)
 
         try:
-            check_contract(get, "hack-2026-0001", ROSTER_SCOPES[0])
+            check_contract(get, ROSTER_URL, "hack-2026-0001", ROSTER_SCOPES[0])
         except AssertionError:
             return
         raise AssertionError("the contract mode passed a roster record whose courses is a string")
@@ -403,7 +399,7 @@ def test_every_field_a_gateway_model_requires_is_required_in_openapi_yaml() -> N
     components = spec["components"]["schemas"]
     for t in ct.REGISTRY.values():
         schema = TypeAdapter(t.eligibility).json_schema(mode="validation")
-        answer = scope_schema(spec, "/records/{recordId}/eligibility", t.scope)
+        answer = eligibility_schema(spec, t.scope)
         assert drift(schema, answer, schema.get("$defs", {}), components, f"{t.scope} eligibility") == []
     # The comparison can fail: a field the YAML does not require, a wire type it does not give, and a minimum length
     # it does not state.
@@ -435,13 +431,45 @@ def test_the_plugin_refuses_exactly_the_structured_fields_openapi_yaml_forbids()
     source = PLUGIN.read_text(encoding="utf-8")
     (courses,) = re.findall(r'\bCOURSES\s*=\s*"([^"]*)"', source)
     for scope in template_claims():
-        schema = scope_schema(contract, "/records/{recordId}", scope)
+        schema = record_schema(contract, scope)
         arrays = {n for n, p in schema["properties"].items() if resolve(p, contract).get("type") == "array"}
         assert arrays <= {courses}, (scope, arrays)
         extra = resolve(schema["additionalProperties"], contract)
         assert extra["type"] == ["string", "number", "boolean"], (scope, extra)
     # The parse reads the constant as the plugin writes it, so a rename in the plugin fails the test.
     assert re.findall(r'\bCOURSES\s*=\s*"([^"]*)"', 'private static final String COURSES = "terms";') == ["terms"]
+
+
+def shape_of(schema: dict, resolve_ref) -> object:
+    """A schema's field tree, for comparing two schema languages: an object's required names, each to its own tree,
+    an array's item tree, else the type name."""
+    schema = resolve_ref(schema)
+    if schema.get("type") == "object":
+        return {name: shape_of(schema["properties"][name], resolve_ref) for name in schema.get("required", [])}
+    if schema.get("type") == "array":
+        return [shape_of(schema["items"], resolve_ref)]
+    return schema.get("type")
+
+
+def test_the_transcript_record_is_the_credential_schemas_subject_less_the_holder() -> None:
+    """The two master files agree: openapi.yaml's TranscriptRecord requires exactly the claims, terms and courses that
+    wiki/schemas/ait-transcript-credential.v2.schema.json requires of the signed credentialSubject, with the same
+    types, except the holder's `id`, which Certify sets."""
+    contract = load_contract()
+    credential = json.loads(CREDENTIAL_SCHEMA.read_text(encoding="utf-8"))
+
+    def credential_ref(schema: dict) -> dict:
+        while "$ref" in schema:
+            schema = credential["$defs"][schema["$ref"].rsplit("/", 1)[1]]
+        return schema
+
+    subject = shape_of(credential["$defs"]["transcript"], credential_ref)
+    del subject["id"]
+    assert shape_of(record_schema(contract, "ait_transcript_vc_ldp"), lambda s: resolve(s, contract)) == subject
+    # The comparison sees a nested field: a course field the record lacks fails it.
+    narrower = {"type": "object", "required": ["courses"], "properties": {"courses": {"type": "array", "items": {
+        "type": "object", "required": ["no"], "properties": {"no": {"type": "string"}}}}}}
+    assert shape_of(narrower, lambda s: s) != {"courses": [{"no": "string", "title": "string"}]}
 
 
 def getter(base: str):
@@ -472,10 +500,10 @@ def run_live(url: str, csv_path: Path, copy_url: str, copy_csv: Path) -> None:
 
 if __name__ == "__main__":
     if sys.argv[1:2] == ["--contract"] and len(sys.argv) == 5:
-        check_contract(getter(sys.argv[2].rstrip("/")), sys.argv[3], sys.argv[4])
+        check_contract(getter(""), sys.argv[2], sys.argv[3], sys.argv[4])
         print(f"PASS contract at {sys.argv[2]} for {sys.argv[4]}")
     elif sys.argv[1:2] == ["--record-claims"] and len(sys.argv) == 3:
-        print("\n".join(scope_schema(load_contract(), "/records/{recordId}", sys.argv[2])["required"]))
+        print("\n".join(record_schema(load_contract(), sys.argv[2])["required"]))
     elif len(sys.argv) == 5:
         run_live(sys.argv[1], Path(sys.argv[2]), sys.argv[3], Path(sys.argv[4]))
         print(f"PASS adapter at {sys.argv[1]}, edit case at {sys.argv[3]}")

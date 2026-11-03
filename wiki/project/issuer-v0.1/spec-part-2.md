@@ -92,7 +92,7 @@ Auth:
 
 `GET /checklists/{credentialType}`: the type's checks from the registry, in order, with a one-line description each. 404 for a type the installation does not serve.
 
-`POST /evaluations` with `{ sub, scope, recordId }`, the endpoint the plugin calls (section 2a), replaces `POST /checklists/{credentialType}/evaluate`: every check evaluated, the checklist result object (`credentialType`, `checks` with `passed` and `reason` on failures), 200 when it passes and 403 `checklist_failed` when not, 404 `no_record` for an unknown record. It writes nothing. What part 2 adds is the staff token beside the shared secret.
+`POST /evaluations` with `{ sub, scope }`, the endpoint the plugin calls (section 2a), replaces `POST /checklists/{credentialType}/evaluate`: every check evaluated, the checklist result object (`credentialType`, `checks` with `passed` and `reason` on failures), 200 when it passes and 403 `checklist_failed` when not, 404 `no_record` for an unknown student. It writes nothing. What part 2 adds is the staff token beside the shared secret.
 
 `GET /credentials?studentId=&name=&school=&program=&credentialType=&clientId=&status=`: issued credentials, newest first, identifiers only.
 

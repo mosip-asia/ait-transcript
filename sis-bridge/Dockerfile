@@ -1,5 +1,5 @@
-# TEMPORARY SIS bridge, deleted once the SIS Adapter serves /records itself (ticket 11): the Adapter contract's record
-# paths in front of the SIS Adapter's current route. data/ait_courses.py is copied in for the course listing.
+# TEMPORARY SIS bridge, deleted once the SIS Adapter serves the contract itself (ticket 11): the Adapter contract's
+# transcript path in front of the SIS Adapter's current route. data/ait_courses.py is copied in for the course listing.
 FROM python:3.12-slim-bookworm
 
 WORKDIR /bridge
