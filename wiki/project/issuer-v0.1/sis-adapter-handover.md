@@ -93,10 +93,11 @@ The student passes when there are no holds, the degree is conferred, and the bal
 
 ## Privacy: the Issuer stores `sub`
 
-Campus asked consumers not to store its `sub` during the PoC. Two things to know:
+Campus asked consumers not to store its `sub` during the PoC. Three things to know:
 
 - **The SIS Adapter** should keep `sub` out of its own storage and access logs.
 - **The Issuer itself stores it.** Certify keeps every issued credential in its ledger, and the Issuer records the token's `sub` there as `tokenSub`. That is how a credential can later be traced to the sign-in that claimed it. Revocation itself goes by `registrationNo`.
+- **Certify also logs it.** Each issued credential adds one INFO line from `io.mosip.certify.utils.LedgerUtils` that holds the `sub`. That's Certify's own code, not the Issuer's.
 
 If campus's `sub` is an internal account id they don't want stored, they need to say so before go-live. The fix on Thas's side is small: trace by `registrationNo` from the record instead of `sub`. The question is in [`spec-part-2.md`](spec-part-2.md) under "If campus picks (b)".
 
