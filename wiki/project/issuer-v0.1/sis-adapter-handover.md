@@ -26,6 +26,7 @@ The path uses `student`, singular. Both paths are only defaults: the server's se
 
 - **What must match:** the `sub` the campus sign-in server puts in a student's token must be the key the SIS Adapter finds that student by. If they differ, every claim fails with "no record".
 - Which value that is (a student number, an internal account id) is for campus IT and the SIS Adapter to decide together.
+- **Find the student by `sub` exactly as sent.** Don't ignore case or trim spaces, and answer `404` for anything that isn't an exact match. Today's SIS route answers `ST123456` and `st123456 ` (with a trailing space) with `st123456`'s record. The Issuer signs whatever record comes back, so a near-miss `sub` would get another student's transcript signed. Campus IT, for its part, keeps every `sub` unique.
 - One `sub` gives one transcript. A student with two degrees is still an open question in [`spec-part-2.md`](spec-part-2.md) ("Multi-degree students").
 
 ## The server's settings
@@ -62,7 +63,7 @@ A JSON object holding the 24 fields `TranscriptRecord` lists in `adapter/openapi
 - **`programCommittee`** holds one member per line, the chair first, marked `(Chair)`.
 - **`notes`** is `-` when there are none.
 - **Text fields:** `fullName` is the whole name in one string. `country` is a country name, like `Thailand`, not a code.
-- **`registrationNo` can't be empty**, though it is text: the Portal finds an issued credential by it to revoke it. It is the SIS's `studentId` today, and `faculty` is its `schoolName` (the school, like `School of Engineering and Technology`).
+- **`registrationNo` can't be empty**, though it is text: Certify's ledger indexes it, and revocation finds an issued credential by it. It is the SIS's `studentId` today, and `faculty` is its `schoolName` (the school, like `School of Engineering and Technology`).
 - **Extra fields** beyond the 24 are allowed if each is a plain string, number or true/false. The Issuer passes them on unused.
 - **Forbidden keys:** a record must never carry `id`, `_holderId`, `_issuer`, `validFrom`, `validUntil`, `credentialStatus`, `tokenSub` or `tokenClientId`. Certify and the Issuer set those themselves, and they refuse a record that has one.
 
