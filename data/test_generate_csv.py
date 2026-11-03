@@ -117,7 +117,7 @@ def test_context_v1_signs_every_generated_claim() -> None:
 
 def test_eligibility_columns_follow_the_claims() -> None:
     # The mock adapter's columns come after the claims; Certify maps by header name and ignores them.
-    assert gc.CSV_COLUMNS == ["id", *gc.CLAIM_COLUMNS, "level", "holds", "conferralStatus", "balance"]
+    assert gc.CSV_COLUMNS == ["id", *gc.CLAIM_COLUMNS, "holds", "conferralStatus", "balance"]
 
 
 def test_personas_cover_each_transcript_check() -> None:

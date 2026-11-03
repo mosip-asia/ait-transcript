@@ -47,9 +47,9 @@ CLAIM_COLUMNS = [
     "thesisExamination",
 ]
 
-# Read by the mock adapter (adapter/), not by Certify: the degree level and the eligibility
+# Read by the mock adapter (adapter/), not by Certify: the eligibility
 # attributes of contracts.md section 2b. They follow the claims.
-ADAPTER_COLUMNS = ["level", "holds", "conferralStatus", "balance"]
+ADAPTER_COLUMNS = ["holds", "conferralStatus", "balance"]
 
 CSV_COLUMNS = ["id", *CLAIM_COLUMNS, *ADAPTER_COLUMNS]
 
@@ -80,7 +80,7 @@ def build_rows(students: list[dict]) -> list[dict]:
             for claim in CLAIM_COLUMNS:
                 row[claim] = str(enriched.get(claim, ""))
             eligibility = degree["eligibility"]
-            row.update(level=degree["level"], holds=json.dumps(eligibility["holds"]),
+            row.update(holds=json.dumps(eligibility["holds"]),
                        conferralStatus=eligibility["conferralStatus"], balance=eligibility["balance"])
             rows.append(row)
     return rows
