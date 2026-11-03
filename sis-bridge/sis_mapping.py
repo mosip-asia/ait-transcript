@@ -6,9 +6,10 @@ Deleted, with the rest of sis-bridge/ and vc-stack/sis-bridge/, once the SIS Ada
 - the VC envelope (`@context`, `type`, `issuer`, `issuanceDate`) and `credentialSubject.id` are dropped, and so is
   every SIS field the contract has no claim for: the record is exactly the claims of adapter/openapi.yaml's
   `TranscriptRecord`, so it cannot carry a key Certify reserves;
-- renames: `admissionDate` to `dateAdmitted`, `graduationDate` to `dateGraduation`, `degreeName` to
-  `degreeAwarded`, `studyProgram` to `academicProgram`, `thesis.title` and `thesis.grade` to `thesisTitle` and
-  `thesisGrade`;
+- renames: `studentId` to `registrationNo`, `admissionDate` to `dateAdmitted`, `graduationDate` to
+  `dateGraduation`, `degreeName` to `degreeAwarded`, `schoolName` (the school, e.g. "School of Engineering and
+  Technology") to `faculty`, `studyProgram` to `academicProgram`, `thesis.title` and `thesis.grade` to
+  `thesisTitle` and `thesisGrade`;
 - `academicRecords` becomes `courses`, terms of `{ term, courses: [{ no, title, lec, lab, credits, grade }], credits,
   gpa, cumGpa }`; a term is named by the SIS's `termLabel` (`term` when the label is empty). The SIS serves no
   lecture or lab hours and no term credits or GPAs, so those are empty strings, as below;
@@ -32,9 +33,11 @@ class UnexpectedSisAnswer(ValueError):
 FIELDS = {
     "fullName": "fullName",
     "dateOfBirth": "dateOfBirth",
+    "registrationNo": "studentId",
     "dateAdmitted": "admissionDate",
     "degreeAwarded": "degreeName",
     "dateGraduation": "graduationDate",
+    "faculty": "schoolName",
     "academicProgram": "studyProgram",
     "totalCredits": "totalCredits",
 }

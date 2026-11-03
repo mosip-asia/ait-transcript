@@ -62,6 +62,7 @@ A JSON object holding the 24 fields `TranscriptRecord` lists in `adapter/openapi
 - **`programCommittee`** holds one member per line, the chair first, marked `(Chair)`.
 - **`notes`** is `-` when there are none.
 - **Text fields:** `fullName` is the whole name in one string. `country` is a country name, like `Thailand`, not a code.
+- **`registrationNo` can't be empty**, though it is text: the Portal finds an issued credential by it to revoke it. It is the SIS's `studentId` today, and `faculty` is its `schoolName` (the school, like `School of Engineering and Technology`).
 - **Extra fields** beyond the 24 are allowed if each is a plain string, number or true/false. The Issuer passes them on unused.
 - **Forbidden keys:** a record must never carry `id`, `_holderId`, `_issuer`, `validFrom`, `validUntil`, `credentialStatus`, `tokenSub` or `tokenClientId`. Certify and the Issuer set those themselves, and they refuse a record that has one.
 
