@@ -1,11 +1,12 @@
 name: vc-stack
 
 services:
-  # TEMPORARY SIS bridge: this folder and sis-bridge/ are deleted once the SIS Adapter serves /records itself
-  # (ticket 11). It serves the Adapter contract's record paths in front of the SIS Adapter's current route.
+  # TEMPORARY SIS bridge: this folder and sis-bridge/ are deleted once the SIS Adapter serves the contract itself
+  # (ticket 11). It serves the Adapter contract's transcript path in front of the SIS Adapter's current route.
   # Not included by vc-stack/compose.yaml or issuer-dev.yaml. An environment that wants it runs this folder next to
-  # them and points the Data-provider plugin at it (CERTIFY_ADAPTER_URL=http://sis-bridge:8000 in vc-stack/.env, then
-  # recreate certify). The Gateway stays on the mock Adapter (GATEWAY_ADAPTER_URL): the bridge serves no eligibility.
+  # them and points the Data-provider plugin at it (CERTIFY_RECORD_URL=http://sis-bridge:8000/student/{sub}/transcript
+  # in vc-stack/.env, then recreate certify). The Gateway stays on the mock Adapter (GATEWAY_ELIGIBILITY_URL): the
+  # bridge serves no eligibility.
   #   docker compose --env-file vc-stack/.env -f vc-stack/sis-bridge/compose.yaml up -d --build
   # Its one setting is SIS_BASE_URL, the SIS Adapter, which is reachable only over NetBird. Reached as
   # http://sis-bridge:8000 from the other services; no host port.
