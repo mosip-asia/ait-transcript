@@ -9,7 +9,7 @@ tags:
 ---
 # Approval Gate (stale)
 
-> **Stale since 2026-10-31.** The demo app still shows the claim link only after approval, but the reasons below describe Certify's CSV data provider, which the Gateway replaced. The Gateway refuses at issuance on each credential type's checklist, not on approval ([Credential request](./credential-request.md)), and part 2 removes the request queue ([`spec-part-2.md`](../project/issuer-v0.1/spec-part-2.md)).
+> **Stale since 2026-10-31.** The demo app still shows the claim link only after approval, but the reasons below describe Certify's CSV data provider, which the Data-provider plugin replaced. The Gateway refuses at issuance on each credential type's checklist, not on approval ([Credential request](./credential-request.md)), and part 2 removes the request queue ([`spec-part-2.md`](../project/issuer-v0.1/spec-part-2.md)).
 
 ## The decision
 

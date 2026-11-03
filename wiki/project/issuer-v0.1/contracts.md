@@ -120,7 +120,7 @@ GET /student/{sub}/eligibility   what the Checklist reads   read by the Gateway;
 
 Decided 2026-11-03, replacing the proposal of 2026-10-29. The plugin sends the token's `sub`, unchanged, as the record URL's `{sub}`. Besides `sub` it reads the token's `scope`, which it sends to the Gateway only, and `client_id`, which it keeps for Certify's ledger as `tokenClientId` and sends to neither.
 
-- What `sub` holds is for the Authorization Server and the Adapter to agree on. Under campus sign-in (the realm `ait-dev`, "Campus sign-in" in [`spec-part-2.md`](spec-part-2.md)), campus IT puts a value in `sub` and the SIS Adapter accepts it; the Issuer changes nothing for either choice. Campus asks consumers not to store its `sub` during the PoC, so the Adapter keeps `sub` out of its storage and its access logs.
+- What `sub` holds is for the Authorization Server and the Adapter to agree on. Under campus sign-in (the realm `ait-dev`, "Campus sign-in" in [`spec-part-2.md`](spec-part-2.md)), campus IT puts a value in `sub` and the SIS Adapter accepts it; the Issuer changes nothing, whatever it holds. Campus asks consumers not to store its `sub` during the PoC, so the Adapter keeps `sub` out of its storage and its access logs.
 - For a `sub` it cannot resolve, the Adapter answers `404`. The plugin turns it into `no_record`, and the wallet shows a failure.
 - A campus account belongs to one person, not one degree. How the Issuer chooses between two degrees is still open, under "Multi-degree students" in `spec-part-2.md`. Until that is decided, the Adapter serves one transcript per `sub`.
 

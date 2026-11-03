@@ -18,7 +18,7 @@ Registrar can revoke an issued transcript, issue a replacement, and see a studen
 
 Certify already tracks every issued VC in its own ledger (`certify.ledger`, `certify.status_list_credential`, `certify.credential_status_transaction` — see `vc-stack/certify_init.sql`). The demo app does **not** keep its own copy of "which VCs exist" — [portal/certify_client.py](../../portal/certify_client.py) queries Certify's `/ledger-search` live on every registrar page load. The app's own SQLite `requests` table stays scoped to what it already owned before this phase: the pre-issuance approval cycle (now append-only history, so a student can go through request → approve → claim more than once — [portal/requests.py](../../portal/requests.py)).
 
-Ledger rows are indexed by **claim values**, not the app's own `student_id` (`ait-2026-0001`-style). The AIT Transcript's indexed identifier is `registrationNo` (`st125001`-style) — `certify_client.py` translates via `fixtures.get_student(student_id)["registrationNo"]` before every Certify call.
+Ledger rows are indexed by **claim values**, not the app's own `student_id` (`ait-2026-0001`-style). The AIT Transcript's indexed identifier is `registrationNo` (`st125001`-style) — `registrationNo` is per degree, so the Portal passes the degree's (`degree["registrationNo"]`) to every `certify_client` call.
 
 ```mermaid
 sequenceDiagram
@@ -37,7 +37,7 @@ sequenceDiagram
 
 ## Reissue gating
 
-Registrar can only start a new request cycle for a student if `create_request` ([portal/requests.py](../../portal/requests.py)) finds no non-revoked VC in `certify_client.list_credentials(registration_no)` — no non-revoked VC on the ledger. This is a **registrar-initiated** one-step action (`create_request` + `approve_request` together, `POST /registrar/students/{id}/reissue`), not the student re-requesting — the requirement was phrased as something the registrar drives directly.
+Registrar can only start a new request cycle for a student if `create_request` ([portal/requests.py](../../portal/requests.py)) finds no non-revoked VC in `certify_client.list_credentials(registration_no)` — no non-revoked VC on the ledger. This is a **registrar-initiated** one-step action (`create_request` + `approve_request` together, `POST /registrar/students/{student_id}/{degree_id}/reissue`), not the student re-requesting — the requirement was phrased as something the registrar drives directly.
 
 ## The VCDM 1.1 → 2.0 migration (the real fix)
 

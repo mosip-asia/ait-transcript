@@ -152,7 +152,7 @@ Certify's app log pinpoints it further: `org.json.JSONException: Expected a ',' 
 docker run --rm -v "$PWD/plugin:/src" -w /src maven:3.9-eclipse-temurin-21 mvn -q package   # the plugin's escaper tests
 ```
 
-Then reproduce Certify's substitution locally against the regenerated CSV (swap in the real `vc_template` from `installations/ait/certify_seed.sql`, base64-decoded) and confirm `json.loads()` succeeds on the rendered document — this is how the bug was originally isolated to line 32 without needing a live claim attempt for every iteration.
+Then reproduce Certify's substitution locally with the record's values escaped as the plugin escapes them, not the raw CSV, which is verbatim (swap in the real `vc_template` from `installations/ait/certify_seed.sql`, base64-decoded) and confirm `json.loads()` succeeds on the rendered document — this is how the bug was originally isolated to line 32 without needing a live claim attempt for every iteration.
 
 **After a template fix, restart `certify`** (and `mimoto-service`, which caches Certify's metadata) before assuming the fix is wrong. The CSV needs no restart: the mock Adapter reads it on every request.
 

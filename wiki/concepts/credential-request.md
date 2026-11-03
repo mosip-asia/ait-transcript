@@ -8,7 +8,7 @@ tags:
 ---
 # Credential request
 
-A credential request needs three things: an access token from the authorization server (Keycloak), a statement of what is requested (the scope), and a proof of the holder's key. The token carries who is asking (`sub`) and what it was granted (`scope`). The adapter never sees the wallet or the token, only the `sub` and `scope` the Data-provider plugin passes on.
+A credential request needs three things: an access token from the authorization server (Keycloak), a statement of what is requested (the scope), and a proof of the holder's key. The token carries who is asking (`sub`) and what it was granted (`scope`). The adapter never sees the wallet or the token, only the `sub` the Data-provider plugin passes on.
 
 For the endpoints and the full contracts see [Connecting a non-Inji OpenID4VCI wallet](../guides/other-openid4vci-wallets.md) and [Interface contracts](../project/issuer-v0.1/contracts.md); this page explains how the pieces fit.
 
@@ -17,7 +17,7 @@ For the endpoints and the full contracts see [Connecting a non-Inji OpenID4VCI w
 | Item | Where it comes from | What it decides |
 |---|---|---|
 | Access token | Keycloak, after the user logs in | Who is asking (`sub`) and what was granted (`scope`); Certify validates it |
-| `scope` | Asked for by the wallet at login, granted by Keycloak (`ait_transcript_vc_ldp` is an optional client scope of `wallet-demo`) | Which credential type; the plugin passes it to the adapter unchanged, and the Gateway picks the type's checklist from it |
+| `scope` | Asked for by the wallet at login, granted by Keycloak (`ait_transcript_vc_ldp` is an optional client scope of `wallet-demo`) | Which credential type; the plugin passes it to the Gateway unchanged, which picks the type's checklist from it, and never to the adapter |
 | `sub` | Keycloak mapper `sub-from-username` in `installations/ait/keycloak-realm.json`, so `sub` is the Keycloak username, for example `ait-2026-0001` | Whose record is read: the plugin fills it into its record URL, the adapter's `GET /student/{sub}/transcript` |
 | Proof JWT | The wallet, signed with its own key, identified as `did:jwk` | The holder id placed in the credential; it says which wallet receives it, not which student the data is about |
 
