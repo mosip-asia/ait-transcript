@@ -69,7 +69,7 @@ A JSON object holding the 24 fields `TranscriptRecord` lists in `adapter/openapi
 
 **Today's gaps** in the current SIS route, seen through the temporary bridge (`sis-bridge/`). The route has no field for any of these, so the bridge sends each as an empty string, for every student:
 
-- **dates and numbers:** the year awarded, the issue date, the coursework and thesis credits, lecture and lab hours, and each term's credits, GPA and cumulative GPA. These fail the contract check until the SIS fills them in.
+- **dates and numbers:** `yearAwarded`, `issueDate`, `courseworkCredits` and `thesisCredits`, each course's `lec` and `lab` hours, and each term's `credits`, `gpa` and `cumGpa`. These fail the contract check until the SIS fills them in.
 - **text:** `country`, `previousDegree`, `option`, `areaOfSpecialization`, `notes`, `programCommittee` and `thesisExamination`. Empty text passes the contract check, so nothing flags these, and the transcript prints them blank. `notes` should be `-` when there are none.
 
 ## What an eligibility answer looks like

@@ -26,10 +26,12 @@ from fastapi.responses import JSONResponse, PlainTextResponse  # noqa: E402
 
 import bridge  # noqa: E402
 import sis_mapping  # noqa: E402
-from test_adapter import TRANSCRIPT_URL, check_contract, load_contract, record_schema, violations  # noqa: E402
+from test_adapter import (  # noqa: E402
+    TRANSCRIPT_URL, check_contract, load_contract, record_schema, resolve, violations)
 
 SCOPE = "ait_transcript_vc_ldp"
 SAMPLE = json.loads((HERE / "fixtures" / "st123456.json").read_text(encoding="utf-8"))
+HANDOVER = HERE.parent / "wiki" / "project" / "issuer-v0.1" / "sis-adapter-handover.md"
 
 # The course and term fields the SIS does not serve.
 NO_HOURS = {"lec": "", "lab": ""}
@@ -253,6 +255,26 @@ def test_the_record_follows_the_sis_not_the_sample() -> None:
             {"no": "IM900", "title": "Dissertation", **NO_HOURS, "credits": "12", "grade": ""}],
             **NO_TERM_TOTALS}]
         assert record["courseList"] == "Dissertation"
+
+
+def gaps_bullet(label: str) -> set[str]:
+    """The field names in backticks in the first sentence, the list, of one bullet of the handover's "Today's gaps"."""
+    gaps = HANDOVER.read_text(encoding="utf-8").split("**Today's gaps**", 1)[1].split("\n## ", 1)[0]
+    line = next(line for line in gaps.splitlines() if line.startswith(f"- **{label}:**"))
+    return set(re.findall(r"`(\w+)`", line.split(". ", 1)[0]))
+
+
+def test_the_handovers_gaps_name_every_claim_the_sis_route_has_no_field_for() -> None:
+    """wiki/project/issuer-v0.1/sis-adapter-handover.md tells the SIS team what the bridge serves empty for every
+    student: the claims no SIS field fills, split by whether the contract gives them a format (a date, a year or a
+    number), plus the course and term fields the SIS does not serve."""
+    contract = load_contract()
+    properties = record_schema(contract, SCOPE)["properties"]
+    filled = set(sis_mapping.FIELDS) | {"thesisTitle", "thesisGrade", "courses", "courseList"}  # to_record's others
+    never = set(sis_mapping.CLAIMS) - filled
+    formatted = {claim for claim in never if "pattern" in resolve(properties[claim], contract)}
+    assert gaps_bullet("dates and numbers") == formatted | set(NO_HOURS) | set(NO_TERM_TOTALS)
+    assert gaps_bullet("text") == never - formatted
 
 
 if __name__ == "__main__":

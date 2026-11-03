@@ -498,6 +498,18 @@ def test_the_transcript_record_is_the_credential_schemas_subject_less_the_holder
     assert shape_of({"type": "string", "minLength": 1}, lambda s: s) != shape_of({"type": "string"}, lambda s: s)
 
 
+def test_the_handovers_privacy_section_names_every_claim_the_ait_ledger_indexes() -> None:
+    """Certify logs every value its ledger indexes (LedgerUtils, at INFO), so the list on the handover's "Certify also
+    logs it" line (wiki/project/issuer-v0.1/sis-adapter-handover.md) is the ait Installation's indexed mappings."""
+    root = Path(__file__).parent.parent
+    properties = (root / "installations" / "ait" / "certify-installation.properties").read_text(encoding="utf-8")
+    indexed = set(re.findall(r"^mosip\.certify\.indexed-mappings\.(\w+)=", properties, re.M))
+    page = (root / "wiki" / "project" / "issuer-v0.1" / "sis-adapter-handover.md").read_text(encoding="utf-8")
+    line = next(line for line in page.splitlines() if line.startswith("- **Certify also logs it, and more.**"))
+    named = set(re.findall(r"`(\w+)`", line.split(" in plain text: ", 1)[1].split(". ", 1)[0]))
+    assert indexed and named == indexed, (named, indexed)
+
+
 def getter(base: str):
     """`get(path)` over HTTP at `base`. Only a 200's body is read as JSON (a 404's is not part of the contract)."""
     import httpx
