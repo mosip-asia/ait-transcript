@@ -68,7 +68,7 @@ issuer_checks() {
   certify_props=$(tr -d '\r' <"$INSTALLATION_DIR/certify-installation.properties")
   plugin_keys=$( (grep -oE '^mosip\.certify\.((adapter|gateway)\.[a-z-]+|integration\.(data-provider-plugin|scan-base-package))=' <<<"$certify_props" || true) \
     | tr -d = | LC_ALL=C sort)
-  want_keys=$(printf '%s\n' mosip.certify.adapter.{connect-timeout-ms,read-timeout-ms,url} \
+  want_keys=$(printf '%s\n' mosip.certify.adapter.{connect-timeout-ms,read-timeout-ms,record-url} \
     mosip.certify.gateway.{auth-token,connect-timeout-ms,enabled,read-timeout-ms,url} \
     mosip.certify.integration.{data-provider-plugin,scan-base-package} | LC_ALL=C sort)
   [[ "$plugin_keys" == "$want_keys" ]] || fail "Certify's plugin keys must be the plugin's ten (got: $plugin_keys)"
