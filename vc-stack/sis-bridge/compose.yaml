@@ -16,7 +16,8 @@ services:
       context: ../..
       dockerfile: sis-bridge/Dockerfile
     environment:
-      - SIS_BASE_URL=${SIS_BASE_URL:-http://ait-itserv-vm:8000}
+      # The full NetBird name: the short name ait-itserv-vm does not resolve in the bridge's (glibc) container.
+      - SIS_BASE_URL=${SIS_BASE_URL:-http://ait-itserv-vm.netbird.selfhosted:8000}
     restart: unless-stopped
     networks:
       - network

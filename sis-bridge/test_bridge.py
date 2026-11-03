@@ -104,6 +104,8 @@ class StandInSis:
                 return JSONResponse({"detail": "boom"}, status_code=500)
             if self.mode == "not json":
                 return PlainTextResponse("<html>gateway</html>")
+            if self.mode == "slow":
+                time.sleep(6)
             if student_id != "st123456":
                 return JSONResponse({"detail": f"Student {student_id} not found"}, status_code=404)
             return self.body
@@ -222,6 +224,15 @@ def test_a_sis_error_or_a_reply_that_is_not_the_sample_is_a_502() -> None:
         sis.mode, sis.body = mode, body
         with bridge_over(sis) as (get, _):
             assert get("/student/st123456/transcript")[0] == 502, (mode, body)
+
+
+def test_a_sis_answer_inside_the_plugins_read_timeout_is_served() -> None:
+    """The plugin waits 10 s for the record (`mosip.certify.adapter.read-timeout-ms`), and the handover promises the
+    SIS that much: an answer after 6 s is a record, not the bridge's own earlier 502."""
+    sis = StandInSis()
+    sis.mode = "slow"
+    with bridge_over(sis) as (get, _):
+        assert get("/student/st123456/transcript")[0] == 200
 
 
 def test_the_record_follows_the_sis_not_the_sample() -> None:

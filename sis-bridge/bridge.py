@@ -29,7 +29,9 @@ SIS_ROUTE = "/api/v1/credentials/transcript/{}"
 
 
 def create_app(sis_base_url: str) -> FastAPI:
-    sis = httpx.Client(base_url=sis_base_url, timeout=5)
+    # As long as the plugin waits for the record (mosip.certify.adapter.read-timeout-ms=10000), so a SIS answer the
+    # handover allows is served rather than cut short here.
+    sis = httpx.Client(base_url=sis_base_url, timeout=10)
     app = FastAPI(title="Temporary SIS bridge")
 
     def ask(student_id: str) -> httpx.Response:
