@@ -11,8 +11,8 @@ src/issuer/
 ├── plugin/                                 # Java 21 SPI DataProvider plugin source & pom.xml
 ├── Dockerfile.certify                      # Multi-stage image build (bakes plugin into Certify)
 ├── compose.yaml                            # Standalone Compose manifest (Certify + Postgres + Ingress + VDR)
-├── docker-compose.override.yml.example     # Loop 3: Dev override for hot JAR mounting
-├── dev-reload.sh                           # Loop 3: Fast recompile & container restart script (~3s)
+├── compose.dev.yaml                        # Loop 3: Dev overlay for hot JAR mounting
+├── dev-reload.sh                           # Loop 3: Fast recompile & container update script (~3s)
 ├── .env.example                            # Dedicated standalone Issuer environment template
 ├── config/                                 # Self-contained Certify properties & SQL init
 └── README.md
@@ -50,17 +50,19 @@ Builds and restarts the container with the updated image in **~7 seconds**.
 ### Loop 3: Even Faster "Hot JAR Mount" Mode (~3s Reload)
 For rapid local iteration without rebuilding Docker images:
 
-1. **Enable the local override once:**
-   ```bash
-   cp docker-compose.override.yml.example docker-compose.override.yml
+1. **Option A: Control via `.env` (Recommended)**
+   In your `.env` file, toggle `COMPOSE_FILE`:
+   ```env
+   # Merge compose.dev.yaml to mount the local JAR
+   COMPOSE_FILE=compose.yaml:compose.dev.yaml
    ```
-   *This instructs Docker Compose to mount the local JAR directly into `/home/inji/additional_jars/`, overriding the baked JAR inside the container.*
+   Now all standard Docker Compose commands (`docker compose up -d`, `docker compose restart`) automatically mount your local plugin JAR into `/home/inji/additional_jars/`.
 
-2. **Recompile and restart in one command:**
+2. **Option B: One-Command Recompile & Update (`./dev-reload.sh`)**
    ```bash
    ./dev-reload.sh
    ```
-   *Compiles the JAR and restarts Inji Certify in **~3 seconds flat**.*
+   *Compiles the plugin JAR and updates Inji Certify with the fresh JAR in **~3 seconds flat**.*
 
 ---
 
