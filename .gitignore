@@ -7,7 +7,9 @@ vc-stack/certs/
 vc-stack/data/
 vc-stack/plugins/
 plugin/target/
-src/issuer/plugin/target/
+src/issuer/target/
+target/
+deploy/data/
 portal/*.db
 .demo-state/*
 !.demo-state/.gitkeep

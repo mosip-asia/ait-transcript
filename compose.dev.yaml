@@ -3,8 +3,14 @@
 # ==============================================================================
 # Enabled via COMPOSE_FILE=compose.yaml:compose.dev.yaml in .env
 # Directly mounts the locally compiled plugin JAR into Certify (~3s reload).
+# Requires running 'mvn package' first so the target JAR exists.
 # ==============================================================================
 services:
   certify:
     volumes:
-      - ./src/issuer/target/issuer-data-provider-plugin.jar:/home/inji/additional_jars/issuer-data-provider-plugin.jar:ro
+      - type: bind
+        source: ./src/issuer/target/issuer-data-provider-plugin.jar
+        target: /home/inji/additional_jars/issuer-data-provider-plugin.jar
+        read_only: true
+        bind:
+          create_host_path: false
