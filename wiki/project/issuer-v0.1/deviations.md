@@ -1,6 +1,6 @@
 # Issuer v0.1 — deviations from the proposal
 
-Status: draft for team review, 2026-10-11, extended 2026-10-19. "Q" numbers refer to the owner's 2026-10-11 scoping plan, kept outside this repository. Each row is a place where v0.1 does something other than `proposal-issuer.md` (PR 4) says, why, and when it is revisited. The team accepting this list is the prerequisite for starting the build on 2026-11-02.
+Status: accepted by the team on 2026-10-20; first written 2026-10-11, extended 2026-10-19. "Q" numbers refer to the owner's 2026-10-11 scoping plan, kept outside this repository. Each row is a place where v0.1 does something other than `proposal-issuer.md` (PR 4) says, why, and when it is revisited. The team's acceptance of this list cleared the build to start on 2026-11-02.
 
 | # | Proposal says | v0.1 does | Why | Revisit |
 |---|---|---|---|---|
