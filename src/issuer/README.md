@@ -50,19 +50,22 @@ Builds and restarts the container with the updated image in **~7 seconds** via D
 ### Loop 3: Hot JAR Mount Mode (~3s Reload)
 For rapid local iteration without rebuilding Docker images:
 
-1. **Option A: Control via root `.env`:**
-   In your root `.env` file, toggle `COMPOSE_FILE`:
+1. **Enable in root `.env`:**
    ```env
    # Merge compose.dev.yaml to mount the local JAR
    COMPOSE_FILE=compose.yaml:compose.dev.yaml
    ```
    Now all standard Docker Compose commands automatically mount your local plugin JAR directly into `/home/inji/additional_jars/`.
 
-2. **Option B: One-Command Recompile & Update (`./dev-reload.sh`)**
+2. **Recompile and restart Certify:**
    ```bash
-   ./dev-reload.sh
+   mvn -f src/issuer/pom.xml package -DskipTests && docker compose restart certify
    ```
-   *Compiles the plugin JAR and updates Inji Certify with the fresh JAR in **~3 seconds flat**.*
+   *(Or in Docker if Maven is not installed locally):*
+   ```bash
+   docker run --rm -v "$PWD/src/issuer:/src" -w /src maven:3.9-eclipse-temurin-21 mvn -q package -DskipTests && docker compose restart certify
+   ```
+   *Compiles the JAR and reloads Inji Certify in **~3 seconds flat**.*
 
 ---
 
