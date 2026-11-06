@@ -20,6 +20,9 @@ vc-stack/.installation
 .pytest_cache/
 
 # local-only notes, not shared
+docker-compose.override.yml
+compose.override.yaml
+compose.override.yml
 /AGENTS.md
 /PLAN.md
 /wiki/log.md

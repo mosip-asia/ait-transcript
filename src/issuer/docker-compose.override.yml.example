@@ -1,0 +1,19 @@
+# ==============================================================================
+# Developer Override: Loop 3 - Hot JAR Mount Mode
+# ==============================================================================
+# Mounts the locally compiled JAR directly into Inji Certify, overriding the
+# baked JAR inside the container for ultra-fast local development (~3s feedback).
+#
+# Quickstart:
+#   1. Enable this override:
+#      cp docker-compose.override.yml.example docker-compose.override.yml
+#
+#   2. Fast build & reload:
+#      ./dev-reload.sh
+#      (or: cd plugin && mvn package -DskipTests && docker compose restart certify)
+# ==============================================================================
+
+services:
+  certify:
+    volumes:
+      - ./plugin/target/issuer-data-provider-plugin.jar:/home/inji/additional_jars/issuer-data-provider-plugin.jar:ro
