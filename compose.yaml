@@ -31,8 +31,8 @@ services:
 
   certify:
     build:
-      context: ./src/issuer
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: docker/Dockerfile.certify
     image: ghcr.io/mosip-asia/ait-certify:local
     user: root
     extra_hosts:
@@ -79,8 +79,8 @@ services:
 
   gateway:
     build:
-      context: ./src/gateway
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: docker/Dockerfile.gateway
     image: ghcr.io/mosip-asia/ait-gateway:local
     restart: unless-stopped
     env_file:

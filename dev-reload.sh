@@ -14,10 +14,10 @@ export COMPOSE_FILE="${COMPOSE_FILE:-compose.yaml:compose.dev.yaml}"
 
 echo "==> [1/2] Compiling plugin JAR..."
 if command -v mvn >/dev/null 2>&1; then
-  mvn -f src/issuer/plugin/pom.xml -q clean package -DskipTests
+  mvn -f src/issuer/pom.xml -q clean package -DskipTests
 else
   docker run --rm --user "$(id -u):$(id -g)" \
-    -v "$REPO_ROOT/src/issuer/plugin:/src" -w /src \
+    -v "$REPO_ROOT/src/issuer:/src" -w /src \
     maven:3.9-eclipse-temurin-21 mvn -q clean package -DskipTests
 fi
 

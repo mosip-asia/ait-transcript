@@ -7,4 +7,4 @@
 services:
   certify:
     volumes:
-      - ./src/issuer/plugin/target/issuer-data-provider-plugin.jar:/home/inji/additional_jars/issuer-data-provider-plugin.jar:ro
+      - ./src/issuer/target/issuer-data-provider-plugin.jar:/home/inji/additional_jars/issuer-data-provider-plugin.jar:ro

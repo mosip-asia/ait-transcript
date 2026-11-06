@@ -17,12 +17,13 @@ Per [ADR 0001](../../docs/adr/0001-approval-gate-beside-the-data-path.md), the G
 src/gateway/
 ├── main.py               # FastAPI application exposing POST /evaluations
 ├── credential_types.py   # Registry of credential clearance predicates
-├── Dockerfile            # Standalone container build
 ├── requirements.txt      # Module dependencies (also managed in root pyproject.toml)
 └── tests/                # In-process and host verification tests
     ├── test_credential_types.py
     └── test_evaluations.py
 ```
+
+*(Note: Container build recipes are located in `docker/Dockerfile.gateway`)*
 
 ---
 
