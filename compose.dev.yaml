@@ -1,0 +1,10 @@
+# ==============================================================================
+# Developer Hot-Reload Overlay (Loop 3: Hot JAR Mount)
+# ==============================================================================
+# Enabled via COMPOSE_FILE=compose.yaml:compose.dev.yaml in .env
+# Directly mounts the locally compiled plugin JAR into Certify (~3s reload).
+# ==============================================================================
+services:
+  certify:
+    volumes:
+      - ./src/issuer/plugin/target/issuer-data-provider-plugin.jar:/home/inji/additional_jars/issuer-data-provider-plugin.jar:ro

@@ -6,18 +6,18 @@
 # in ~3 seconds using compose.dev.yaml.
 # ==============================================================================
 set -euo pipefail
-ISSUER_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-cd "$ISSUER_DIR"
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$REPO_ROOT"
 
-# Ensure hot-reload file overlay is active for this reload
+# Ensure hot-reload file overlay is active for this command
 export COMPOSE_FILE="${COMPOSE_FILE:-compose.yaml:compose.dev.yaml}"
 
 echo "==> [1/2] Compiling plugin JAR..."
 if command -v mvn >/dev/null 2>&1; then
-  mvn -f plugin/pom.xml -q clean package -DskipTests
+  mvn -f src/issuer/plugin/pom.xml -q clean package -DskipTests
 else
   docker run --rm --user "$(id -u):$(id -g)" \
-    -v "$ISSUER_DIR/plugin:/src" -w /src \
+    -v "$REPO_ROOT/src/issuer/plugin:/src" -w /src \
     maven:3.9-eclipse-temurin-21 mvn -q clean package -DskipTests
 fi
 
