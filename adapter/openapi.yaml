@@ -1,0 +1,308 @@
+openapi: 3.1.0
+info:
+  title: Issuer data adapter
+  version: 0.5.0
+  description: |
+    The Adapter contract: the API any Adapter serves to the Issuer, read-only. This file and
+    `wiki/schemas/ait-transcript-credential.v2.schema.json` are the master files: the transcript record here holds
+    exactly the credential subject that schema signs, less the holder's `id`, and `adapter/test_adapter.py` holds the
+    two equal. Jo and Boss build the SIS Adapter for the AIT installation. Thas's mock in `adapter/main.py` serves it
+    from a CSV for both installations. `python3 adapter/test_adapter.py --contract URL SUB SCOPE` checks any Adapter
+    against this file.
+
+    The Issuer needs one value from the Authorization Server and sends it to the Adapter: the access token's `sub`,
+    unchanged. What `sub` holds is for the Authorization Server and the Adapter to agree on; the Adapter accepts
+    whatever the Authorization Server puts there.
+
+    - `GET /student/{sub}/transcript`: the AIT transcript record, read by the Data-provider plugin. The mock also
+      serves the hackathon installation's record here (the Developer Passport's and the Achievement's), which the SIS
+      Adapter does not serve.
+    - `GET /student/{sub}/eligibility`: what the Checklist reads, read by the Gateway. The SIS Adapter does not serve
+      it yet; until it does, the Gateway reads the mock's.
+
+    Each caller is set with the whole URL, `{sub}` included, so the path is the deployment's to choose: the plugin
+    through `CERTIFY_RECORD_URL`, defaulted in `installations/<name>/certify-installation.properties`, the Gateway
+    through `GATEWAY_ELIGIBILITY_URL`, defaulted in `installations/<name>/gateway.env`; `vc-stack/.env` sets either
+    per environment. The caller fills in `{sub}` URL-encoded as one path segment and adds nothing else.
+
+    A record schema per scope (its `x-scope`) lists exactly the claims its Certify template substitutes. A record may
+    carry more fields, each a string, number or boolean (`ExtraField`); the Issuer passes them on unrendered. Every
+    claim is a string, numbers included, except `courses`, the one field that is an array. The Issuer refuses a record
+    holding any other object or array, or a `courses` that is not an array. A record never carries one of Certify's
+    reserved keys (`id`, `_holderId`, `_issuer`, `validFrom`, `validUntil`, `credentialStatus`) or the plugin's trace
+    keys (`tokenSub`, `tokenClientId`): `RecordKey` names them, and the Issuer refuses a record holding one.
+
+    A `404` means no such student, and its body is not read. Any other status, a timeout or a refused connection
+    makes the Issuer refuse the credential. So does an answer it cannot take: the Data-provider plugin refuses with
+    `adapter_error` a body that is not one strict JSON object, a top-level `null`, a forbidden key, or a structured
+    value other than an array `courses`; the Gateway refuses with `gateway_error` an answer its eligibility schema does
+    not parse. The plugin does not check each claim's type or format, or what is inside `courses`, at issuance: an
+    Adapter that breaks this file there gets its values signed as sent, so holding the record to this file is the
+    Adapter's job, and `adapter/test_adapter.py --contract` proves it. The Adapter keeps `sub` out of its storage and
+    access logs. There is no secret on either hop: the network is the boundary.
+servers:
+  - url: http://adapter:8000
+    description: Thas's mock in the Compose stack.
+paths:
+  /student/{sub}/transcript:
+    get:
+      operationId: getTranscript
+      summary: The student's transcript, under the Issuer's claim names
+      parameters:
+        - $ref: '#/components/parameters/Sub'
+      responses:
+        '200':
+          description: |
+            The record in the record schema of the installation's scope (its `x-scope`): `TranscriptRecord` from the
+            SIS Adapter; the hackathon's two from the mock only, one roster row holding the claims of both.
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/TranscriptRecord'
+                  - $ref: '#/components/schemas/PassportRecord'
+                  - $ref: '#/components/schemas/AchievementRecord'
+        '404':
+          $ref: '#/components/responses/NoRecord'
+  /student/{sub}/eligibility:
+    get:
+      operationId: getEligibility
+      summary: The attributes the Checklist reads
+      description: |
+        The transcript's checks are `no_holds` (`holds` is empty), `conferred` (`conferralStatus` is `Conferred`)
+        and `zero_balance` (`balance` equals 0). The Developer Passport's is `on_roster` (`teamId` is not blank);
+        the Achievement's are `on_roster` and `winner`. A `null` in a field the credential type reads is
+        `gateway_error`. Each installation serves the eligibility schema of its scopes (their `x-scope`).
+      parameters:
+        - $ref: '#/components/parameters/Sub'
+      responses:
+        '200':
+          description: The eligibility attributes in the installation's eligibility schema
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/TranscriptEligibility'
+                  - $ref: '#/components/schemas/PassportEligibility'
+                  - $ref: '#/components/schemas/AchievementEligibility'
+              examples:
+                eligible:
+                  value:
+                    holds: []
+                    conferralStatus: Conferred
+                    balance: '0.00'
+                refused:
+                  value:
+                    holds: [Library fine]
+                    conferralStatus: Pending
+                    balance: '1250.00'
+        '404':
+          $ref: '#/components/responses/NoRecord'
+components:
+  parameters:
+    Sub:
+      name: sub
+      in: path
+      required: true
+      description: |
+        The access token's `sub`, unchanged, URL-encoded as one path segment. On the stand-in realms it is the row
+        id, one per degree (`ait-2026-0001`). Under campus sign-in, campus and the SIS Adapter agree on what it
+        holds. Keep it out of storage and access logs.
+      schema:
+        type: string
+        minLength: 1
+      examples:
+        standIn:
+          value: ait-2026-0001
+        campusUsername:
+          value: st123456
+  responses:
+    NoRecord:
+      description: |
+        No such student. The body is not read. The plugin answers `no_record`, and so does the Gateway.
+  schemas:
+    RecordKey:
+      type: string
+      description: |
+        A key a record may carry: anything but Certify's reserved keys, which Certify sets itself, and the
+        Data-provider plugin's trace keys, which it adds to every record.
+      not:
+        enum: [id, _holderId, _issuer, validFrom, validUntil, credentialStatus, tokenSub, tokenClientId]
+    Date:
+      type: string
+      pattern: '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
+      description: A calendar date as `YYYY-MM-DD`, for example `2026-08-31`. No time, no time zone.
+    Decimal:
+      type: string
+      pattern: '^[0-9]+(\.[0-9]+)?$'
+      description: |
+        A number of zero or more written as a string: digits, then optionally a point and more digits, for example
+        `3`, `27.0` or `3.67`. No sign, no thousands separator, no unit. The Issuer prints it as it is, so the
+        Adapter chooses the decimals it means (a GPA as `3.67`, credits as `27.0`).
+    ExtraField:
+      description: |
+        A field a record schema does not name: a scalar. The Data-provider plugin refuses an object or an array here
+        (only `courses` may be an array), and passes the field on unrendered.
+      type: [string, number, boolean]
+    TranscriptRecord:
+      type: object
+      x-scope: ait_transcript_vc_ldp
+      description: |
+        The AIT transcript: the claims the ait-transcript template substitutes, every one required and none `null`.
+        Strings throughout, numbers included; only `courses` is structured. Dates are `Date`, credits, hours and
+        GPAs `Decimal`. Each claim's meaning is in `wiki/schemas/ait-transcript-credential.v2.schema.json`, which
+        pins the same formats; `wiki/project/issuer-v0.1/sis-adapter-handover.md` explains them in prose. Which fields may leave the student information system
+        is OSA's decision.
+      propertyNames:
+        $ref: '#/components/schemas/RecordKey'
+      additionalProperties:
+        $ref: '#/components/schemas/ExtraField'
+      required:
+        - fullName
+        - dateOfBirth
+        - country
+        - registrationNo
+        - previousDegree
+        - yearAwarded
+        - dateAdmitted
+        - option
+        - degreeAwarded
+        - dateGraduation
+        - faculty
+        - academicProgram
+        - areaOfSpecialization
+        - notes
+        - issueDate
+        - courses
+        - courseList
+        - thesisTitle
+        - thesisGrade
+        - programCommittee
+        - courseworkCredits
+        - thesisCredits
+        - totalCredits
+        - thesisExamination
+      properties:
+        fullName: {type: string}
+        dateOfBirth: {$ref: '#/components/schemas/Date'}
+        country: {type: string}
+        registrationNo: {type: string, minLength: 1, examples: [st125001]}
+        previousDegree: {type: string}
+        yearAwarded: {type: string, pattern: '^[0-9]{4}$', examples: ['2023']}
+        dateAdmitted: {$ref: '#/components/schemas/Date'}
+        option: {type: string, examples: [Thesis]}
+        degreeAwarded: {type: string}
+        dateGraduation: {$ref: '#/components/schemas/Date'}
+        faculty: {type: string}
+        academicProgram: {type: string}
+        areaOfSpecialization: {type: string}
+        notes: {type: string, description: '`-` when there are none'}
+        issueDate: {$ref: '#/components/schemas/Date'}
+        courses:
+          type: array
+          description: Terms in order, each with its courses in order.
+          items:
+            $ref: '#/components/schemas/Term'
+        courseList:
+          type: string
+          description: |
+            The wallet card's summary of `courses`, a plain string: one line per course, `title — grade`, the
+            title alone when there is no grade.
+        thesisTitle: {type: string}
+        thesisGrade: {type: string}
+        programCommittee: {type: string}
+        courseworkCredits: {$ref: '#/components/schemas/Decimal'}
+        thesisCredits: {$ref: '#/components/schemas/Decimal'}
+        totalCredits: {$ref: '#/components/schemas/Decimal'}
+        thesisExamination: {type: string, examples: [Passed]}
+    PassportRecord:
+      type: object
+      x-scope: developer_passport_vc_ldp
+      description: The Developer Passport, the claims its template substitutes. The mock serves the whole roster row.
+      propertyNames:
+        $ref: '#/components/schemas/RecordKey'
+      additionalProperties:
+        $ref: '#/components/schemas/ExtraField'
+      required: [teamId, teamName, oidcClientId, authEndpoint, issuerEndpoint, verifierEndpoint]
+      properties:
+        teamId: {type: string}
+        teamName: {type: string}
+        oidcClientId: {type: string}
+        authEndpoint: {type: string}
+        issuerEndpoint: {type: string}
+        verifierEndpoint: {type: string}
+    AchievementRecord:
+      type: object
+      x-scope: achievement_certificate_vc_ldp
+      description: The Achievement, the claims its template substitutes. The mock serves the whole roster row.
+      propertyNames:
+        $ref: '#/components/schemas/RecordKey'
+      additionalProperties:
+        $ref: '#/components/schemas/ExtraField'
+      required: [teamId, award]
+      properties:
+        teamId: {type: string}
+        award: {type: string}
+    TranscriptEligibility:
+      type: object
+      x-scope: ait_transcript_vc_ldp
+      required: [holds, conferralStatus, balance]
+      properties:
+        holds:
+          type: array
+          items:
+            type: string
+          description: One entry per hold, as the student should read it. Empty when there is none.
+        conferralStatus:
+          type: string
+          enum: [Conferred, Pending]
+        balance:
+          type: string
+          pattern: '^-?[0-9]+(\.[0-9]+)?$'
+          description: The amount owed as a decimal string, never a number. `"0.00"` when nothing is owed.
+    PassportEligibility:
+      type: object
+      x-scope: developer_passport_vc_ldp
+      description: |
+        `teamId` is empty for a participant without a team. The mock serves the whole roster row.
+      required: [teamId]
+      properties:
+        teamId: {type: string}
+    AchievementEligibility:
+      type: object
+      x-scope: achievement_certificate_vc_ldp
+      description: |
+        `teamId` as for the Developer Passport; `winner` is `true` for a member of a winning team, read
+        case-insensitively, and anything else is not. The mock serves the whole roster row.
+      required: [teamId, winner]
+      properties:
+        teamId: {type: string}
+        winner: {type: string}
+    Term:
+      type: object
+      description: |
+        One semester. No other key: `courses` goes into the credential as it is, so a key the credential schema does
+        not name would be signed and fail it.
+      required: [term, courses, credits, gpa, cumGpa]
+      additionalProperties: false
+      properties:
+        term: {type: string, examples: [August Semester 2024]}
+        courses:
+          type: array
+          items:
+            $ref: '#/components/schemas/Course'
+        credits: {$ref: '#/components/schemas/Decimal', description: Credits taken in the term}
+        gpa: {$ref: '#/components/schemas/Decimal', description: The term's GPA on the 4.00 scale}
+        cumGpa: {$ref: '#/components/schemas/Decimal', description: The cumulative GPA at the end of the term}
+    Course:
+      type: object
+      description: One course of a term. No other key, as for `Term`.
+      required: ['no', title, lec, lab, credits, grade]
+      additionalProperties: false
+      properties:
+        'no': {type: string, examples: [CS601]}
+        title: {type: string}
+        lec: {$ref: '#/components/schemas/Decimal', description: Lecture hours}
+        lab: {$ref: '#/components/schemas/Decimal', description: Lab hours}
+        credits: {$ref: '#/components/schemas/Decimal'}
+        grade: {type: string}

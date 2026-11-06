@@ -1,0 +1,73 @@
+name: vc-stack
+
+services:
+  # Verify's own Postgres; no host port.
+  verify-database:
+    image: 'postgres:15'
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+    volumes:
+      - ../verify_init.sql:/docker-entrypoint-initdb.d/verify_init.sql
+    networks:
+      - network
+
+  verify-service:
+    container_name: verify-service
+    image: injistack/inji-verify-service:0.17.0
+    user: root
+    # The issued VC's JSON-LD context is http://host.docker.internal:9098/contexts/... (see
+    # bootstrap.sh LOCAL_STUDENT_CONTEXT_URL). Docker Desktop resolves that name by
+    # itself; on Linux (the GCP VM) it needs this mapping or verification fails.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "9095:8080"
+    environment:
+      - active_profile_env=default
+      - DATABASE_HOST=verify-database
+      - DATABASE_PORT=5432
+      - DATABASE_NAME=inji_verify
+      - DATABASE_SCHEMA=verify
+      - DATABASE_USERNAME=postgres
+      - DATABASE_PASSWORD=postgres
+      - INJI_VP_REQUEST_LONG_POLLING_TIMEOUT=55000
+      - INJI_VP_SUBMISSION_BASE_URL=${INJI_VERIFY_PUBLIC_BASE_URL:-http://localhost:9095}/v1/verify
+      - INJI_DID_VERIFY_URI=${INJI_VERIFY_DID_URI:-did:web:localhost%3A9095:v1:verify}
+      - INJI_DID_VERIFY_PUBLIC_KEY_URI=${INJI_VERIFY_DID_PUBLIC_KEY_URI:-did:web:localhost%3A9095:v1:verify#key-0}
+      - INJI_KEYSTORE_FILE_PASS=mosip
+      - INJI_VERIFY_REDIRECT_URI=${INJI_VERIFY_REDIRECT_URI:-http://localhost:4007}
+      - INJI_VERIFY_CLAIMS_WITH_META_DATA=_sd,_sd_alg,iss,cnf,sub,aud,exp,nbf,iat,cti
+    depends_on:
+      - verify-database
+    networks:
+      - network
+
+  verify-ui:
+    container_name: verify-ui
+    image: injistack/inji-verify-ui:0.17.0
+    ports:
+      - "4007:8000"
+    environment:
+      - DEFAULT_TITLE=Inji Verify
+      - DEFAULT_LANG=en
+      - INTERNET_CONNECTIVITY_CHECK_ENDPOINT=https://dns.google/
+      - INTERNET_CONNECTIVITY_CHECK_TIMEOUT=10000
+      - OVP_QR_HEADER=INJI_OVP://payload=
+      - VERIFIABLE_CLAIMS_CONFIG_URL=/assets/config.json
+      - VP_SUBMISSION_SUPPORTED=false
+      - CLIENT_ID=inji-verify-ui
+      - CLIENT_ID_DID=${INJI_VERIFY_DID_URI:-did:web:localhost%3A9095:v1:verify}
+      - DISPLAY_TIMEOUT=120000
+      - VERIFY_SERVICE_API_URL=/v1/verify
+    volumes:
+      - ../config/verify-config.json:/usr/share/nginx/html/assets/config.json
+    depends_on:
+      - verify-service
+    networks:
+      - network
+
+networks:
+  network:
+    name: vc_stack_network
+    external: true

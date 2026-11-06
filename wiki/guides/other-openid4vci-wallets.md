@@ -25,7 +25,7 @@ All values below are from the live deployment.
 | Grant | authorization code with PKCE `S256`; no pre-authorized code, **no credential offer** |
 | Format | `ldp_vc`, signed `Ed25519Signature2020` (algorithm `EdDSA`), VCDM 2.0 |
 | Key binding | `did:jwk`; proof type `jwt`, signing algorithms `RS256` or `ES256` |
-| Credential `@context` | `["https://api.transcript-demo.ait-vc.dpi.ait.ac.th/academic-transcript-context.json", "https://www.w3.org/ns/credentials/v2"]`; the request's `@context` must match this list |
+| Credential `@context` | `["https://api.transcript-demo.ait-vc.dpi.ait.ac.th/contexts/transcript/v1.json", "https://www.w3.org/ns/credentials/v2"]`; the request's `@context` must match this list |
 | Not in the issuer metadata | `nonce_endpoint`, credential offer, batch or deferred endpoints, SD-JWT VC or mdoc configurations |
 
 ## What the wallet itself must support
@@ -45,7 +45,7 @@ Whatever stack the wallet uses, it must:
 | 1 | **No usable OAuth client.** | The only client, `wallet-demo`, is confidential. Mimoto holds its key and authenticates for the wallet, so a wallet exchanging the code directly with Keycloak has no credentials. |
 | 2 | **Advertised token endpoint is not public.** | The discovery document gives `token_endpoint`, `jwks_uri` and `pushed_authorization_request_endpoint` as `http://keycloak.<host>:8080/...`. Keycloak builds these from the request Host; port 8080 is not exposed. |
 | 3 | **Issuer mismatch on one discovery path.** | `oauth-authorization-server` returns an issuer equal to the AS URL. `openid-configuration` still returns `http://keycloak:8080/realms/inji`, so a strict wallet that uses OIDC discovery rejects it. |
-| 4 | **Token audience.** | Certify is configured to accept tokens with audience `wallet-demo` (`MOSIP_CERTIFY_AUTHN_ALLOWED_AUDIENCES`, and an audience mapper on that client). A token from another client is expected to be rejected unless it carries that audience; not tested. |
+| 4 | **Token audience.** | Certify is configured to accept tokens with audience `wallet-demo` (`mosip.certify.authn.allowed-audiences` in `certify-installation.properties`, and an audience mapper on that client). A token from another client is expected to be rejected unless it carries that audience; not tested. |
 | 5 | **No nonce or offer.** | A wallet that insists on a nonce endpoint or starts from a credential offer cannot use this issuer. |
 | 6 | **Format support.** | See the wallet list above; this is on the wallet side. |
 
@@ -65,7 +65,7 @@ This fits wallets that let you plug in your own token step, such as an Inji-base
 
 These are changes to the platform, not yet made. Items 1 to 3 together let a standards-based wallet get a token itself.
 
-1. **Add a public Keycloak client** (for example `wallet-public`): public, PKCE `S256` required, the other wallet's redirect URI registered, scope `ait_transcript_vc_ldp` available. Give it an audience mapper for `wallet-demo` (as `wallet-demo` has) or add the new client id to `MOSIP_CERTIFY_AUTHN_ALLOWED_AUDIENCES` in `vc-stack/docker-compose.yaml`. Keycloak's admin paths are blocked on the public hostnames, so a running realm is changed through the admin API over an IAP or SSH tunnel; `keycloak-realm.json` only seeds a new realm.
+1. **Add a public Keycloak client** (for example `wallet-public`): public, PKCE `S256` required, the other wallet's redirect URI registered, scope `ait_transcript_vc_ldp` available. Give it an audience mapper for `wallet-demo` (as `wallet-demo` has) or add the new client id to `mosip.certify.authn.allowed-audiences` in the installation's `certify-installation.properties`. Keycloak's admin paths are blocked on the public hostnames, so a running realm is changed through the admin API over an IAP or SSH tunnel; `keycloak-realm.json` only seeds a new realm.
 2. **Make the public token endpoint real.** In `vc-stack/keycloak-nginx.conf.template`, for requests under a public hostname only, rewrite `http://<host>:8080` to the public base URL for `token_endpoint`, `jwks_uri`, `introspection_endpoint`, `userinfo_endpoint` and the PAR endpoint. The existing `map $host` that keeps Mimoto (`Host: keycloak`) untouched is the model. The path `/realms/inji/protocol/openid-connect/*` is already served on the public host.
 3. **Apply the issuer rewrite to `openid-configuration`** too, with the same `map`.
 4. Optional: `nonce_endpoint` and credential-offer support depend on the Certify version; 0.14.0 has neither, so wallets that need them wait for an upgrade.
@@ -74,4 +74,4 @@ After 1 to 3, test with one chosen wallet and fix what it reports. Tokens issued
 
 ## Why it is shaped like this
 
-Keycloak's issuer is pinned to the Docker-internal `http://keycloak:8080` because Mimoto's JWT `aud` and Certify's `issuer-uri` must equal the token's `iss`. Public hostnames therefore need rewritten views of the discovery documents; see [architecture/inji-mobile-wallet.md](../architecture/inji-mobile-wallet.md) for the details and the Inji-specific findings.
+Keycloak's issuer is pinned to the Docker-internal `http://keycloak:8080` because Mimoto's JWT `aud` and Certify's `issuer-uri` must equal the token's `iss`. Public hostnames therefore need rewritten views of the discovery documents; see [reference/inji-mobile-wallet.md](../reference/inji-mobile-wallet.md) for the details and the Inji-specific findings.

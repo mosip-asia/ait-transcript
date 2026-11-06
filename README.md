@@ -1,227 +1,227 @@
-# AIT Transcript VC Journey
+# Institutional Verifiable Credential Platform (AIT Issuer)
 
-Local Docker-only walkthrough: student requests a transcript VC, registrar approves in the app, student claims into **Inji Web**, presents to **Inji Verify**. The same stack runs publicly on GCP, where the credential can also be claimed into the **Inji mobile wallet** (see [Developing an Inji-based mobile wallet](#developing-an-inji-based-mobile-wallet)).
+An enterprise Verifiable Credential (VC) platform built on **MOSIP Inji Certify**, issuing W3C VCDM 2.0 credentials (JSON-LD with Ed25519Signature2020) via OpenID4VCI.
+
+The platform provides end-to-end credential lifecycle management: institutional clearance workflow, dynamic data resolution, cryptographic signing, credential design studio, and wallet issuance.
 
 ```mermaid
-flowchart LR
-  S["Student"] -->|1. request| App["Demo app :4100"]
-  R["Registrar"] -->|2. approve / revoke| App
-  App -->|3. claim link| Web["Inji Web :4004"]
-  App -.->|ledger search, revoke| Certify["Inji Certify (issuer)"]
-  Web -->|Keycloak login, OpenID4VCI| Certify
-  Certify -->|signed VC| Web
-  Web -->|4. present VC| Verify["Inji Verify :4007"]
-  Verify -->|valid / revoked / expired| S
+flowchart TD
+    subgraph Client["Holder Wallets & Verifiers"]
+        Wallet["Holder Wallet<br>(Inji Web :4004 / Mobile)"]
+        Verifier["Inji Verify :4007"]
+    end
+
+    subgraph Platform["Institutional VC Platform (src/)"]
+        Certify["Inji Certify Engine<br>(OpenID4VCI :9091)"]
+        Plugin["IssuerDataProviderPlugin<br>(Java 21 SPI)"]
+        Gateway["Institutional Clearance Workflow<br>(Gateway :8000)"]
+        VCLab["VC Lab Registry<br>(Contexts, Schemas, Templates)"]
+        Certify --- Plugin
+        Plugin -->|1. POST /evaluations| Gateway
+        Plugin -->|2. GET /student/{sub}/transcript| Adapter
+    end
+
+    subgraph Upstream["Institutional Systems & Ingress"]
+        Adapter["SIS Data Adapter :8000"]
+        Auth["Keycloak / OAuth Server :9080"]
+    end
+
+    Wallet -->|Bearer Token & Offer| Certify
+    Wallet -.->|Auth Code Flow| Auth
+    Wallet -->|Present Credential| Verifier
+    Certify -.->|Fetch Schemas / Contexts| VCLab
 ```
 
-Full service and port topology: [wiki/architecture/vc-stack.md](./wiki/architecture/vc-stack.md).
+---
 
-## Prerequisites
+## 1. Repository Architecture
 
-- Docker Desktop (Compose v2) — no host Python, `pip`, or `uvicorn`.
-- `jq`, `curl`, `awk` on the host (used by the setup scripts, not just inside containers). `curl`/`awk` ship with macOS/Linux; `jq` may need `brew install jq`.
-- **Windows:** run everything inside WSL2, not Git Bash — enable Docker Desktop's WSL integration, clone the repo into the WSL filesystem (not `/mnt/c/...`), and `sudo apt install jq` if it's missing. Git Bash mangles absolute paths in bind-mount arguments (e.g. the keystore step's `-v "$PWD/certs:/certs"`), which silently breaks the mount.
+The codebase is organized into modular components separating pure source code, container packaging, and deployment orchestration:
 
-## Local development
-
-### Start the stack
-
-From the repo root:
-
-```sh
-chmod +x run-demo.sh vc-stack/bootstrap.sh vc-stack/smoke.sh
-./run-demo.sh
+```
+ait-transcript/
+├── src/                                  # 100% PURE APPLICATION SOURCE CODE
+│   ├── issuer/                           # Java 21 SPI Data-Provider Plugin (pom.xml + src/)
+│   ├── gateway/                          # Institutional clearance & permission workflow engine
+│   └── vc-lab/                           # VC Designer: W3C JSON-LD contexts, schemas, visual templates
+│
+├── docker/                               # CONTAINER PACKAGING RECIPES
+│   ├── Dockerfile.certify                # Bakes src/issuer SPI plugin into Inji Certify
+│   └── Dockerfile.gateway                # Packages src/gateway
+│
+├── compose.yaml                          # Local developer platform compose (builds from src/)
+├── compose.dev.yaml                      # Loop 3: Hot JAR mount dev overlay (~3s reload)
+├── .env.example                          # Root developer environment configuration
+├── pyproject.toml / uv.lock              # Modern Python dependency management (uv)
+│
+├── deploy/                               # STANDALONE PRODUCTION / STAGING DEPLOYMENT
+│   ├── compose.yaml                      # Pulls pre-built registry images (no source build)
+│   ├── .env.example                      # Production environment template
+│   ├── config/                           # Self-contained Inji Certify properties & SQL schemas
+│   └── remote-deploy.sh                  # Automated VM deployment script used by CI/CD
+│
+├── installations/                        # MULTI-TENANT CONFIGURATION PROFILES
+│   ├── ait/                              # Academic Transcript profile
+│   └── hackathon/                        # Developer Passport & Achievement profile
+│
+└── vc-stack/                             # FULL DEMO STACK (Inji Web, Keycloak, Portal, Verify)
 ```
 
-This builds the demo app image, regenerates `vc-stack/config/student_identity_data.csv` from `data/students.json` (inside Docker), runs `./vc-stack/bootstrap.sh` (full stack + demo app), and leaves everything running.
+---
 
-**Docker-only equivalent** (after first `./run-demo.sh` has created `vc-stack/.env` and the external network):
+## 2. Prerequisites
 
-```sh
-mkdir -p .demo-state
-docker compose -f vc-stack/docker-compose.yaml up -d --build
+- **Docker Desktop** (Compose v2) with Linux containers or WSL2 (on Windows).
+- **Python 3.11+** and [`uv`](https://github.com/astral-sh/uv) (recommended for running tests and scripts).
+- `jq`, `curl`, `awk` on the host.
+- **Windows:** Run commands inside WSL2, not Git Bash, to avoid path-mangling issues on volume bind-mounts.
+
+---
+
+## 3. Deploy locally
+
+Run every command from the repository root. Depending on your task, you can start the **Core Issuer Platform** (fast, focused) or the **Full End-to-End Demo** (with wallet, registrar portal, and verifier).
+
+### Mode A: Core Issuer Platform (Developer Fast-Track)
+
+Spins up the core Verifiable Credential Platform (`certify`, `gateway`, `vdr`, `database`, `adapter`) built directly from `src/`:
+
+```bash
+# 1. Setup local environment
+cp .env.example .env
+
+# 2. Build and start the platform
+docker compose up -d --build
 ```
 
-Use `./run-demo.sh` when you change `data/students.json` so Certify’s CSV stays in sync.
+#### Fast Inner Loops for Plugin Development:
+- **Loop 1: In-Memory Unit Tests (~3s):**
+  ```bash
+  cd src/issuer && mvn test
+  ```
+- **Loop 2: Container Build & Run (~7s):**
+  ```bash
+  docker compose up -d --build
+  ```
+- **Loop 3: Hot JAR Mount Mode (~3s Reload):**
+  Enable hot-reload in `.env`:
+  ```env
+  COMPOSE_FILE=compose.yaml:compose.dev.yaml
+  ```
+  Then recompile and restart Certify without rebuilding container images:
+  ```bash
+  mvn -f src/issuer/pom.xml package -DskipTests && docker compose restart certify
+  ```
 
-### Demo app persistence
+---
 
-Request/approval SQLite state lives at **`.demo-state/demo_requests.db`** on the host (bind-mounted into the container). It survives `docker compose restart demo-app` and `docker compose down` / `up`. Delete that file to reset workflow state.
+### Mode B: Full End-to-End Demo (Stakeholder Journey)
 
-### Developing the demo app
+Brings up the complete multi-service demonstration journey (Inji Web Wallet, Keycloak OAuth Server, Registrar Portal, and Inji Verify):
 
-`app/` and `data/` are **bind-mounted** into the container; `uvicorn` runs with **`--reload`**, so Python and template edits apply without rebuilding. Rebuild only when `app/requirements.txt` changes:
-
-```sh
-docker compose -f vc-stack/docker-compose.yaml build demo-app
-docker compose -f vc-stack/docker-compose.yaml up -d demo-app
+```bash
+chmod +x run-demo.sh vc-stack/bootstrap.sh vc-stack/smoke.sh vc-stack/issuer-smoke.sh
+INSTALLATION=ait ./run-demo.sh
 ```
 
-The demo app calls Certify server-to-server (`ledger-search`, status list, revoke — see [wiki/concepts/vc-revocation.md](./wiki/concepts/vc-revocation.md)) but never Mimoto or Keycloak; for claiming and verifying it only renders links to **http://localhost:4004** and **http://localhost:4007** for the presenter’s browser.
+`run-demo.sh` prepares the database, generates mock student data, renders Mimoto issuer configurations, compiles the plugin JAR, brings up the containers in order, and verifies health. A successful start ends with `Stack is healthy.`
 
-## Local testing
-
-Stack smoke (Inji services must be up):
-
-```sh
-./vc-stack/smoke.sh
+#### To Reset or Switch Installation:
+```bash
+INSTALLATION=ait ./run-demo.sh --wipe          # Reset AIT stack
+INSTALLATION=hackathon ./run-demo.sh --wipe    # Switch to Hackathon profile
 ```
 
-Inji Web VC download readiness (config always; `--live` needs stack up — also run from `smoke.sh`):
+---
 
-```sh
-python3 vc-stack/test_inji_web_vc_readiness.py
-python3 vc-stack/test_inji_web_vc_readiness.py --live
+## 4. How to test
+
+All test suites are automated and runnable locally on your host or in CI.
+
+### Unit & Host Tests (Run without Docker)
+
+Using `uv` (or `.venv`):
+
+```bash
+# Run all host verification tests:
+uv run python data/test_generate_csv.py
+uv run python vc-stack/test_installation_guard.py
+uv run python vc-stack/test_installations.py
+uv run python vc-stack/test_authorization_server.py
+uv run python vc-stack/test_configuration_contract.py
+uv run python adapter/test_adapter.py
+uv run python src/gateway/tests/test_credential_types.py
+uv run python src/gateway/tests/test_evaluations.py
+uv run python sis-bridge/test_bridge.py
+
+# Run Java plugin unit tests:
+cd src/issuer && mvn test
 ```
 
-Guards regressions that broke issuer list, Keycloak login, or same-origin token/download (`:4004` vs `:9099`). Full OAuth + PDF is still manual.
-
-Demo app logic (host Python **or** inside the demo image):
-
-```sh
-python3 app/test_auth.py
-python3 app/test_requests.py
-```
-
-```sh
-docker compose -f vc-stack/docker-compose.yaml run --rm --no-deps demo-app python app/test_auth.py
-docker compose -f vc-stack/docker-compose.yaml run --rm --no-deps demo-app python app/test_requests.py
-```
-
-Data fixture tests still need Python on the host (or run similarly via `demo-app`):
-
-```sh
-python3 data/test_ait_courses.py
-python3 data/test_generate_csv.py
-```
-
-## Deploying to GCP
-
-The demo also runs as a public deployment on a GCE VM behind Caddy (TLS), reachable without any local setup. The VM, DNS and firewall are defined in [mosip-asia/ait-vc](https://github.com/mosip-asia/ait-vc) (`ait-vc-transcript-demo/`); this repo only holds the app and the deploy workflow.
-
-The VM is off outside Mon-Fri 08:30-18:30 Asia/Bangkok; the workflow's pre-flight says so if you deploy then.
-
-### GCP infrastructure
-
-Everything below is defined in Terraform in [mosip-asia/ait-vc](https://github.com/mosip-asia/ait-vc), not in this repo. Two roots are involved: `ait-vc-mgmt/terraform` (the project envelope and the DNS zone) and `ait-vc-transcript-demo/terraform` (the workload).
-
-| GCP service | What it does here | Terraform |
+| Module | Test Target | What It Verifies |
 |---|---|---|
-| **Resource Manager, Billing** | Project `ait-vc-transcript-demo`, billing link, deletion lien. Only the Compute and IAM APIs are enabled. | `ait-vc-mgmt`: `prj-transcript-demo.tf` |
-| **Compute Engine: VM** | One `e2-standard-2` (Debian 12, 30 GB `pd-balanced`, Shielded VM) in `asia-southeast1-b` running the whole Docker Compose stack. Its startup script installs Docker, Caddy and Dozzle and restarts the stack on every boot. | `compute.tf`, `startup.sh.tpl` |
-| **Compute Engine: instance schedule** | Starts the VM 08:30 and stops it 18:30, Mon-Fri Asia/Bangkok, to save cost. | `schedule.tf` |
-| **VPC, static IP, firewall** | A dedicated VPC and subnet, a permanent static external IP, and firewall rules for ports 80/443 (web), 22 (key-only SSH for GitHub runners) and 22 via IAP. Container ports stay closed. | `network.tf` |
-| **Cloud DNS** | A records for the apex and `*.` wildcard pointing at the static IP, in the zone owned by `ait-vc-mgmt`. | `dns.tf` |
-| **IAM, OS Login, IAP** | The VM's service account holds no roles. Operators listed in `admin_users` get OS Login admin and IAP tunnel access. | `compute.tf` |
-| **Cloud Storage** | Holds the Terraform state (`gs://ait-vc-dpi-ait-ac-th-tfstate`). Not used at runtime. | `backends.tf` |
+| **Gateway** | `src/gateway/tests/test_credential_types.py` | Credential clearance rules, hold checks, zero balance, conferral predicates |
+| **Gateway** | `src/gateway/tests/test_evaluations.py` | In-process evaluation of `POST /evaluations` across all installation personas |
+| **Issuer Plugin** | `src/issuer/` (`mvn test`) | SPI `fetchData()` contract, HTTP retry/timeouts, strict JSON escaping, trace keys |
+| **Adapter** | `adapter/test_adapter.py` | Validates OpenAPI contracts (`adapter/openapi.yaml`) against VCDM 2.0 schemas |
+| **Contract** | `vc-stack/test_configuration_contract.py` | Holds Compose files and architecture documentation in sync |
+| **Auth Server** | `vc-stack/test_authorization_server.py` | Validates OIDC issuer URLs, Keycloak realm mappings, and public endpoints |
 
-Not GCP services, but on the VM: **Caddy** terminates TLS (automatic Let's Encrypt certificates) and blocks the admin paths, and **Dozzle** shows container logs behind basic auth.
+---
 
-Change the VM, schedule, network or DNS by editing that Terraform in the `ait-vc` repo. A change to this repo's code never touches them; it only needs a [deploy](#deploy-a-change).
+### Integration Smoke Tests (Requires Running Stack)
 
-### Deploy a change
+A smoke test verifies real cryptographic issuance, signature verification, and ledger recording.
 
-A deploy is manual and ships exactly one commit; nothing on the VM pulls code by itself.
+| Smoke Suite | Pre-requisite | Command | Expected Output |
+|---|---|---|---|
+| **Issuer Smoke** | Core platform up | `./vc-stack/issuer-smoke.sh` | `All Issuer-only smoke checks passed.` |
+| **Full Stack Smoke** | Demo stack up | `./vc-stack/smoke.sh` | `All smoke checks passed.` |
 
-```mermaid
-sequenceDiagram
-  actor Dev
-  participant GH as GitHub Actions runner
-  participant VM as GCP VM (as deploy user)
-  participant Stack as Docker Compose stack
-  Dev->>GH: Run workflow (branch or tag)
-  GH->>VM: Pre-flight: SSH port 22 answers?
-  GH->>VM: scp deploy/remote-deploy.sh
-  GH->>VM: ssh + sudo, run's GITHUB_TOKEN on stdin
-  VM->>VM: git fetch that one commit into /opt/ait-transcript-demo
-  VM->>VM: copy app.env to vc-stack/.env
-  VM->>Stack: run-demo.sh (build, CSV, bootstrap, up -d, restart proxies)
-  GH->>Stack: Health check: /student/login and Keycloak return 200
-  GH-->>Dev: Green or red
-```
+---
 
-1. Push your branch to GitHub (`mosip-asia/ait-transcript-demo`).
-2. **Actions → Deploy → Run workflow**, choose the branch or tag.
-3. The workflow logs in to the VM as `deploy`, runs `deploy/remote-deploy.sh` (fetch that commit into `/opt/ait-transcript-demo`, copy the VM's `app.env` to `vc-stack/.env`, run `run-demo.sh`), then health-checks `/student/login` and Keycloak's `openid-configuration`. Green means both returned 200.
-4. Check the change on the [public URLs](#accessing-the-demo-on-gcp). Logs: Dozzle, or `docker logs <container>` over SSH.
+## 5. Local Access & Stakeholder Walkthrough
 
-## Accessing the demo locally
+When running the Full Demo Stack (`./run-demo.sh`):
 
-Keycloak admin console: **`http://localhost:9080/admin/`** (admin / admin). Inji Web student login uses **`http://localhost:9080`** (no `/etc/hosts` required).
+### Local Port Endpoints
 
-### Local URLs
+| Service | Local URL | Role |
+|---|---|---|
+| **Student Portal** | [http://localhost:4100/student/login](http://localhost:4100/student/login) | Student requests transcript |
+| **Registrar Portal** | [http://localhost:4100/registrar/login](http://localhost:4100/registrar/login) | Registrar approves or revokes issuance |
+| **Inji Web Wallet** | [http://localhost:4004](http://localhost:4004) | Digital wallet to claim & store credentials |
+| **Inji Verify** | [http://localhost:4007](http://localhost:4007) | Verifier to validate credential signatures & status |
+| **Inji Certify** | [http://localhost:9091](http://localhost:9091) | OpenID4VCI credential issuer & metadata |
+| **Keycloak Admin** | [http://localhost:9080/admin/](http://localhost:9080/admin/) | Identity provider (`admin` / `admin`) |
 
-| Service | URL |
-|---|---|
-| Student portal | http://localhost:4100/student/login |
-| Registrar portal | http://localhost:4100/registrar/login |
-| Inji Web | http://localhost:4004 |
-| Inji Verify | http://localhost:4007 |
-| Keycloak admin | http://localhost:9080 (admin / admin) |
+### Stakeholder Walkthrough:
+1. Open **Student Portal** ([http://localhost:4100/student/login](http://localhost:4100/student/login)) $\rightarrow$ Select `Nara Wattanakul` (`ait-2026-0001`) $\rightarrow$ Click **Request my transcript VC**.
+2. Open **Registrar Portal** ([http://localhost:4100/registrar/login](http://localhost:4100/registrar/login)) $\rightarrow$ Sign in as Academic Registrar $\rightarrow$ Click **Approve**.
+3. Return to Student Portal $\rightarrow$ Click **Claim your credential** $\rightarrow$ Redirects to **Inji Web**.
+4. In Inji Web, sign in (`ait-2026-0001` / `inji`), select **AIT University**, and download the **AIT Transcript**.
+5. Open **Inji Verify** ([http://localhost:4007](http://localhost:4007)) $\rightarrow$ Upload the downloaded credential JSON $\rightarrow$ Verdict reports **`allChecksSuccessful: true`**.
 
-### Stakeholder walkthrough
+---
 
-After `./run-demo.sh` (no further terminal steps):
+## 6. Deploying to GCP
 
-1. Open **http://localhost:4100/student/login** → pick a student → **Request my transcript VC**.
-2. Open **http://localhost:4100/registrar/login** → approve that request.
-3. Reload the student tab → use **Claim your credential** → Inji Web → AIT University → **AIT Transcript** → Keycloak login.
-4. Download/open the credential PDF — layout must match `design/pdf-ait-transcript-template.html` (presenter visual check).
-5. From the student portal, open **Inji Verify** → present the credential → verification succeeds.
-6. Repeat with a second student persona.
+The demonstration environment is continuously deployed to a Google Compute Engine VM behind Caddy (TLS):
 
-## Accessing the demo on GCP
+- **Student Portal:** `https://transcript-demo.ait-vc.dpi.ait.ac.th/student/login`
+- **Registrar Portal:** `https://transcript-demo.ait-vc.dpi.ait.ac.th/registrar/login`
+- **Inji Web Wallet:** `https://wallet.transcript-demo.ait-vc.dpi.ait.ac.th`
+- **Inji Verify:** `https://verify.transcript-demo.ait-vc.dpi.ait.ac.th`
 
-**Availability:** the VM runs **Mon-Fri 08:30-18:30 Asia/Bangkok** and is off otherwise, so outside those hours the URLs time out.
+Deployments are triggered via GitHub Actions: **Actions $\rightarrow$ Deploy $\rightarrow$ Run workflow**.
 
-### Public URLs
+---
 
-| Service | URL |
-|---|---|
-| Student portal | https://transcript-demo.ait-vc.dpi.ait.ac.th/student/login |
-| Registrar portal | https://transcript-demo.ait-vc.dpi.ait.ac.th/registrar/login |
-| Inji Web | https://wallet.transcript-demo.ait-vc.dpi.ait.ac.th |
-| Inji Verify | https://verify.transcript-demo.ait-vc.dpi.ait.ac.th |
-| API gateway (Certify, Mimoto, Verify, Keycloak realms) | https://api.transcript-demo.ait-vc.dpi.ait.ac.th |
-| Keycloak (student logins, realm `inji`) | https://keycloak.transcript-demo.ait-vc.dpi.ait.ac.th |
-| Container logs (Dozzle, basic auth) | https://logs.transcript-demo.ait-vc.dpi.ait.ac.th |
+## 7. Documentation & References
 
-## Developing an Inji-based mobile wallet
-
-The GCP deployment issues the transcript to the Inji mobile wallet as well as to Inji Web. It works with Inji Wallet **v0.22.1**, confirmed end to end on a physical iPhone through TestFlight (iOS only; Android is untried). Developers building their own wallet on Inji Wallet need these three public hostnames and one app setting:
-
-| Need | Value |
-|---|---|
-| Wallet backend (Mimoto issuer list and token proxy, Certify metadata and credential endpoint) | `https://api.transcript-demo.ait-vc.dpi.ait.ac.th` |
-| Student login (Keycloak realm `inji`) | `https://keycloak.transcript-demo.ait-vc.dpi.ait.ac.th` |
-| Check a credential by QR in the browser | `https://verify.transcript-demo.ait-vc.dpi.ait.ac.th` |
-| App setting (`.env`) | `MIMOTO_HOST=https://api.transcript-demo.ait-vc.dpi.ait.ac.th` (no trailing slash, no `/v1/mimoto`) |
-
-| Wallet values | |
-|---|---|
-| Issuer / credential | `AITUniversity` / `ait-transcript` (scope `ait_transcript_vc_ldp`, format `ldp_vc`) |
-| OAuth client / redirect | `wallet-demo` / `io.mosip.residentapp.inji://oauthredirect` (register this URL scheme in the app) |
-| Test students | mock students in [data/students.json](./data/students.json); ask the maintainer for the test password |
-
-What a developer should know before starting:
-
-- **Use a physical iPhone.** Inji Wallet v0.22.1 does not run in the iOS Simulator. Building on current Xcode needs a few changes (iOS 15 minimum, two Podfile settings, an `expo-localization` patch) and, **for iOS 27, a `SceneDelegate`**: without it the app is killed at launch. **Start from [wallet/](./wallet/README.md):** `BUNDLE_ID=... TEAM_ID=... ./wallet/apply.sh ios <dir>` clones Inji Wallet v0.22.1 and applies all of these changes (the AIT hosts, signing, build fixes and `SceneDelegate`) from two small patches. The step-by-step recipe, with the code, is in [wiki/guides/wallet-developer-urls.md](./wiki/guides/wallet-developer-urls.md).
-- **Always use the `api.` host, not `wallet.`.** The phone gets its own issuer list and Certify metadata from `api.`; the same paths on `wallet.` return Docker-internal values that only Inji Web can use. Why: [wiki/architecture/inji-mobile-wallet.md](./wiki/architecture/inji-mobile-wallet.md).
-- **The login code goes to Mimoto, not Keycloak.** `wallet-demo` is a confidential client, so Inji Wallet posts the code to `.../v1/mimoto/get-token/AITUniversity` and Mimoto authenticates for it.
-- **Download then verify happens on the phone.** Credentials issued before 2026-10-15 carry an old context URL that a phone cannot load; use freshly issued ones (the registrar portal's reissue).
-- **Not enabled:** presenting a credential from the phone to Inji Verify (OpenID4VP). Verify by QR in the browser instead.
-- **Availability:** the VM runs Mon-Fri 08:30-18:30 Asia/Bangkok only.
-
-If the app only says the download failed, the request order in the platform logs shows where it stopped; see "Where a failed download stopped" in the guide above.
-
-### Wallets that are not Inji Wallet
-
-A generic OpenID4VCI wallet cannot connect to the platform yet: the only OAuth client is confidential, and the advertised token endpoint is not public. Nothing has been tested with a non-Inji wallet. What the platform exposes, what a wallet must support, the workaround that exists today and the changes needed are in [wiki/guides/other-openid4vci-wallets.md](./wiki/guides/other-openid4vci-wallets.md).
-
-## Docs
-
-- [wiki/OVERVIEW.md](./wiki/OVERVIEW.md) — architecture and gotchas
-- [wallet/README.md](./wallet/README.md) — the per-platform patches (`common/`, `ios/`) and one-command script that turn Inji Wallet v0.22.1 into the AIT-connected wallet
-- [wiki/guides/wallet-developer-urls.md](./wiki/guides/wallet-developer-urls.md) — URLs, flow and iOS build recipe for Inji-based wallets
-- [wiki/guides/other-openid4vci-wallets.md](./wiki/guides/other-openid4vci-wallets.md) — connecting a non-Inji OpenID4VCI wallet
-- [wiki/architecture/inji-mobile-wallet.md](./wiki/architecture/inji-mobile-wallet.md) — why the phone gets its own views of the issuer list and metadata
+- [Architecture & Topology (`wiki/architecture/vc-stack.md`)](./wiki/architecture/vc-stack.md)
+- [ADR 0001: Approval Gate Beside the Data Path](./docs/adr/0001-approval-gate-beside-the-data-path.md)
+- [Inji Certify Standalone Deployment (`deploy/README.md`)](./deploy/README.md)
+- [Gateway Workflow Engine (`src/gateway/README.md`)](./src/gateway/README.md)
+- [VC Lab Designer (`src/vc-lab/README.md`)](./src/vc-lab/README.md)
+- [Inji Mobile Wallet Guide (`wallet/README.md`)](./wallet/README.md)

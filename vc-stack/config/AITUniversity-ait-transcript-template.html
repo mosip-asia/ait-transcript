@@ -15,8 +15,6 @@
     table.grid { width: 100%; border-collapse: collapse; }
     table.grid td { border: 1px solid #000; padding: 3px 5px; vertical-align: top; }
     .label { font-weight: 700; font-size: 9px; }
-    /* Flush under student grid; table height is set in courseTableHtml (iText ignores % grow). */
-    .courses-slot { margin: 0; padding: 0; }
     .sheet { position: relative; z-index: 1; }
   </style>
 </head>
@@ -75,9 +73,21 @@
     </tr>
   </table>
 
-  <div class="courses-slot">
-    #claimValue("courseTableHtml")
-  </div>
+  <!-- Mimoto 0.21 hands a list-of-objects claim to Velocity as "" (CredentialPDFGeneratorService.formatValue),
+       so the semester table cannot be built from courses here; the course body is courseList, one line per course. -->
+  <table class="grid" style="margin-top: 0;">
+    <tr>
+      <td colspan="4"><span class="label">Courses and Grades</span><br/>
+        <div style="white-space: pre-wrap;">#claimValue("courseList")</div>
+      </td>
+    </tr>
+    <tr>
+      <td><span class="label">Coursework Credits Gained</span><br/>#claimValue("courseworkCredits")</td>
+      <td><span class="label">Thesis Credits Gained</span><br/>#claimValue("thesisCredits")</td>
+      <td><span class="label">Total Number of Credits Gained</span><br/>#claimValue("totalCredits")</td>
+      <td><span class="label">Thesis Examination</span><br/>#claimValue("thesisExamination")</td>
+    </tr>
+  </table>
 
   <table class="grid" style="margin-top: 0;">
     <tr>

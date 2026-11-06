@@ -1,0 +1,10 @@
+# Stage 1: Build the Certify Data-provider plugin
+FROM maven:3.9-eclipse-temurin-21 AS builder
+WORKDIR /build
+COPY src/issuer/pom.xml .
+COPY src/issuer/src ./src
+RUN mvn -q package -DskipTests
+
+# Stage 2: Inji Certify with the plugin pre-installed
+FROM injistack/inji-certify-with-plugins:0.14.0
+COPY --from=builder /build/target/issuer-data-provider-plugin.jar /home/inji/additional_jars/issuer-data-provider-plugin.jar
