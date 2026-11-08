@@ -40,6 +40,7 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
       - "ait-itserv-uat-vm:100.70.36.145"
+      - "ait-itserv-dev-vm:100.70.236.72"
     ports:
       - "9090:8090"
     environment:
