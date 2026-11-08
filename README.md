@@ -18,7 +18,7 @@ flowchart TD
         VCLab["VC Lab Registry<br>(Contexts, Schemas, Templates)"]
         Certify --- Plugin
         Plugin -->|1. POST /evaluations| Gateway
-        Plugin -->|2. GET /student/{sub}/transcript| Adapter
+        Plugin -->|"2. GET /student/{sub}/transcript"| Adapter
     end
 
     subgraph Upstream["Institutional Systems & Ingress"]
@@ -96,9 +96,9 @@ sequenceDiagram
     Auth-->>Wallet: Returns access_token (with sub & scope)
     Wallet->>Certify: 2. POST /credential (Bearer access_token)
     Note over Certify: Validates JWT signature against Auth JWKS.<br/>Extracts verified `sub` & `scope`.
-    Certify->>Gate: 3. POST /evaluations { sub, scope }
+    Certify->>Gate: 3. POST /evaluations (sub, scope)
     Gate-->>Certify: Evaluation passed (no holds, conferred, zero balance)
-    Certify->>SIS: 4. GET /student/{sub}/transcript
+    Certify->>SIS: 4. GET /student/:sub/transcript
     SIS-->>Certify: Returns student JSON record
     Note over Certify: 5. Velocity Template Interpolation & Projection:<br/>• Missing fields: halts issuance.<br/>• Extra fields: dropped automatically (privacy whitelist).
     Certify->>DB: 6. Allocate Bitstring Status List index & write ledger
