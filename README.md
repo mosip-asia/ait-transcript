@@ -50,7 +50,7 @@ ait-transcript/
 │   └── credentials/                      # Declarative JSON credential configurations (e.g. ait-transcript.json)
 │
 ├── scripts/                              # AUTOMATION & TESTING SCRIPTS
-│   └── issue_student.py                  # Headless OpenID4VCI pre-authorized issuance client
+│   └── smoke.sh -> ../deploy/smoke.sh    # Symlink to deploy smoke test
 │
 ├── docker/                               # CONTAINER PACKAGING RECIPES
 │   ├── Dockerfile.certify                # Bakes src/issuer SPI plugin into Inji Certify
@@ -66,7 +66,8 @@ ait-transcript/
 │   ├── compose.yaml                      # Pulls pre-built registry images (no source build)
 │   ├── .env.example                      # Production environment template
 │   ├── config/                           # Self-contained Inji Certify properties & SQL schemas
-│   └── remote-deploy.sh                  # Automated VM deployment script used by CI/CD
+│   ├── remote-deploy.sh                  # Automated VM deployment script used by CI/CD
+│   └── smoke.sh                          # Headless OpenID4VCI issuance smoke test (pure bash)
 │
 ├── installations/                        # MULTI-TENANT CONFIGURATION PROFILES
 │   ├── ait/                              # Academic Transcript profile
@@ -169,15 +170,18 @@ ACCESS_TOKEN=$(curl -s -X POST http://localhost:9091/v1/certify/oauth/token \
 ```
 This tests the full running Inji Certify engine, real database templates, DataProviderPlugin, and Data Source without external OAuth or VDR dependencies.
 
-#### 3. One-Command Headless Issuance CLI (`scripts/issue_student.py`)
-To test the complete issuance flow end-to-end with cryptographic client proof-of-possession in ~1 second, use the included CLI:
+#### 3. One-Command Headless Issuance Smoke Test (`deploy/smoke.sh`)
+To verify the complete issuer engine, GitOps template, and SIS connectivity end-to-end without Python or OAuth dependencies, run the included pure bash smoke test:
 
 ```bash
-# Issue transcript for student st123456 and print the signed Verifiable Credential:
-uv run python scripts/issue_student.py st123456
+# Run smoke test for default student (st123456):
+./deploy/smoke.sh
 
-# Save the issued credential to a JSON file:
-uv run python scripts/issue_student.py st123456 -o st123456.vc.json
+# Or test a specific student ID:
+./deploy/smoke.sh st123457
+
+# Target a remote deployment (e.g. over NetBird VPN):
+./deploy/smoke.sh st123456 http://100.x.y.z:9091 ait-transcript
 ```
 
 ---
