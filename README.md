@@ -129,6 +129,38 @@ sequenceDiagram
    - **Cryptographic Proof:** The document is canonicalized into RDF triples (URDNA2015) and signed with the Issuer's private key (`Ed25519Signature2020`).
    - **Delivery:** The finalized W3C VC is delivered to the wallet. When Inji Verify checks the credential later, it fetches the public `@context` and verifies the status bit to ensure it has not been revoked.
 
+### Testing APIs & Data Sources Without OAuth/VDR
+
+If you only want to verify that your Data Source or Adapter is integrated successfully, you **do not need Keycloak, a wallet, or a VDR**.
+
+#### 1. Interactive Swagger UI
+Inji Certify includes an interactive Swagger UI for exploring and testing endpoints:
+* **Swagger UI:** [http://localhost:9091/v1/certify/swagger-ui/index.html](http://localhost:9091/v1/certify/swagger-ui/index.html)
+* **OpenAPI Spec:** [http://localhost:9091/v1/certify/v3/api-docs](http://localhost:9091/v1/certify/v3/api-docs)
+
+#### 2. Official OpenID4VCI Pre-Authorized Code Flow (Headless Testing)
+Official Inji Certify supports the **Pre-Authorized Code Flow** natively. Certify acts as its own token authority, allowing automated server-to-server issuance testing without human login:
+
+```bash
+# 1. Pre-authorize issuance for a student (creates credential offer):
+OFFER_URI=$(curl -s -X POST http://localhost:9091/v1/certify/pre-authorized-data \
+  -H "Content-Type: application/json" \
+  -d '{"credential_configuration_id": "ait-transcript", "claims": {"registrationNo": "st125001"}}' \
+  | jq -r .credential_offer_uri)
+
+# 2. Extract offer ID and fetch the pre-authorized code:
+OFFER_ID=$(echo "$OFFER_URI" | sed 's/.*credential-offer-data%2F//')
+PRE_AUTH_CODE=$(curl -s "http://localhost:9091/v1/certify/credential-offer-data/$OFFER_ID" \
+  | jq -r '.grants["urn:ietf:params:oauth:grant-type:pre-authorized_code"]["pre-authorized_code"]')
+
+# 3. Exchange code for an Access Token directly with Inji Certify:
+ACCESS_TOKEN=$(curl -s -X POST http://localhost:9091/v1/certify/oauth/token \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  -d "grant_type=urn:ietf:params:oauth:grant-type:pre-authorized_code&pre-authorized_code=$PRE_AUTH_CODE" \
+  | jq -r .access_token)
+```
+This tests the full running Inji Certify engine, real database templates, DataProviderPlugin, and Data Source without external OAuth or VDR dependencies.
+
 ---
 
 ## 3. Prerequisites
@@ -257,6 +289,7 @@ When running the Full Demo Stack (`./run-demo.sh`):
 | **Inji Web Wallet** | [http://localhost:4004](http://localhost:4004) | Digital wallet to claim & store credentials |
 | **Inji Verify** | [http://localhost:4007](http://localhost:4007) | Verifier to validate credential signatures & status |
 | **Inji Certify** | [http://localhost:9091](http://localhost:9091) | OpenID4VCI credential issuer & metadata |
+| **Inji Certify Swagger UI** | [http://localhost:9091/v1/certify/swagger-ui/index.html](http://localhost:9091/v1/certify/swagger-ui/index.html) | Interactive API exploration & Swagger testing |
 | **Keycloak Admin** | [http://localhost:9080/admin/](http://localhost:9080/admin/) | Identity provider (`admin` / `admin`) |
 
 ### Stakeholder Walkthrough:
