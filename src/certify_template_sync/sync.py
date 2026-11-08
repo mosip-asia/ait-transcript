@@ -305,12 +305,13 @@ def main():
     print(f"    Loaded {len(configs)} configuration(s): {[c[0] for c in configs]}")
     sql_content = generate_full_sql(configs)
 
-    if args.generate_sql or (not args.apply and not args.check):
+    if args.generate_sql:
         with open(seed_sql_path, "w", encoding="utf-8") as f:
             f.write(sql_content)
         print(f"[+] Generated seed SQL at: {seed_sql_path}")
 
-    if args.apply:
+    # Default action is --apply if not --check and not --generate-sql
+    if args.apply or (not args.generate_sql and not args.check):
         print("[*] Synchronizing templates to PostgreSQL database...")
         success = execute_sql(sql_content)
         if not success:
