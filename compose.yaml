@@ -89,19 +89,19 @@ services:
       - ./src/vc-lab/contexts:/usr/share/nginx/html/contexts:ro
 
   template-sync:
-    image: ghcr.io/astral-sh/uv:python3.11-alpine
+    build:
+      context: .
+      dockerfile: src/certify-template-sync/Dockerfile
+    image: ghcr.io/mosip-asia/certify-template-sync:local
     profiles:
       - sync
     volumes:
-      - .:/workspace:ro
-    working_dir: /workspace
+      - ./config/credentials:/app/config/credentials:ro
     environment:
       - POSTGRES_HOST=database
       - POSTGRES_PORT=5432
       - POSTGRES_USER=${POSTGRES_USER}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
-      - CREDENTIALS_DIR=/workspace/config/credentials
-    command: uv run --no-project --with "psycopg[binary]>=3.1.0" src/certify-template-sync/sync.py --apply
 
 volumes:
   issuer-db:
