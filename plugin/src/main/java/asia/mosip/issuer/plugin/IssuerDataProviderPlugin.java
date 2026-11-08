@@ -225,6 +225,7 @@ public class IssuerDataProviderPlugin implements DataProviderPlugin {
         if (!(claims.get("sub") instanceof String sub) || sub.isEmpty()) {
             throw new DataProviderExchangeException(INVALID_ACCESS_TOKEN);
         }
+        sub = extractSub(sub);
         if (gate.isPresent()) {
             gate.get().evaluate(sub, claims.get("scope") instanceof String scope ? scope : "");
         }
@@ -235,6 +236,28 @@ public class IssuerDataProviderPlugin implements DataProviderPlugin {
             data.put("tokenClientId", claims.get("client_id"));
         }
         return data;
+    }
+
+    private static String extractSub(String sub) {
+        if (sub.startsWith("{") && sub.endsWith("}")) {
+            try {
+                JSONObject json = strictObject(sub);
+                if (json.has("registrationNo")) {
+                    return json.getString("registrationNo");
+                }
+                if (json.has("studentId")) {
+                    return json.getString("studentId");
+                }
+                if (json.has("sub")) {
+                    return json.getString("sub");
+                }
+                if (json.has("id")) {
+                    return json.getString("id");
+                }
+            } catch (JSONException ignored) {
+            }
+        }
+        return sub;
     }
 
     /** The record URL with {@code sub} filled in as one path segment: the record, a JSON object with no forbidden key. */

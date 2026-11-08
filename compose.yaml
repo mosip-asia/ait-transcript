@@ -47,6 +47,7 @@ services:
     user: root
     extra_hosts:
       - "host.docker.internal:host-gateway"
+      - "ait-itserv-uat-vm:100.70.36.145"
     ports:
       - "9090:8090"
     environment:
@@ -61,6 +62,7 @@ services:
       - CERTIFY_RECORD_URL=${CERTIFY_RECORD_URL:-http://adapter:8000/student/{sub}/transcript}
       - MOSIP_CERTIFY_GATEWAY_ENABLED=${MOSIP_CERTIFY_GATEWAY_ENABLED:-true}
       - MOSIP_CERTIFY_GATEWAY_URL=${MOSIP_CERTIFY_GATEWAY_URL:-http://gateway:8000}
+      - AUTH_SERVER_JWKS_URL=${AUTH_SERVER_JWKS_URL:-http://certify:8090/v1/certify/.well-known/jwks.json}
     env_file:
       - ./installations/ait/authorization-server.env
     volumes:
@@ -121,6 +123,8 @@ services:
   vdr:
     image: nginx:stable
     restart: unless-stopped
+    ports:
+      - "9098:80"
     volumes:
       - ./src/vc-lab/contexts:/usr/share/nginx/html/contexts:ro
     networks:
