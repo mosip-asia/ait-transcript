@@ -12,20 +12,20 @@
 # To compile the plugin without host Java/Maven:
 #   docker compose -f compose.build.yaml run --rm plugin-builder
 # ==============================================================================
-name: ait-issuer
+name: ${COMPOSE_PROJECT_NAME}
 
 services:
   database:
     image: postgres:15
     environment:
-      - POSTGRES_USER=${POSTGRES_USER:-postgres}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
     volumes:
       - ./deploy/config/certify_init.sql:/docker-entrypoint-initdb.d/01_certify_init.sql
       - ./deploy/config/certify_seed.sql:/docker-entrypoint-initdb.d/02_certify_seed.sql
       - issuer-db:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD", "pg_isready", "-h", "127.0.0.1", "-U", "${POSTGRES_USER:-postgres}", "-d", "inji_certify"]
+      test: ["CMD", "pg_isready", "-h", "127.0.0.1", "-U", "${POSTGRES_USER}", "-d", "inji_certify"]
       interval: 2s
       timeout: 3s
       retries: 60
@@ -39,8 +39,6 @@ services:
     user: root
     extra_hosts:
       - "host.docker.internal:host-gateway"
-      - "ait-itserv-uat-vm:100.70.36.145"
-      - "ait-itserv-dev-vm:100.70.236.72"
     ports:
       - "9090:8090"
     environment:
@@ -50,12 +48,12 @@ services:
       - SPRING_CONFIG_LOCATION=/home/mosip/config/
       - enable_certify_artifactory=false
       - download_hsm_client=false
-      - mosip_certify_domain_url=${CERTIFY_PUBLIC_BASE_URL:-http://localhost:9091}
-      - CERTIFY_DID=${CERTIFY_DID:-did:key:z6MkpPLACEHOLDERreplaceMeViaBootstrapDidRefreshScript1}
-      - CERTIFY_RECORD_URL=${CERTIFY_RECORD_URL:-http://adapter:8000/student/{sub}/transcript}
-      - MOSIP_CERTIFY_GATEWAY_ENABLED=${MOSIP_CERTIFY_GATEWAY_ENABLED:-true}
-      - MOSIP_CERTIFY_GATEWAY_URL=${MOSIP_CERTIFY_GATEWAY_URL:-http://gateway:8000}
-      - AUTH_SERVER_JWKS_URL=${AUTH_SERVER_JWKS_URL:-http://certify:8090/v1/certify/.well-known/jwks.json}
+      - mosip_certify_domain_url=${CERTIFY_PUBLIC_BASE_URL}
+      - CERTIFY_DID=${CERTIFY_DID}
+      - CERTIFY_RECORD_URL=${CERTIFY_RECORD_URL}
+      - MOSIP_CERTIFY_GATEWAY_ENABLED=${MOSIP_CERTIFY_GATEWAY_ENABLED}
+      - MOSIP_CERTIFY_GATEWAY_URL=${MOSIP_CERTIFY_GATEWAY_URL}
+      - AUTH_SERVER_JWKS_URL=${AUTH_SERVER_JWKS_URL}
     env_file:
       - ./installations/ait/authorization-server.env
     volumes:
@@ -126,4 +124,4 @@ volumes:
 
 networks:
   network:
-    name: ${DOCKER_NETWORK:-ait_network}
+    name: ${DOCKER_NETWORK}
