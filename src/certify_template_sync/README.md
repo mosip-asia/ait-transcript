@@ -25,27 +25,31 @@ Traditional seed SQL scripts:
 
 ## Usage
 
-### 1. With `uv` (Host / Local)
+### 1. With `uv` (Host / Local from root project)
 ```bash
 # Apply templates directly to PostgreSQL:
-uv run src/certify-template-sync/sync.py --apply
+uv run certify-template-sync --apply
 
 # Generate fresh deploy/config/certify_seed.sql:
-uv run src/certify-template-sync/sync.py --generate-sql
+uv run certify-template-sync --generate-sql
 
 # Check for configuration drift:
-uv run src/certify-template-sync/sync.py --check
+uv run certify-template-sync --check
 ```
 
-### 2. With Docker Compose (Containerized)
+### 2. With Docker Compose (Containerized via `docker/Dockerfile.template-sync`)
 ```bash
+# Apply templates:
 docker compose run --rm template-sync
+
+# Check for drift:
+docker compose run --rm template-sync --check
 ```
 
 ### 3. With standard Python (zero external dependencies)
 ```bash
-python3 src/certify-template-sync/sync.py --generate-sql
-python3 src/certify-template-sync/sync.py --apply
+python3 src/certify_template_sync/sync.py --generate-sql
+python3 src/certify_template_sync/sync.py --apply
 ```
 
 ---

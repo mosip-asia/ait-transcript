@@ -91,7 +91,7 @@ services:
   template-sync:
     build:
       context: .
-      dockerfile: src/certify-template-sync/Dockerfile
+      dockerfile: docker/Dockerfile.template-sync
     image: ghcr.io/mosip-asia/certify-template-sync:local
     profiles:
       - sync
