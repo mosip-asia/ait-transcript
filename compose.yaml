@@ -31,8 +31,6 @@ services:
       retries: 60
     ports:
       - "6440:5432"
-    networks:
-      - network
 
   certify:
     image: injistack/inji-certify-with-plugins:0.14.0
@@ -67,8 +65,6 @@ services:
       - ./deploy/config/certify-installation.properties:/home/mosip/config/certify-installation.properties
       - ./deploy/data/CERTIFY_PKCS12:/home/inji/CERTIFY_PKCS12
       - ./deploy/config/vp_request_config.json:/home/mosip/config/vp_request_config.json
-    networks:
-      - network
     depends_on:
       database:
         condition: service_healthy
@@ -81,8 +77,6 @@ services:
     volumes:
       - ./deploy/config/certify-nginx.conf:/etc/nginx/conf.d/default.conf
       - ./deploy/config/vp_request_config.json:/config/server/vp_request_config.json:ro
-    networks:
-      - network
     depends_on:
       - certify
 
@@ -94,8 +88,6 @@ services:
     restart: unless-stopped
     env_file:
       - ./installations/ait/gateway.env
-    networks:
-      - network
 
   adapter:
     build:
@@ -106,8 +98,6 @@ services:
       - ADAPTER_CSV=/data/student_identity_data.csv
     volumes:
       - ./installations/ait/adapter:/data:ro
-    networks:
-      - network
 
   vdr:
     image: nginx:stable
@@ -116,12 +106,6 @@ services:
       - "9098:80"
     volumes:
       - ./src/vc-lab/contexts:/usr/share/nginx/html/contexts:ro
-    networks:
-      - network
 
 volumes:
   issuer-db:
-
-networks:
-  network:
-    name: ${DOCKER_NETWORK}
