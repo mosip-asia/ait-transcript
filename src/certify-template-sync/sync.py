@@ -1,10 +1,4 @@
 #!/usr/bin/env python3
-# /// script
-# requires-python = ">=3.10"
-# dependencies = [
-#     "psycopg[binary]>=3.1.0",
-# ]
-# ///
 """
 certify-template-sync
 
@@ -14,16 +8,16 @@ Maintains human-readable JSON files in Git as the single source of truth,
 and idempotently synchronizes them with PostgreSQL.
 
 Usage:
-  # With uv:
-  uv run sync.py --apply
-  uv run sync.py --generate-sql
-  uv run sync.py --check
+  # With root uv:
+  uv run src/certify-template-sync/sync.py --apply
+  uv run src/certify-template-sync/sync.py --generate-sql
+  uv run src/certify-template-sync/sync.py --check
 
   # With Docker Compose:
   docker compose run --rm template-sync
 
   # With standard Python:
-  python3 sync.py --generate-sql
+  python3 src/certify-template-sync/sync.py --generate-sql
 """
 
 import argparse

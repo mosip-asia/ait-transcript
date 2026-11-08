@@ -93,16 +93,15 @@ services:
     profiles:
       - sync
     volumes:
-      - ./src/certify-template-sync:/app:ro
-      - ./config/credentials:/config:ro
-    working_dir: /app
+      - .:/workspace:ro
+    working_dir: /workspace
     environment:
       - POSTGRES_HOST=database
       - POSTGRES_PORT=5432
       - POSTGRES_USER=${POSTGRES_USER}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
-      - CREDENTIALS_DIR=/config
-    command: uv run sync.py --apply
+      - CREDENTIALS_DIR=/workspace/config/credentials
+    command: uv run --no-project --with "psycopg[binary]>=3.1.0" src/certify-template-sync/sync.py --apply
 
 volumes:
   issuer-db:
