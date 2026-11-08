@@ -163,6 +163,49 @@ This tests the full running Inji Certify engine, real database templates, DataPr
 
 ---
 
+### Security Architecture: Public vs. Private Ingress Boundary
+
+Because Inji Certify serves both public wallet protocols and internal cryptographic/administrative endpoints, **Certify must never be exposed directly to the public internet without an ingress gateway (Reverse Proxy)**.
+
+```mermaid
+flowchart TD
+    Internet["Public Internet (Holders & Verifiers)"] --> Ingress["Ingress Gateway / Reverse Proxy<br>(Nginx / Caddy / Cloudflare)"]
+    
+    subgraph PublicEndpoints["ALLOWED: Public Wallet & Verifier Endpoints"]
+        IssuerMeta["GET /.well-known/openid-credential-issuer"]
+        Issuance["POST /v1/certify/issuance/credential<br>(Strictly locked by Keycloak Bearer Token + Proof JWT)"]
+        StatusList["GET /v1/certify/credentials/status-list/*<br>(Revocation list for verifiers)"]
+        Contexts["GET /contexts/*<br>(Public JSON-LD schemas)"]
+        JWKS["GET /.well-known/did.json / jwks.json"]
+    end
+    
+    subgraph PrivateEndpoints["BLOCKED: Private Administrative & Test Endpoints"]
+        PreAuth["POST /v1/certify/pre-authorized-data<br>(Pre-issuance staging - internal admin only)"]
+        Swagger["/v1/certify/swagger-ui/* & /v3/api-docs<br>(Internal API docs)"]
+        Actuator["/v1/certify/actuator/*<br>(Health & metrics)"]
+        CryptoOps["/v1/certify/sign, /decrypt, /jwtSign<br>(Direct HSM cryptographic operations)"]
+        Ledger["/v1/certify/ledger-search<br>(Audit trail search)"]
+    end
+
+    Ingress -->|Route Public Traffic| PublicEndpoints
+    Ingress -.->|Block / 403 Forbidden| PrivateEndpoints
+    Internal["Internal Admin / Registrar Portal / VPN"] --> PrivateEndpoints
+    PublicEndpoints --> CertifyEngine["Inji Certify Core Engine<br>(Private VPC / Internal Network)"]
+    PrivateEndpoints --> CertifyEngine
+```
+
+#### Why Student Records Cannot Be Stolen on the Public Path:
+1. **Cryptographic Identity Anchor (No User-Supplied IDs):**
+   On the public issuance endpoint (`/issuance/credential`), a caller cannot pass a `student_id` in the body. Inji Certify strictly reads the authenticated `sub` from the cryptographically signed Keycloak access token.
+2. **Proof-of-Possession:**
+   The wallet must sign a Proof JWT using its own private key bound to the ephemeral `c_nonce`. Stolen tokens cannot be replayed.
+3. **Institutional Clearance Gate:**
+   Certify queries the Gateway (`POST /evaluations`). If the student has holds, unpaid fees, or their degree is pending, issuance halts with `403 checklist_failed`.
+4. **Pre-Authorized Endpoint Protection:**
+   `POST /pre-authorized-data` allows creating issuance offers without human login for server-to-server batch jobs. **In production, this endpoint must be blocked at the ingress gateway** and accessible only via VPN, internal network, or the Registrar Portal.
+
+---
+
 ## 3. Prerequisites
 
 - **Docker Desktop** (Compose v2) with Linux containers or WSL2 (on Windows).
