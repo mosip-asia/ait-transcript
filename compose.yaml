@@ -10,7 +10,7 @@
 #   cp .env.example .env
 #   docker compose up -d
 # ==============================================================================
-name: ait-platform
+name: ait-issuer
 
 services:
   database:
