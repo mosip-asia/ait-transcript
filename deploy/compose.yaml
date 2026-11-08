@@ -17,7 +17,6 @@ services:
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
     volumes:
       - ./config/certify_init.sql:/docker-entrypoint-initdb.d/01_certify_init.sql
-      - ./config/certify_seed.sql:/docker-entrypoint-initdb.d/02_certify_seed.sql
       - issuer-db:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD", "pg_isready", "-h", "127.0.0.1", "-U", "${POSTGRES_USER:-postgres}", "-d", "inji_certify"]
@@ -26,6 +25,22 @@ services:
       retries: 60
     ports:
       - "6440:5432"
+    networks:
+      - network
+
+  template-sync:
+    image: ${TEMPLATE_SYNC_IMAGE:-ghcr.io/mosip-asia/certify-template-sync:latest}
+    restart: "no"
+    depends_on:
+      database:
+        condition: service_healthy
+    volumes:
+      - ../config/credentials:/app/config/credentials:ro
+    environment:
+      - POSTGRES_HOST=database
+      - POSTGRES_PORT=5432
+      - POSTGRES_USER=${POSTGRES_USER:-postgres}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
     networks:
       - network
 
@@ -60,6 +75,8 @@ services:
     depends_on:
       database:
         condition: service_healthy
+      template-sync:
+        condition: service_completed_successfully
 
   certify-nginx:
     image: nginx:stable

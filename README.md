@@ -43,11 +43,19 @@ ait-transcript/
 ├── src/                                  # 100% PURE APPLICATION SOURCE CODE
 │   ├── issuer/                           # Java 21 SPI Data-Provider Plugin (pom.xml + src/)
 │   ├── gateway/                          # Institutional clearance & permission workflow engine
+│   ├── certify_template_sync/            # GitOps template synchronizer module
 │   └── vc-lab/                           # VC Designer: W3C JSON-LD contexts, schemas, visual templates
+│
+├── config/                               # DECLARATIVE REPOSITORY CONFIGURATION
+│   └── credentials/                      # Declarative JSON credential configurations (e.g. ait-transcript.json)
+│
+├── scripts/                              # AUTOMATION & TESTING SCRIPTS
+│   └── issue_student.py                  # Headless OpenID4VCI pre-authorized issuance client
 │
 ├── docker/                               # CONTAINER PACKAGING RECIPES
 │   ├── Dockerfile.certify                # Bakes src/issuer SPI plugin into Inji Certify
-│   └── Dockerfile.gateway                # Packages src/gateway
+│   ├── Dockerfile.gateway                # Packages src/gateway
+│   └── Dockerfile.template-sync          # Packages certify_template_sync (uv + Alpine)
 │
 ├── compose.yaml                          # Local developer platform compose (builds from src/)
 ├── compose.dev.yaml                      # Loop 3: Hot JAR mount dev overlay (~3s reload)
@@ -161,6 +169,38 @@ ACCESS_TOKEN=$(curl -s -X POST http://localhost:9091/v1/certify/oauth/token \
 ```
 This tests the full running Inji Certify engine, real database templates, DataProviderPlugin, and Data Source without external OAuth or VDR dependencies.
 
+#### 3. One-Command Headless Issuance CLI (`scripts/issue_student.py`)
+To test the complete issuance flow end-to-end with cryptographic client proof-of-possession in ~1 second, use the included CLI:
+
+```bash
+# Issue transcript for student st123456 and print the signed Verifiable Credential:
+uv run python scripts/issue_student.py st123456
+
+# Save the issued credential to a JSON file:
+uv run python scripts/issue_student.py st123456 -o st123456.vc.json
+```
+
+---
+
+### Declarative GitOps Credential Configuration
+
+Credential templates and configurations are managed natively as **GitOps declarative JSON artifacts** under `config/credentials/` (e.g. `config/credentials/ait-transcript.json`).
+
+* **Human-Readable & Version-Controlled:** Templates are plain JSON files. No base64-encoded strings or manual SQL seed scripts.
+* **Automatic Init Synchronization:** When executing `docker compose up -d`, the `template-sync` init container runs first, executing an idempotent SQL `UPSERT` into PostgreSQL (`ON CONFLICT (credential_config_key_id) DO UPDATE`) before `certify` boots.
+* **Zero Downtime & Safe Updates:** Updating a template in Git only refreshes the `credential_config` table without wiping runtime signing keys (`key_store`), audit logs (`ledger`), or revocation lists (`status_list`).
+* **Manual Sync / Dry Run:**
+  ```bash
+  # Dry-run inspect template changes:
+  uv run certify-template-sync --dry-run
+
+  # Apply changes directly to PostgreSQL:
+  uv run certify-template-sync --apply
+
+  # Or execute sync via Docker Compose:
+  docker compose run --rm template-sync
+  ```
+
 > [!TIP]
 > **Remote Access on GCP (NetBird VPN):**
 > On the deployed GCP environment, port `9091` is closed to the public internet by the GCP cloud firewall. Authorized engineers, campus systems, and administrative batch scripts reach Swagger UI and the Pre-Authorized API directly over the **NetBird Zero-Trust Mesh VPN** (`http://<vm-netbird-ip>:9091/...`) without exposing unauthenticated endpoints publicly. See [Section 7: Deploying to GCP](#7-deploying-to-gcp).
@@ -225,7 +265,7 @@ Run every command from the repository root. Depending on your task, you can star
 
 ### Mode A: Core Issuer Platform (Developer Fast-Track)
 
-Spins up the core Verifiable Credential Platform (`certify`, `gateway`, `vdr`, `database`, `adapter`):
+Spins up the core Verifiable Credential Platform (`certify`, `certify-nginx`, `database`, `vdr`, and `template-sync` init container):
 
 ```bash
 # 1. Setup local environment
