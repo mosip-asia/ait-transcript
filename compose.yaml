@@ -2,13 +2,15 @@
 # AIT Multi-Credential Verifiable Credential Platform
 # Root Developer Compose Manifest
 # ==============================================================================
-# 1. Compiles the SPI plugin via 'plugin-builder' and saves the JAR to host.
-# 2. Runs Inji Certify with the compiled JAR mounted as an SPI plugin.
-# 3. Builds and runs Gateway and Adapter directly from source.
+# Runs Inji Certify with the compiled SPI JAR mounted as a plugin.
+# Builds and runs Gateway, Adapter, and VDR services.
 #
 # Usage:
 #   cp .env.example .env
 #   docker compose up -d
+#
+# To compile the plugin without host Java/Maven:
+#   docker compose -f compose.build.yaml run --rm plugin-builder
 # ==============================================================================
 name: ait-issuer
 
@@ -31,16 +33,6 @@ services:
       - "6440:5432"
     networks:
       - network
-
-  plugin-builder:
-    image: maven:3.9-eclipse-temurin-21
-    volumes:
-      - ./src/issuer:/src
-      - maven-cache:/var/maven/.m2
-    environment:
-      - MAVEN_CONFIG=/var/maven/.m2
-    working_dir: /src
-    command: sh -c "mvn -q -B -Duser.home=/var/maven package -DskipTests && chmod -R a+rwX target"
 
   certify:
     image: injistack/inji-certify-with-plugins:0.14.0
@@ -81,8 +73,6 @@ services:
     depends_on:
       database:
         condition: service_healthy
-      plugin-builder:
-        condition: service_completed_successfully
 
   certify-nginx:
     image: nginx:stable
@@ -132,7 +122,6 @@ services:
 
 volumes:
   issuer-db:
-  maven-cache:
 
 networks:
   network:

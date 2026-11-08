@@ -42,7 +42,7 @@ For rapid local iteration without rebuilding Docker images or requiring host Mav
 
 1. **Compile using the compiler container:**
    ```bash
-   docker compose run --rm plugin-builder
+   docker compose -f compose.build.yaml run --rm plugin-builder
    ```
    *(Or using host Maven if installed: `mvn -f src/issuer/pom.xml package -DskipTests`)*
 

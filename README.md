@@ -232,7 +232,7 @@ Spins up the core Verifiable Credential Platform (`certify`, `gateway`, `vdr`, `
 cp .env.example .env
 
 # 2. Build the SPI plugin via the compiler container (no host Maven/Java needed)
-docker compose run --rm plugin-builder
+docker compose -f compose.build.yaml run --rm plugin-builder
 
 # 3. Start the platform
 docker compose up -d
@@ -242,7 +242,7 @@ docker compose up -d
 - **Compiler Container Build & Reload (~2s):**
   Recompile the JAR into `src/issuer/target/` and reload Certify without rebuilding the image:
   ```bash
-  docker compose run --rm plugin-builder && docker compose restart certify
+  docker compose -f compose.build.yaml run --rm plugin-builder && docker compose restart certify
   ```
 - **In-Memory Unit Tests (~3s):**
   ```bash
