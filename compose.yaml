@@ -88,5 +88,21 @@ services:
     volumes:
       - ./src/vc-lab/contexts:/usr/share/nginx/html/contexts:ro
 
+  template-sync:
+    image: ghcr.io/astral-sh/uv:python3.11-alpine
+    profiles:
+      - sync
+    volumes:
+      - ./src/certify-template-sync:/app:ro
+      - ./config/credentials:/config:ro
+    working_dir: /app
+    environment:
+      - POSTGRES_HOST=database
+      - POSTGRES_PORT=5432
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - CREDENTIALS_DIR=/config
+    command: uv run sync.py --apply
+
 volumes:
   issuer-db:
