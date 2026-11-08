@@ -161,6 +161,10 @@ ACCESS_TOKEN=$(curl -s -X POST http://localhost:9091/v1/certify/oauth/token \
 ```
 This tests the full running Inji Certify engine, real database templates, DataProviderPlugin, and Data Source without external OAuth or VDR dependencies.
 
+> [!TIP]
+> **Remote Access on GCP (NetBird VPN):**
+> On the deployed GCP environment, port `9091` is closed to the public internet by the GCP cloud firewall. Authorized engineers, campus systems, and administrative batch scripts reach Swagger UI and the Pre-Authorized API directly over the **NetBird Zero-Trust Mesh VPN** (`http://<vm-netbird-ip>:9091/...`) without exposing unauthenticated endpoints publicly. See [Section 7: Deploying to GCP](#7-deploying-to-gcp).
+
 ---
 
 ### Security Architecture: Public vs. Private Ingress Boundary
@@ -189,7 +193,7 @@ flowchart TD
 
     Ingress -->|Route Public Traffic| PublicEndpoints
     Ingress -.->|Block / 403 Forbidden| PrivateEndpoints
-    Internal["Internal Admin / Registrar Portal / VPN"] --> PrivateEndpoints
+    Internal["Internal Admin / Registrar Portal / NetBird VPN"] --> PrivateEndpoints
     PublicEndpoints --> CertifyEngine["Inji Certify Core Engine<br>(Private VPC / Internal Network)"]
     PrivateEndpoints --> CertifyEngine
 ```
@@ -202,7 +206,7 @@ flowchart TD
 3. **Institutional Clearance Gate:**
    Certify queries the Gateway (`POST /evaluations`). If the student has holds, unpaid fees, or their degree is pending, issuance halts with `403 checklist_failed`.
 4. **Pre-Authorized Endpoint Protection:**
-   `POST /pre-authorized-data` allows creating issuance offers without human login for server-to-server batch jobs. **In production, this endpoint must be blocked at the ingress gateway** and accessible only via VPN, internal network, or the Registrar Portal.
+   `POST /pre-authorized-data` allows creating issuance offers without human login for server-to-server batch jobs. **In production, this endpoint must be blocked at the ingress gateway** and accessible only via private network (NetBird VPN), campus VPC, or the Registrar Portal.
 
 ---
 
@@ -346,14 +350,35 @@ When running the Full Demo Stack (`./run-demo.sh`):
 
 ## 7. Deploying to GCP
 
-The demonstration environment is continuously deployed to a Google Compute Engine VM behind Caddy (TLS):
+The demonstration environment is continuously deployed to a Google Compute Engine VM (`ait-vc-transcript-demo`) behind Caddy (TLS) and NetBird Zero-Trust Mesh.
+
+### Public Web Ingress (TLS / Caddy)
+
+These public endpoints are internet-facing for student holders and external verifiers:
 
 - **Student Portal:** `https://transcript-demo.ait-vc.dpi.ait.ac.th/student/login`
 - **Registrar Portal:** `https://transcript-demo.ait-vc.dpi.ait.ac.th/registrar/login`
 - **Inji Web Wallet:** `https://wallet.transcript-demo.ait-vc.dpi.ait.ac.th`
 - **Inji Verify:** `https://verify.transcript-demo.ait-vc.dpi.ait.ac.th`
+- **Issuer Metadata & Issuance:** `https://api.transcript-demo.ait-vc.dpi.ait.ac.th/.well-known/openid-credential-issuer` (routed via Caddy to `certify-nginx:8090`)
 
-Deployments are triggered via GitHub Actions: **Actions $\rightarrow$ Deploy $\rightarrow$ Run workflow**.
+### Private Administrative & API Access via NetBird VPN
+
+To protect sensitive administrative functions and pre-authorized issuance, internal ports are **never exposed to the public internet**:
+
+- **GCP Firewall Policy:** Only inbound ports `80` and `443` are open to `0.0.0.0/0`. Direct engine ports (`9091` Certify, `8000` Adapter, `5432` PostgreSQL, `9080` Keycloak Admin) are blocked from public internet access.
+- **NetBird Mesh Overlay:** The GCP VM joins the campus private NetBird WireGuard network (alongside campus infrastructure like `ait-itserv-vm.netbird.selfhosted`).
+- **Zero-Trust Access:** Authorized administrators, engineers, and campus backend systems connected to NetBird access internal services directly using the VM's NetBird IP (`100.x.y.z`) or hostname without bastion hosts or SSH tunneling:
+  - **Interactive Swagger UI:** `http://<vm-netbird-ip>:9091/v1/certify/swagger-ui/index.html`
+  - **Pre-Authorized Issuance API:** `POST http://<vm-netbird-ip>:9091/v1/certify/pre-authorized-data`
+  - **SIS Adapter Contract Verification:** `http://<vm-netbird-ip>:8000/student/{sub}/eligibility`
+  - **Health & Actuator Metrics:** `http://<vm-netbird-ip>:9091/v1/certify/actuator/health`
+
+This ensures that administrative pre-issuance and automated test harnesses remain fully functional remotely while strictly enforcing the public vs. private ingress boundary.
+
+### Continuous Deployment
+
+Deployments are triggered via GitHub Actions: **Actions $\rightarrow$ Deploy $\rightarrow$ Run workflow** (executes `deploy/remote-deploy.sh` on the VM).
 
 ---
 
