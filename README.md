@@ -69,7 +69,69 @@ ait-transcript/
 
 ---
 
-## 2. Prerequisites
+## 2. How Credential Issuance Works (Lifecycle & Data Flow)
+
+Understanding the complete OpenID4VCI credential lifecycle requires four architectural pillars:
+
+```
+    1. Schema & Context              2. Authentication             3. Certify Blueprint              4. Data Source
+      (`src/vc-lab/`)                 (OIDC / Keycloak)           (Postgres `credential_config`)      (SIS / Adapter)
+  Public JSON-LD vocabulary       User logs in via OAuth2       Velocity `vc_template`, Key Alias,   Returns subject records
+  defines terms & signature       provides verified `sub`       and W3C Bitstring Status List        via `CERTIFY_RECORD_URL`
+```
+
+### The 5-Step Issuance Pipeline
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant Wallet as Holder Wallet (Inji Web)
+    participant Auth as Keycloak (OAuth2 / OIDC)
+    participant Certify as Inji Certify Engine
+    participant Gate as Approval Gate (Gateway)
+    participant SIS as Data Source (Adapter / SIS)
+    participant DB as Postgres (VDR / Ledger)
+
+    Wallet->>Auth: 1. Sign in via OAuth2 Authorization Code + PKCE
+    Auth-->>Wallet: Returns access_token (with sub & scope)
+    Wallet->>Certify: 2. POST /credential (Bearer access_token)
+    Note over Certify: Validates JWT signature against Auth JWKS.<br/>Extracts verified `sub` & `scope`.
+    Certify->>Gate: 3. POST /evaluations { sub, scope }
+    Gate-->>Certify: Evaluation passed (no holds, conferred, zero balance)
+    Certify->>SIS: 4. GET /student/{sub}/transcript
+    SIS-->>Certify: Returns student JSON record
+    Note over Certify: 5. Velocity Template Interpolation & Projection:<br/>• Missing fields: halts issuance.<br/>• Extra fields: dropped automatically (privacy whitelist).
+    Certify->>DB: 6. Allocate Bitstring Status List index & write ledger
+    Note over Certify: 7. Canonicalize (URDNA2015) & Cryptographically Sign<br/>with Issuer's Ed25519 Private Key.
+    Certify-->>Wallet: 8. Return signed W3C Verifiable Credential
+```
+
+#### Detailed Pipeline Breakdown:
+
+1. **Authentication & Identity Anchor:**
+   - The holder signs into Keycloak. Certify verifies the Bearer JWT signature against Keycloak's JWKS endpoint (`AUTH_SERVER_JWKS_URL`).
+   - Certify extracts the authenticated `sub` (student identifier) and requested `scope`. The user cannot query another person's record.
+
+2. **Institutional Clearance Gate:**
+   - When enabled, the DataProvider plugin calls Gateway (`POST /evaluations`).
+   - The Gateway evaluates institutional clearance checks (holds, conferral status, tuition balance). Refusal fails closed.
+
+3. **Data Retrieval:**
+   - The plugin calls the configured upstream endpoint (`CERTIFY_RECORD_URL`), substituting `{sub}` with the token's identity.
+
+4. **Template Resolution & Privacy Projection:**
+   - Certify's internal Velocity engine loads the `vc_template` from `credential_config` matching the requested scope.
+   - **Missing Fields:** If a template placeholder (e.g. `${fullName}`) is absent, template rendering fails and issuance halts.
+   - **Extra Fields:** If the database returns additional attributes (e.g. `internal_db_id`, `motherName`), they are **silently dropped** because the template only renders explicit slots. The template acts as a privacy projection filter.
+
+5. **Cryptographic Signing & Status List (VDR):**
+   - **Status List Allocation:** Certify assigns an index in the W3C **Bitstring Status List** and logs an immutable audit row in `certify.ledger`.
+   - **Cryptographic Proof:** The document is canonicalized into RDF triples (URDNA2015) and signed with the Issuer's private key (`Ed25519Signature2020`).
+   - **Delivery:** The finalized W3C VC is delivered to the wallet. When Inji Verify checks the credential later, it fetches the public `@context` and verifies the status bit to ensure it has not been revoked.
+
+---
+
+## 3. Prerequisites
 
 - **Docker Desktop** (Compose v2) with Linux containers or WSL2 (on Windows).
 - **Python 3.11+** and [`uv`](https://github.com/astral-sh/uv) (recommended for running tests and scripts).
@@ -78,7 +140,7 @@ ait-transcript/
 
 ---
 
-## 3. Deploy locally
+## 4. Deploy locally
 
 Run every command from the repository root. Depending on your task, you can start the **Core Issuer Platform** (fast, focused) or the **Full End-to-End Demo** (with wallet, registrar portal, and verifier).
 
@@ -136,7 +198,7 @@ INSTALLATION=hackathon ./run-demo.sh --wipe    # Switch to Hackathon profile
 
 ---
 
-## 4. How to test
+## 5. How to test
 
 All test suites are automated and runnable locally on your host or in CI.
 
@@ -182,7 +244,7 @@ A smoke test verifies real cryptographic issuance, signature verification, and l
 
 ---
 
-## 5. Local Access & Stakeholder Walkthrough
+## 6. Local Access & Stakeholder Walkthrough
 
 When running the Full Demo Stack (`./run-demo.sh`):
 
@@ -206,7 +268,7 @@ When running the Full Demo Stack (`./run-demo.sh`):
 
 ---
 
-## 6. Deploying to GCP
+## 7. Deploying to GCP
 
 The demonstration environment is continuously deployed to a Google Compute Engine VM behind Caddy (TLS):
 
@@ -219,7 +281,7 @@ Deployments are triggered via GitHub Actions: **Actions $\rightarrow$ Deploy $\r
 
 ---
 
-## 7. Documentation & References
+## 8. Documentation & References
 
 - [Architecture & Topology (`wiki/architecture/vc-stack.md`)](./wiki/architecture/vc-stack.md)
 - [ADR 0001: Approval Gate Beside the Data Path](./docs/adr/0001-approval-gate-beside-the-data-path.md)
