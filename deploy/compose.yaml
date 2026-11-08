@@ -16,8 +16,8 @@ services:
       - POSTGRES_USER=${POSTGRES_USER:-postgres}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
     volumes:
-      - ./config/certify_init.sql:/docker-entrypoint-initdb.d/certify_init.sql
-      - ../installations/${INSTALLATION:?set INSTALLATION in .env}/certify_seed.sql:/docker-entrypoint-initdb.d/certify_seed.sql
+      - ./config/certify_init.sql:/docker-entrypoint-initdb.d/01_certify_init.sql
+      - ./config/certify_seed.sql:/docker-entrypoint-initdb.d/02_certify_seed.sql
       - issuer-db:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD", "pg_isready", "-h", "127.0.0.1", "-U", "${POSTGRES_USER:-postgres}", "-d", "inji_certify"]
@@ -49,10 +49,10 @@ services:
       - MOSIP_CERTIFY_GATEWAY_ENABLED=${MOSIP_CERTIFY_GATEWAY_ENABLED:-true}
       - MOSIP_CERTIFY_GATEWAY_URL=${MOSIP_CERTIFY_GATEWAY_URL:-http://gateway:8000}
     env_file:
-      - ../installations/${INSTALLATION}/authorization-server.env
+      - ../installations/ait/authorization-server.env
     volumes:
       - ./config/certify-default.properties:/home/mosip/config/certify-default.properties
-      - ../installations/${INSTALLATION}/certify-installation.properties:/home/mosip/config/certify-installation.properties
+      - ./config/certify-installation.properties:/home/mosip/config/certify-installation.properties
       - ./data/CERTIFY_PKCS12:/home/inji/CERTIFY_PKCS12
       - ./config/vp_request_config.json:/home/mosip/config/vp_request_config.json
     networks:
@@ -78,7 +78,7 @@ services:
     image: ${GATEWAY_IMAGE:-ghcr.io/mosip-asia/ait-gateway:latest}
     restart: unless-stopped
     env_file:
-      - ../installations/${INSTALLATION}/gateway.env
+      - ../installations/ait/gateway.env
     networks:
       - network
 

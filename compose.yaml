@@ -19,8 +19,8 @@ services:
       - POSTGRES_USER=${POSTGRES_USER:-postgres}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
     volumes:
-      - ./deploy/config/certify_init.sql:/docker-entrypoint-initdb.d/certify_init.sql
-      - ./installations/${INSTALLATION:?set INSTALLATION in .env}/certify_seed.sql:/docker-entrypoint-initdb.d/certify_seed.sql
+      - ./deploy/config/certify_init.sql:/docker-entrypoint-initdb.d/01_certify_init.sql
+      - ./deploy/config/certify_seed.sql:/docker-entrypoint-initdb.d/02_certify_seed.sql
       - issuer-db:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD", "pg_isready", "-h", "127.0.0.1", "-U", "${POSTGRES_USER:-postgres}", "-d", "inji_certify"]
@@ -62,7 +62,7 @@ services:
       - MOSIP_CERTIFY_GATEWAY_ENABLED=${MOSIP_CERTIFY_GATEWAY_ENABLED:-true}
       - MOSIP_CERTIFY_GATEWAY_URL=${MOSIP_CERTIFY_GATEWAY_URL:-http://gateway:8000}
     env_file:
-      - ./installations/${INSTALLATION}/authorization-server.env
+      - ./installations/ait/authorization-server.env
     volumes:
       - type: bind
         source: ./src/issuer/target/issuer-data-provider-plugin.jar
@@ -71,7 +71,7 @@ services:
         bind:
           create_host_path: false
       - ./deploy/config/certify-default.properties:/home/mosip/config/certify-default.properties
-      - ./installations/${INSTALLATION}/certify-installation.properties:/home/mosip/config/certify-installation.properties
+      - ./deploy/config/certify-installation.properties:/home/mosip/config/certify-installation.properties
       - ./deploy/data/CERTIFY_PKCS12:/home/inji/CERTIFY_PKCS12
       - ./deploy/config/vp_request_config.json:/home/mosip/config/vp_request_config.json
     networks:
@@ -102,7 +102,7 @@ services:
     image: ghcr.io/mosip-asia/ait-gateway:local
     restart: unless-stopped
     env_file:
-      - ./installations/${INSTALLATION}/gateway.env
+      - ./installations/ait/gateway.env
     networks:
       - network
 
@@ -114,7 +114,7 @@ services:
     environment:
       - ADAPTER_CSV=/data/student_identity_data.csv
     volumes:
-      - ./installations/${INSTALLATION}/adapter:/data:ro
+      - ./installations/ait/adapter:/data:ro
     networks:
       - network
 
