@@ -9,15 +9,15 @@ and idempotently synchronizes them with PostgreSQL.
 
 Usage:
   # With root uv:
-  uv run src/certify-template-sync/sync.py --apply
-  uv run src/certify-template-sync/sync.py --generate-sql
-  uv run src/certify-template-sync/sync.py --check
+  uv run certify-template-sync --apply
+  uv run certify-template-sync --generate-sql
+  uv run certify-template-sync --check
 
   # With Docker Compose:
   docker compose run --rm template-sync
 
   # With standard Python:
-  python3 src/certify-template-sync/sync.py --generate-sql
+  python3 -m certify_template_sync.sync --generate-sql
 """
 
 import argparse
@@ -42,7 +42,7 @@ def find_credentials_dir(custom_path=None):
     here = Path(__file__).resolve().parent
     candidates = [
         Path("/config"),                             # Docker container mount
-        here.parent.parent / "config" / "credentials", # Relative to src/certify-template-sync
+        here.parent.parent / "config" / "credentials", # Relative to src/certify_template_sync
         here / "credentials",                        # Local folder
         Path.cwd() / "config" / "credentials",       # CWD relative
     ]

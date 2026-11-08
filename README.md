@@ -49,9 +49,6 @@ ait-transcript/
 ├── config/                               # DECLARATIVE REPOSITORY CONFIGURATION
 │   └── credentials/                      # Declarative JSON credential configurations (e.g. ait-transcript.json)
 │
-├── scripts/                              # AUTOMATION & TESTING SCRIPTS
-│   └── smoke.sh -> ../deploy/smoke.sh    # Symlink to deploy smoke test
-│
 ├── docker/                               # CONTAINER PACKAGING RECIPES
 │   ├── Dockerfile.certify                # Bakes src/issuer SPI plugin into Inji Certify
 │   ├── Dockerfile.gateway                # Packages src/gateway
