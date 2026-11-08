@@ -2,10 +2,13 @@
 # AIT Multi-Credential Verifiable Credential Platform
 # Root Developer Compose Manifest
 # ==============================================================================
-# Builds all services from src/ and runs the full platform locally.
+# 1. Compiles the SPI plugin via 'plugin-builder' and saves the JAR to host.
+# 2. Runs Inji Certify with the compiled JAR mounted as an SPI plugin.
+# 3. Builds and runs Gateway and Adapter directly from source.
+#
 # Usage:
 #   cp .env.example .env
-#   docker compose up -d --build
+#   docker compose up -d
 # ==============================================================================
 name: ait-platform
 
@@ -29,11 +32,18 @@ services:
     networks:
       - network
 
+  plugin-builder:
+    image: maven:3.9-eclipse-temurin-21
+    volumes:
+      - ./src/issuer:/src
+      - maven-cache:/var/maven/.m2
+    environment:
+      - MAVEN_CONFIG=/var/maven/.m2
+    working_dir: /src
+    command: sh -c "mvn -q -B -Duser.home=/var/maven package -DskipTests && chmod -R a+rwX target"
+
   certify:
-    build:
-      context: .
-      dockerfile: docker/Dockerfile.certify
-    image: ghcr.io/mosip-asia/ait-certify:local
+    image: injistack/inji-certify-with-plugins:0.14.0
     user: root
     extra_hosts:
       - "host.docker.internal:host-gateway"
@@ -54,6 +64,12 @@ services:
     env_file:
       - ./installations/${INSTALLATION}/authorization-server.env
     volumes:
+      - type: bind
+        source: ./src/issuer/target/issuer-data-provider-plugin.jar
+        target: /home/inji/additional_jars/issuer-data-provider-plugin.jar
+        read_only: true
+        bind:
+          create_host_path: false
       - ./deploy/config/certify-default.properties:/home/mosip/config/certify-default.properties
       - ./installations/${INSTALLATION}/certify-installation.properties:/home/mosip/config/certify-installation.properties
       - ./deploy/data/CERTIFY_PKCS12:/home/inji/CERTIFY_PKCS12
@@ -63,6 +79,8 @@ services:
     depends_on:
       database:
         condition: service_healthy
+      plugin-builder:
+        condition: service_completed_successfully
 
   certify-nginx:
     image: nginx:stable
@@ -110,6 +128,7 @@ services:
 
 volumes:
   issuer-db:
+  maven-cache:
 
 networks:
   network:

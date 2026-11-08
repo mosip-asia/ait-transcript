@@ -84,33 +84,35 @@ Run every command from the repository root. Depending on your task, you can star
 
 ### Mode A: Core Issuer Platform (Developer Fast-Track)
 
-Spins up the core Verifiable Credential Platform (`certify`, `gateway`, `vdr`, `database`, `adapter`) built directly from `src/`:
+Spins up the core Verifiable Credential Platform (`certify`, `gateway`, `vdr`, `database`, `adapter`):
 
 ```bash
 # 1. Setup local environment
 cp .env.example .env
 
-# 2. Build and start the platform
-docker compose up -d --build
+# 2. Build the SPI plugin via the compiler container (no host Maven/Java needed)
+docker compose run --rm plugin-builder
+
+# 3. Start the platform
+docker compose up -d
 ```
 
-#### Fast Inner Loops for Plugin Development:
-- **Loop 1: In-Memory Unit Tests (~3s):**
+#### Fast Inner Loops for SPI Plugin Development:
+- **Compiler Container Build & Reload (~2s):**
+  Recompile the JAR into `src/issuer/target/` and reload Certify without rebuilding the image:
+  ```bash
+  docker compose run --rm plugin-builder && docker compose restart certify
+  ```
+- **In-Memory Unit Tests (~3s):**
   ```bash
   cd src/issuer && mvn test
+  # Or via Docker:
+  docker run --rm -v "$PWD/src/issuer:/src" -w /src maven:3.9-eclipse-temurin-21 mvn test
   ```
-- **Loop 2: Container Build & Run (~7s):**
+- **Multi-Stage Production Image Build:**
+  To build the standalone release image using the 2-stage Dockerfile:
   ```bash
-  docker compose up -d --build
-  ```
-- **Loop 3: Hot JAR Mount Mode (~3s Reload):**
-  Enable hot-reload in `.env`:
-  ```env
-  COMPOSE_FILE=compose.yaml:compose.dev.yaml
-  ```
-  Then recompile and restart Certify without rebuilding container images:
-  ```bash
-  mvn -f src/issuer/pom.xml package -DskipTests && docker compose restart certify
+  docker build -f docker/Dockerfile.certify -t ghcr.io/mosip-asia/ait-certify:local .
   ```
 
 ---

@@ -37,42 +37,28 @@ Tests in-memory HTTP responses, error mappings, and JSON escaping in **~3 second
 
 ---
 
-### Loop 2: Live Testing with Root Compose (~7s)
-Test your changes inside the full Inji Certify container runtime from the repo root:
-```bash
-# From repository root:
-docker compose up -d --build
-```
-Builds and restarts the container with the updated image in **~7 seconds** via Docker BuildKit caching.
+### Loop 2: Hot JAR Mount with Compiler Container (~2s Reload)
+For rapid local iteration without rebuilding Docker images or requiring host Maven:
+
+1. **Compile using the compiler container:**
+   ```bash
+   docker compose run --rm plugin-builder
+   ```
+   *(Or using host Maven if installed: `mvn -f src/issuer/pom.xml package -DskipTests`)*
+
+2. **Start or reload Inji Certify:**
+   ```bash
+   docker compose up -d
+   # Or reload after code changes:
+   docker compose restart certify
+   ```
+   The root `compose.yaml` mounts `./src/issuer/target/issuer-data-provider-plugin.jar` directly into `/home/inji/additional_jars/issuer-data-provider-plugin.jar`.
 
 ---
 
-### Loop 3: Hot JAR Mount Mode (~3s Reload)
-For rapid local iteration without rebuilding Docker images:
-
-1. **Enable in root `.env`:**
-   ```env
-   # Merge compose.dev.yaml to mount the local JAR
-   COMPOSE_FILE=compose.yaml:compose.dev.yaml
-   ```
-   Now all standard Docker Compose commands automatically mount your local plugin JAR directly into `/home/inji/additional_jars/`.
-
-2. **Recompile and restart Certify:**
-   ```bash
-   mvn -f src/issuer/pom.xml package -DskipTests && docker compose restart certify
-   ```
-   *(Or in Docker if Maven is not installed locally):*
-   ```bash
-   docker run --rm -v "$PWD/src/issuer:/src" -w /src maven:3.9-eclipse-temurin-21 mvn -q package -DskipTests && docker compose restart certify
-   ```
-   *Compiles the JAR and reloads Inji Certify in **~3 seconds flat**.*
-
----
-
-## 3. Building Container Images
-
-Container packaging recipes are centralized in `docker/`. To build the standalone Certify image from repo root:
-
+### Loop 3: Multi-Stage Release Build
+To package a standalone, production-ready container image without volume mounts:
 ```bash
 docker build -t ghcr.io/mosip-asia/ait-certify:latest -f docker/Dockerfile.certify .
 ```
+`docker/Dockerfile.certify` is a 2-stage Dockerfile that builds the JAR in stage 1 and bakes it into `injistack/inji-certify-with-plugins:0.14.0` in stage 2.
