@@ -1,7 +1,7 @@
 """Generate deploy/ait/adapter/student_identity_data.csv from src/portal/fixtures/students.json.
 
 See docs/concepts/transcript-credential.md.
-Run: python3 scripts/generate_csv.py
+Run: python3 src/tools/generate_csv.py
 """
 
 from __future__ import annotations
@@ -11,7 +11,7 @@ import json
 import sys
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
+REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(REPO_ROOT / "src" / "adapter"))
 from ait_courses import enrich_ait_transcript_subject  # noqa: E402
 
@@ -80,8 +80,11 @@ def build_rows(students: list[dict]) -> list[dict]:
             for claim in CLAIM_COLUMNS:
                 row[claim] = str(enriched.get(claim, ""))
             eligibility = degree["eligibility"]
-            row.update(holds=json.dumps(eligibility["holds"]),
-                       conferralStatus=eligibility["conferralStatus"], balance=eligibility["balance"])
+            row.update(
+                holds=json.dumps(eligibility["holds"]),
+                conferralStatus=eligibility["conferralStatus"],
+                balance=eligibility["balance"],
+            )
             rows.append(row)
     return rows
 

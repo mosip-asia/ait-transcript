@@ -11,10 +11,10 @@ How the infra team deploys this directory (the service set, every variable and m
 | `certify_seed.sql` | Postgres, first start only | The `credential_config` row for `ait-transcript`, mounted after `vc-stack/certify_init.sql` |
 | `keycloak-realm.json` | Keycloak (`--import-realm`) | Realm `inji`: one user per CSV `id`, the `wallet-demo` client, the test-only `smoke` client, the `ait_transcript_vc_ldp` scope. `bootstrap.sh` syncs the `wallet-demo` certificate into it |
 | `gateway.env` | The Gateway (`gateway/`), through Compose's `env_file` | Its settings, listed below |
-| `mimoto-issuers-config.json.template` | `scripts/render_mimoto_issuers_config.py` | Mimoto's issuer list (wallet test harness), with `${INJI_WEB_URL}` left to fill |
-| `public-gateway-mobile.conf.template` | `scripts/render_mimoto_issuers_config.py` | The `api.` gateway's phone-only nginx locations. Its presence makes the script also render `vc-stack/config/mimoto-issuers-mobile.json` and `public-gateway-mobile.conf` (mounted by Compose); an installation without it renders only Mimoto's list |
+| `mimoto-issuers-config.json.template` | `src/tools/render_mimoto_issuers_config.py` | Mimoto's issuer list (wallet test harness), with `${INJI_WEB_URL}` left to fill |
+| `public-gateway-mobile.conf.template` | `src/tools/render_mimoto_issuers_config.py` | The `api.` gateway's phone-only nginx locations. Its presence makes the script also render `vc-stack/config/mimoto-issuers-mobile.json` and `public-gateway-mobile.conf` (mounted by Compose); an installation without it renders only Mimoto's list |
 | `mimoto-issuers-config.json` | Mimoto, Inji Web | Rendered by `run-demo.sh` from the template, then patched by `bootstrap.sh`. Git-ignored |
-| `adapter/student_identity_data.csv` | The mock adapter (`src/adapter/`, mounted read-only at `/data`) | Mock transcript records. After the claim columns come `holds` (a JSON list), `conferralStatus` and `balance`, the eligibility attributes. To change a student's eligibility edit the file (or regenerate via `scripts/generate_csv.py`): the adapter reads it on every request, no restart of anything |
+| `adapter/student_identity_data.csv` | The mock adapter (`src/adapter/`, mounted read-only at `/data`) | Mock transcript records. After the claim columns come `holds` (a JSON list), `conferralStatus` and `balance`, the eligibility attributes. To change a student's eligibility edit the file (or regenerate via `src/tools/generate_csv.py`): the adapter reads it on every request, no restart of anything |
 | `smoke.json` | `vc-stack/smoke.sh`, `vc-stack/issuer-smoke.sh`, `gateway/tests/test_evaluations.py`, `vc-stack/test_inji_web_vc_readiness.py` | The installation's test fixtures, below |
 
 The installation's own values:

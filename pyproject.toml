@@ -38,4 +38,5 @@ packages = [
     "src/gateway",
     "src/portal",
     "src/sis_bridge",
+    "src/tools",
 ]

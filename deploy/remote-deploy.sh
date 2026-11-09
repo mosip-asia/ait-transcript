@@ -104,5 +104,5 @@ printf '%s\n' "${INSTALLATION_NAME:-ait}" > vc-stack/.installation
 # The wipe deletes vc-stack/.env, so run it before copying app.env in (--prepare stops after the wipe and .env).
 if [ "$WIPE" = "wipe" ]; then vc-stack/bootstrap.sh --wipe --prepare; fi
 cp "$APP_ENV" vc-stack/.env
-./run-demo.sh
+./scripts/deploy.sh
 echo "deployed $SHA"

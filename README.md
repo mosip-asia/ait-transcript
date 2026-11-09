@@ -163,18 +163,15 @@ ACCESS_TOKEN=$(curl -s -X POST http://localhost:9091/v1/certify/oauth/token \
 ```
 This tests the full running Inji Certify engine, real database templates, DataProviderPlugin, and Data Source without external OAuth or VDR dependencies.
 
-#### 3. One-Command Headless Issuance Smoke Test (`deploy/smoke.sh`)
+#### 3. One-Command Headless Issuance Smoke Test (`scripts/smoke-test.sh`)
 To verify the complete issuer engine, GitOps template, and SIS connectivity end-to-end without Python or OAuth dependencies, run the included pure bash smoke test:
 
 ```bash
-# Run smoke test for default student (st123456):
-./deploy/smoke.sh
-
-# Or test a specific student ID:
-./deploy/smoke.sh st123457
+# Run smoke test on local deployment:
+./scripts/smoke-test.sh
 
 # Target a remote deployment (e.g. over NetBird VPN):
-./deploy/smoke.sh st123456 http://100.x.y.z:9091 ait-transcript
+./scripts/smoke-test.sh http://100.x.y.z:9091 st123456 ait-transcript
 ```
 
 ---
@@ -324,7 +321,7 @@ Using `uv` (or `.venv`):
 
 ```bash
 # Run all host verification tests:
-python scripts/test_generate_csv.py
+python src/tools/test_generate_csv.py
 uv run python vc-stack/test_installation_guard.py
 uv run python vc-stack/test_installations.py
 uv run python vc-stack/test_authorization_server.py

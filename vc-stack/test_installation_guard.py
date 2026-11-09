@@ -15,7 +15,7 @@ import tempfile
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-SCRIPTS = ["run-demo.sh", "vc-stack/bootstrap.sh", "vc-stack/smoke.sh", "vc-stack/issuer-smoke.sh"]
+SCRIPTS = ["vc-stack/bootstrap.sh", "vc-stack/smoke.sh", "vc-stack/issuer-smoke.sh"]
 STUBS = ["docker", "jq", "curl"]
 
 
@@ -69,19 +69,19 @@ def test_missing_directory_stops_before_docker() -> None:
 
 
 def test_installation_from_dot_env_passes_the_guard() -> None:
-    _, err, calls = run("run-demo.sh", installation=None, dot_env="INSTALLATION=ait\n")
+    _, err, calls = run("vc-stack/bootstrap.sh", installation=None, dot_env="INSTALLATION=ait\n")
     assert "INSTALLATION must name" not in err, err
-    assert "docker" in calls, "run-demo.sh never reached Docker with INSTALLATION=ait in vc-stack/.env"
+    assert "docker" in calls, "bootstrap.sh never reached Docker with INSTALLATION=ait in vc-stack/.env"
 
 
 def test_installation_from_marker_file_passes_the_guard() -> None:
-    _, err, calls = run("run-demo.sh", installation=None, marker="ait\n")
+    _, err, calls = run("vc-stack/bootstrap.sh", installation=None, marker="ait\n")
     assert "INSTALLATION must name" not in err, err
-    assert "docker" in calls, "run-demo.sh never reached Docker with INSTALLATION=ait in vc-stack/.installation"
+    assert "docker" in calls, "bootstrap.sh never reached Docker with INSTALLATION=ait in vc-stack/.installation"
 
 
 def test_environment_wins_over_marker_file() -> None:
-    code, err, calls = run("run-demo.sh", installation="nope", marker="ait\n")
+    code, err, calls = run("vc-stack/bootstrap.sh", installation="nope", marker="ait\n")
     assert code != 0 and "'nope'" in err, f"the marker overrode the environment: {err!r}"
     assert "docker" not in calls, calls
 

@@ -1,6 +1,6 @@
 """Plain-assert smoke tests for generate_csv.py (PLAN.md Phase 0 Tests).
 
-Run: python3 scripts/test_generate_csv.py
+Run: python3 src/tools/test_generate_csv.py
 """
 
 from __future__ import annotations
@@ -99,8 +99,11 @@ def test_certify_configuration_names_the_generated_columns() -> None:
 def test_template_and_context_column_name_the_same_vdr_url() -> None:
     url = seed_value(r"'([^']*/contexts/transcript/v1\.json[^']*)'").split(",")[0]
     assert url == "http://host.docker.internal:9098/contexts/transcript/v1.json", url
-    assert seed_template()["@context"] == ["https://www.w3.org/ns/credentials/v2", url,
-                                           "https://w3id.org/security/suites/ed25519-2020/v1"]
+    assert seed_template()["@context"] == [
+        "https://www.w3.org/ns/credentials/v2",
+        url,
+        "https://w3id.org/security/suites/ed25519-2020/v1",
+    ]
 
 
 def test_context_v1_signs_every_generated_claim() -> None:
@@ -126,13 +129,17 @@ def test_personas_cover_each_transcript_check() -> None:
     assert any(holds) and not all(holds)  # a hold fails the no-holds check
     assert {"Conferred"} < {r["conferralStatus"] for r in rows}  # and a student that is not conferred
     assert any(float(r["balance"]) > 0 for r in rows) and any(float(r["balance"]) == 0 for r in rows)
-    clean = [r for r in rows if not json.loads(r["holds"]) and r["conferralStatus"] == "Conferred" and float(r["balance"]) == 0]
+    clean = [
+        r
+        for r in rows
+        if not json.loads(r["holds"]) and r["conferralStatus"] == "Conferred" and float(r["balance"]) == 0
+    ]
     assert clean  # someone still passes all three
 
 
 def test_csv_goes_to_the_ait_installation_adapter() -> None:
     # Certify and, later, the mock adapter mount it from there (spec: Directory layout).
-    repo_root = Path(__file__).resolve().parent.parent
+    repo_root = Path(__file__).resolve().parent.parent.parent
     assert gc.OUT_CSV.resolve() == repo_root / "deploy" / "ait" / "adapter" / "student_identity_data.csv"
 
 
@@ -142,4 +149,3 @@ if __name__ == "__main__":
         t()
         print(f"PASS {t.__name__}")
     print(f"{len(tests)} tests passed")
-

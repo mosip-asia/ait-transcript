@@ -37,7 +37,7 @@ sorted_lines() {
   sort | awk 'NF'
 }
 
-python3 "$REPO_ROOT/scripts/generate_csv.py" >/dev/null
+python3 "$REPO_ROOT/src/tools/generate_csv.py" >/dev/null
 
 # The Issuer's own checks first, as issuer-smoke.sh runs them (issuer-checks.sh): the Data-provider plugin in Certify's
 # log, the issuer metadata against the Adapter contract's record schemas, the contexts through certify-nginx, and with

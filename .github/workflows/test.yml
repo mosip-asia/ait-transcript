@@ -33,7 +33,7 @@ jobs:
 
       # The readiness test reads deploy/ait/mimoto-issuers-config.json, which is git-ignored.
       - name: Render the issuer config
-        run: python scripts/render_mimoto_issuers_config.py
+        run: python src/tools/render_mimoto_issuers_config.py
 
       - name: Run test scripts
         run: |
@@ -48,8 +48,8 @@ jobs:
             src/portal/test_auth.py \
             src/portal/test_requests.py \
             src/adapter/test_courses.py \
-            scripts/test_generate_csv.py \
-            scripts/test_render_mimoto_issuers_config.py \
+            src/tools/test_generate_csv.py \
+            src/tools/test_render_mimoto_issuers_config.py \
             src/adapter/test_adapter.py \
             src/sis_bridge/test_bridge.py \
             src/gateway/tests/test_credential_types.py \
@@ -83,14 +83,14 @@ jobs:
         with:
           persist-credentials: false
 
-      # run-demo.sh builds the plugin jar in a Maven container with its repository in vc-stack/plugins/.m2.
+      # scripts/deploy.sh builds the plugin jar in a Maven container with its repository in vc-stack/plugins/.m2.
       - uses: actions/cache@v4
         with:
           path: vc-stack/plugins/.m2
           key: plugin-m2-${{ hashFiles('src/issuer/pom.xml') }}
 
       - name: Bring up the stack
-        run: ./run-demo.sh
+        run: ./scripts/deploy.sh
 
       - run: ./vc-stack/smoke.sh
 
@@ -158,10 +158,10 @@ jobs:
       # .env naming the installation, and the external network.
       - run: ./vc-stack/bootstrap.sh --prepare
 
-      # The git-ignored files the two folders mount: the ait adapter CSV and the plugin jar (as run-demo.sh builds it).
+      # The git-ignored files the two folders mount: the ait adapter CSV and the plugin jar (as scripts/deploy.sh builds it).
       - name: Generate the adapter CSV and build the plugin jar
         run: |
-          python3 scripts/generate_csv.py
+          python3 src/tools/generate_csv.py
           mkdir -p vc-stack/plugins/.m2
           docker run --rm --user "$(id -u):$(id -g)" \
             -v "$PWD/src/issuer:/src" -w /src \

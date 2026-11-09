@@ -1,4 +1,4 @@
-# Source for vc-stack/config/public-gateway-mobile.conf; scripts/render_mimoto_issuers_config.py renders it.
+# Source for vc-stack/config/public-gateway-mobile.conf; src/tools/render_mimoto_issuers_config.py renders it.
 # Phone-only views of two api. paths; Mimoto and Inji Web never request them here.
 location = /v1/mimoto/issuers {
     default_type application/json;

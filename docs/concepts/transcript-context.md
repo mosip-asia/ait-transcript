@@ -19,7 +19,7 @@ It replaces `vc-stack/config/academic-transcript-context.json`, which scoped eve
 
 - Locally the credential names `http://host.docker.internal:9098/contexts/transcript/v1.json`: port 9098 is the public gateway, and `host.docker.internal` is a name Certify (signing), verify-service and Mimoto (verifying) all resolve from inside Docker through their `extra_hosts`.
 - On a public deployment `bootstrap.sh` `context_refresh()` moves the `ait-transcript` row to `https://api.<host>/contexts/transcript/v1.json` through `vc-stack/context_refresh.sql`, so a phone can fetch it.
-- The URL lives in two places that must agree exactly: the `@context` of the Certify template and the `context` column of the `credential_config` row, both in `deploy/ait/certify_seed.sql`. Mimoto builds the credential request's `@context` from the column (via Certify's issuer metadata) and Certify matches it against its configuration. `scripts/test_generate_csv.py` checks the two agree, and that the context defines exactly the claims the CSV carries.
+- The URL lives in two places that must agree exactly: the `@context` of the Certify template and the `context` column of the `credential_config` row, both in `deploy/ait/certify_seed.sql`. Mimoto builds the credential request's `@context` from the column (via Certify's issuer metadata) and Certify matches it against its configuration. `src/tools/test_generate_csv.py` checks the two agree, and that the context defines exactly the claims the CSV carries.
 
 ## The rules
 

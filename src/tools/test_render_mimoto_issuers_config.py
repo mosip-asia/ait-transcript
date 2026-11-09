@@ -1,6 +1,6 @@
 """Plain-assert tests for render_mimoto_issuers_config.py.
 
-Run: python3 scripts/test_render_mimoto_issuers_config.py
+Run: python3 src/tools/test_render_mimoto_issuers_config.py
 """
 
 from __future__ import annotations
@@ -26,7 +26,7 @@ def test_issuer_list_is_rendered_from_and_into_the_installation() -> None:
     # Mimoto's list comes from the installation's template and lands beside it;
     # the phone gateway files stay in vc-stack/config.
     out = r.render(AIT)
-    repo_root = Path(__file__).resolve().parent.parent
+    repo_root = Path(__file__).resolve().parent.parent.parent
     assert {p.resolve() for p in out} == {
         repo_root / "deploy" / "ait" / "mimoto-issuers-config.json",
         repo_root / "vc-stack" / "config" / "mimoto-issuers-mobile.json",
@@ -54,7 +54,7 @@ def test_public_mobile_list_is_phone_reachable() -> None:
     assert issuer["credential_issuer_host"] == "https://api.demo.example"
     assert issuer["wellknown_endpoint"] == "https://api.demo.example/.well-known/openid-credential-issuer"
     assert issuer["redirect_uri"] == r.MOBILE_REDIRECT_URI
-    assert issuer["token_endpoint"] == "https://api.demo.example/v1/mimoto/get-token/AITUniversity"
+    assert issuer["token_endpoint"] == f"https://api.demo.example/v1/mimoto/get-token/{issuer['issuer_id']}"
     # Mimoto rejects an issuer whose token_endpoint does not end in its id.
     assert issuer["token_endpoint"].rsplit("/", 1)[-1] == issuer["issuer_id"]
     assert "host.docker.internal" not in out[r.MOBILE_ISSUERS_OUT]

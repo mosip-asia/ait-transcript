@@ -11,7 +11,7 @@ How the infra team deploys this directory (the service set, every variable and m
 | `certify_seed.sql` | Postgres, first start only | The `credential_config` rows for `developer-passport` and `achievement-certificate`, mounted after `vc-stack/certify_init.sql` |
 | `keycloak-realm.json` | Keycloak (`--import-realm`) | Realm `hackathon`: one user per roster `id`, the `wallet-demo` client, the test-only `smoke` client, the `developer_passport_vc_ldp` and `achievement_certificate_vc_ldp` scopes with Certify's audience. `bootstrap.sh` syncs the `wallet-demo` certificate into it |
 | `gateway.env` | The Gateway (`gateway/`), through Compose's `env_file` | Its settings, listed below |
-| `mimoto-issuers-config.json.template` | `scripts/render_mimoto_issuers_config.py` | Mimoto's issuer list (wallet test harness), with `${INJI_WEB_URL}` left to fill |
+| `mimoto-issuers-config.json.template` | `src/tools/render_mimoto_issuers_config.py` | Mimoto's issuer list (wallet test harness), with `${INJI_WEB_URL}` left to fill |
 | `mimoto-issuers-config.json` | Mimoto, Inji Web | Rendered by `run-demo.sh` from the template, then patched by `bootstrap.sh`. Git-ignored |
 | `adapter/student_identity_data.csv` | The mock adapter (`adapter/`, mounted read-only at `/data`) | The roster, committed and edited by hand: one row per participant, keyed by `id` (the Keycloak username). The adapter reads it on every request, no restart of anything |
 | `smoke.json` | `vc-stack/smoke.sh`, `vc-stack/issuer-smoke.sh`, `gateway/tests/test_evaluations.py`, `vc-stack/test_inji_web_vc_readiness.py` | The installation's test fixtures, below |
