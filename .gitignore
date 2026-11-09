@@ -10,6 +10,8 @@ plugin/target/
 src/issuer/target/
 target/
 deploy/data/
+deploy/*/private_key/
+*.p12
 portal/*.db
 .demo-state/*
 !.demo-state/.gitkeep

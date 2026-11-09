@@ -11,25 +11,25 @@ deploy/
 ├── base/                      # Common Inji platform defaults
 │   ├── certify_init.sql       # Postgres schema initialization
 │   ├── certify-default.properties # Base Inji Certify Spring properties
-│   ├── certify-nginx.conf     # Nginx reverse proxy routing
-│   └── vp_request_config.json # OpenID4VP request specifications
+│   └── certify-nginx.conf     # Nginx reverse proxy routing
 ├── ait/                       # AIT Tenant profile (academic transcript)
 │   ├── certify-installation.properties
 │   ├── keycloak-realm.json
 │   ├── mimoto-issuers-config.json.template
 │   ├── gateway.env
 │   ├── smoke.json
-│   └── adapter/
+│   ├── adapter/
+│   ├── vp_request_config.json # OpenID4VP request specifications
+│   └── private_key/           # Isolated signing keystore (git-ignored)
 ├── hackathon/                 # Hackathon Tenant profile (developer passport & achievements)
 │   ├── certify-installation.properties
 │   ├── keycloak-realm.json
 │   ├── mimoto-issuers-config.json.template
 │   ├── gateway.env
 │   ├── smoke.json
-│   └── adapter/
-├── data/                      # Isolated runtime keystores & state (git-ignored)
-│   ├── ait/CERTIFY_PKCS12
-│   └── hackathon/CERTIFY_PKCS12
+│   ├── adapter/
+│   ├── vp_request_config.json # OpenID4VP request specifications
+│   └── private_key/           # Isolated signing keystore (git-ignored)
 ├── remote-deploy.sh           # Automated VM deployment script used by CI/CD
 └── smoke.sh                   # Pure Bash issuance smoke test
 ```
