@@ -68,7 +68,7 @@ services:
       - SPRING_CONFIG_NAME=certify
     volumes:
       - ./config/certify-default.properties:/home/mosip/config/certify-default.properties
-      - ./config/certify-installation.properties:/home/mosip/config/certify-installation.properties
+      - ../installations/${INSTALLATION:-ait}/certify-installation.properties:/home/mosip/config/certify-installation.properties
       - ./data/CERTIFY_PKCS12:/home/inji/CERTIFY_PKCS12
       - ./config/vp_request_config.json:/home/mosip/config/vp_request_config.json
     networks:
