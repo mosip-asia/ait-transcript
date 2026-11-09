@@ -1,16 +1,15 @@
-FROM python:3.12-slim-bookworm
+# ==============================================================================
+# Custom Branded Inji Verify UI
+# ==============================================================================
+# Extends upstream injistack/inji-verify-ui:0.17.0 with custom AIT branding:
+# - Replaces default Inji logo with AIT Verify SVG logo
+# - Injects custom AIT theme stylesheet (custom teal brand colors)
+# ==============================================================================
+FROM injistack/inji-verify-ui:0.17.0
 
-WORKDIR /app
+# Copy custom AIT branding logo and assets
+COPY src/verifier/assets/inji_verify.svg /usr/share/nginx/html/assets/images/inji_verify.svg
 
-ENV PYTHONUNBUFFERED=1 \
-    PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONPATH=/app
-
-COPY src/verifier/requirements.txt requirements.txt
-RUN pip install --no-cache-dir -r requirements.txt
-
-COPY src/verifier/ src/verifier/
-
-EXPOSE 4007
-
-CMD ["uvicorn", "src.verifier.main:app", "--host", "0.0.0.0", "--port", "4007"]
+# Inject custom theme stylesheet into index.html
+COPY src/verifier/theme.css /usr/share/nginx/html/theme.css
+RUN sed -i 's|</head>|<link rel="stylesheet" href="/theme.css"></head>|' /usr/share/nginx/html/index.html

@@ -39,5 +39,4 @@ packages = [
     "src/portal",
     "src/sis_bridge",
     "src/tools",
-    "src/verifier",
 ]

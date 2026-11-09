@@ -1,0 +1,85 @@
+/* ==============================================================================
+   AIT Verifier Custom Theme (Asian Institute of Technology)
+   Overrides Inji Verify UI CSS variables (--iv-*) and visual styling
+   ============================================================================== */
+
+:root,
+body,
+body.ait_theme,
+[class*="ait_theme"],
+.default_theme {
+  /* Brand Primary Colors */
+  --iv-primary-color: #0f766e;              /* Teal 700 */
+  --iv-logo-start-color: #0d9488;           /* Teal 600 */
+  --iv-horizontal-line: #0f766e;
+  --iv-active-tab-background: #0f766e;
+  --iv-active-tab-text: #ffffff;
+  --iv-inactive-tab-text: #1e293b;
+  --iv-inactive-tab-background: #ffffff;
+  --iv-document-icon: #0f766e;
+
+  /* Backgrounds & Text */
+  --iv-background-color: #ffffff;
+  --iv-page-background-color: #f8fafc;       /* Slate 50 */
+  --iv-white-text: #ffffff;
+  --iv-header-background-color: #f0fdfa;     /* Teal 50 */
+  --iv-header-label-text: #0f172a;           /* Slate 900 */
+  --iv-header-description-text: #475569;     /* Slate 600 */
+  --iv-verificationMethodTabs-bg-color: #ffffff;
+  --iv-arrow-background: #f0fdfa;
+
+  /* Stepper & Navigation */
+  --iv-stepper-background: #f8fafc;
+  --iv-stepper-label: #64748b;
+  --iv-stepper-description: #334155;
+  --iv-selector-pannel-title: #0f172a;
+  --iv-selector-pannel-sub-title: #475569;
+  --iv-selector-border: #e2e8f0;
+  --iv-sortBy-border: #e2e8f0;
+  --iv-sortBy-text: #334155;
+
+  /* Status Verdicts */
+  --iv-success: #ecfdf5;
+  --iv-successText: #059669;
+  --iv-successBorder: #a7f3d0;
+  --iv-success-alert: #10b981;
+
+  --iv-invalid: #fef2f2;
+  --iv-invalidText: #dc2626;
+  --iv-invalidBorder: #fecaca;
+  --iv-error-alert: #ef4444;
+
+  --iv-expired: #fffbeb;
+  --iv-expiredText: #d97706;
+  --iv-expiredBorder: #fde68a;
+  --iv-warning-alert: #f59e0b;
+
+  --iv-revoked: #fdf2f8;
+  --iv-revokedText: #be185d;
+  --iv-revokedBorder: #fbcfe8;
+
+  /* Camera & Scanner UI */
+  --iv-gradient-scanning-line: linear-gradient(90deg, #0f766e, #14b8a6 50%, #2dd4bf);
+  --iv-camera-denied-label-color: #0f172a;
+  --iv-camera-denied-description-color: #64748b;
+  --iv-upload-description: #64748b;
+  --iv-qr-code-timer: #64748b;
+
+  /* Footer & Copyrights */
+  --iv-copyrights-text: #94a3b8;
+  --iv-copyrights-border: #e2e8f0;
+  --iv-disabledTab-bg: #e2e8f0;
+  --iv-disabledTab-text: #64748b;
+  --iv-disabled-button-bg: #cbd5e1;
+}
+
+/* Header customization */
+header {
+  border-bottom: 1px solid #e2e8f0 !important;
+  box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.05);
+}
+
+/* Rounded corners and clean elevation */
+.shadow-md {
+  box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.07), 0 2px 4px -2px rgb(0 0 0 / 0.07) !important;
+}

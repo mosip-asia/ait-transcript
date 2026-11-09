@@ -1,7 +1,7 @@
 # ==============================================================================
 # Verifier Service Compose Manifest
 # ==============================================================================
-# Runs the custom AIT Verifiable Credential Verifier UI & API on port 4007,
+# Runs the custom AIT-branded Inji Verify UI on port 4007,
 # backed by upstream Inji Verify Service and PostgreSQL.
 #
 # Usage:
@@ -10,16 +10,28 @@
 name: ${COMPOSE_PROJECT_NAME}
 
 services:
-  verifier:
+  verify-ui:
     build:
       context: .
       dockerfile: src/verifier/Dockerfile
-    image: ghcr.io/mosip-asia/verifier:local
+    image: ghcr.io/mosip-asia/verify-ui:local
     ports:
-      - "4007:4007"
+      - "4007:8000"
     environment:
-      - VERIFY_SERVICE_URL=http://verify-service:8080
-      - INSTITUTION_NAME=${INSTITUTION_NAME:-Asian Institute of Technology}
+      - DEFAULT_TITLE=${VERIFIER_TITLE:-AIT Credential Verifier}
+      - DEFAULT_THEME=ait_theme
+      - DEFAULT_LANG=en
+      - INTERNET_CONNECTIVITY_CHECK_ENDPOINT=https://dns.google/
+      - INTERNET_CONNECTIVITY_CHECK_TIMEOUT=10000
+      - OVP_QR_HEADER=INJI_OVP://payload=
+      - VERIFIABLE_CLAIMS_CONFIG_URL=/assets/config.json
+      - VP_SUBMISSION_SUPPORTED=false
+      - CLIENT_ID=inji-verify-ui
+      - CLIENT_ID_DID=${INJI_VERIFY_DID_URI:-did:web:localhost%3A9095:v1:verify}
+      - DISPLAY_TIMEOUT=120000
+      - VERIFY_SERVICE_API_URL=/v1/verify
+    volumes:
+      - ./deploy/base/verify-config.json:/usr/share/nginx/html/assets/config.json:ro
     depends_on:
       - verify-service
 
