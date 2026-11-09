@@ -53,6 +53,9 @@ services:
       - "9090:8090"
     environment:
       - active_profile_env=default, installation
+      - AUTH_SERVER_ISSUER=${AUTH_SERVER_ISSUER}
+      - AUTH_SERVER_JWKS_URL=${AUTH_SERVER_JWKS_URL}
+      - AUTH_SERVER_WALLET_CLIENT_ID=${AUTH_SERVER_WALLET_CLIENT_ID:-wallet-demo}
       - CERTIFY_DID=${CERTIFY_DID:-did:key:z6MkpPLACEHOLDERreplaceMeViaBootstrapDidRefreshScript1}
       - CERTIFY_RECORD_URL=${CERTIFY_RECORD_URL:-http://adapter:8000/student/{sub}/transcript}
       - container_user=mosip
@@ -63,8 +66,6 @@ services:
       - mosip_certify_domain_url=${CERTIFY_PUBLIC_BASE_URL:-http://localhost:9091}
       - SPRING_CONFIG_LOCATION=/home/mosip/config/
       - SPRING_CONFIG_NAME=certify
-    env_file:
-      - ../installations/ait/authorization-server.env
     volumes:
       - ./config/certify-default.properties:/home/mosip/config/certify-default.properties
       - ./config/certify-installation.properties:/home/mosip/config/certify-installation.properties

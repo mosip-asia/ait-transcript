@@ -40,7 +40,9 @@ services:
       - "9090:8090"
     environment:
       - active_profile_env=default, installation
+      - AUTH_SERVER_ISSUER=${AUTH_SERVER_ISSUER}
       - AUTH_SERVER_JWKS_URL=${AUTH_SERVER_JWKS_URL}
+      - AUTH_SERVER_WALLET_CLIENT_ID=${AUTH_SERVER_WALLET_CLIENT_ID}
       - CERTIFY_DID=${CERTIFY_DID}
       - CERTIFY_RECORD_URL=${CERTIFY_RECORD_URL}
       - container_user=mosip
@@ -51,8 +53,6 @@ services:
       - mosip_certify_domain_url=${CERTIFY_PUBLIC_BASE_URL}
       - SPRING_CONFIG_LOCATION=/home/mosip/config/
       - SPRING_CONFIG_NAME=certify
-    env_file:
-      - ./installations/ait/authorization-server.env
     volumes:
       - type: bind
         source: ./src/issuer/target/issuer-data-provider-plugin.jar
