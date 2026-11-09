@@ -32,7 +32,7 @@ from test_adapter import (  # noqa: E402
 
 SCOPE = "ait_transcript_vc_ldp"
 SAMPLE = json.loads((HERE / "fixtures" / "st123456.json").read_text(encoding="utf-8"))
-HANDOVER = REPO_ROOT / "wiki" / "project" / "issuer-v0.1" / "sis-adapter-handover.md"
+HANDOVER = REPO_ROOT / "docs" / "project" / "issuer-v0.1" / "sis-adapter-handover.md"
 
 # The course and term fields the SIS does not serve.
 NO_HOURS = {"lec": "", "lab": ""}
@@ -266,7 +266,7 @@ def gaps_bullet(label: str) -> set[str]:
 
 
 def test_the_handovers_gaps_name_every_claim_the_sis_route_has_no_field_for() -> None:
-    """wiki/project/issuer-v0.1/sis-adapter-handover.md tells the SIS team what the bridge serves empty for every
+    """docs/project/issuer-v0.1/sis-adapter-handover.md tells the SIS team what the bridge serves empty for every
     student: the claims no SIS field fills, split by whether the contract gives them a format (a date, a year or a
     number), plus the course and term fields the SIS does not serve."""
     contract = load_contract()

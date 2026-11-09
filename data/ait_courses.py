@@ -1,14 +1,6 @@
-"""Adapted from ../design/ait_courses.py (frozen, vendored from inji/credential-lab).
+"""AIT courses parsing, validation, and enrichment.
 
-Changes vs. the frozen copy:
-- PackValidationError is defined locally instead of imported from
-  credential_lab.domain.pack, which doesn't exist in this repo.
-- render_course_table_html() and the HTML course-table claim it fed are gone
-  (ticket 06): every claim is signed now, and the credential carries the course
-  record once, as `courses`. The frozen ../design/ copy still renders the table.
-
-Do not edit ../design/ait_courses.py to match — that file is the frozen
-reference copy (see wiki/concepts/transcript-credential.md).
+See docs/concepts/transcript-credential.md.
 """
 
 from __future__ import annotations

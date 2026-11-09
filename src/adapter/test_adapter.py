@@ -175,7 +175,7 @@ def resolve(schema: dict, contract: dict) -> dict:
 ELIGIBILITY_PATH = "/student/{sub}/eligibility"
 # The record URL both Installations' Certify reads on the mock, as a path.
 TRANSCRIPT_URL = "/student/{sub}/transcript"
-CREDENTIAL_SCHEMA = REPO_ROOT / "wiki" / "schemas" / "ait-transcript-credential.v2.schema.json"
+CREDENTIAL_SCHEMA = REPO_ROOT / "docs" / "schemas" / "ait-transcript-credential.v2.schema.json"
 
 
 def answer_schemas(contract: dict, path: str) -> list[dict]:
@@ -477,7 +477,7 @@ def shape_of(schema: dict, resolve_ref, top: bool = True) -> object:
 
 def test_the_transcript_record_is_the_credential_schemas_subject_less_the_holder() -> None:
     """The two master files agree: openapi.yaml's TranscriptRecord requires exactly the claims, terms and courses that
-    wiki/schemas/ait-transcript-credential.v2.schema.json requires of the signed credentialSubject, with the same
+    docs/schemas/ait-transcript-credential.v2.schema.json requires of the signed credentialSubject, with the same
     types and formats (patterns and minimum lengths), and terms and courses that allow no other key, except the holder's `id`, which
     Certify sets."""
     contract = load_contract()
@@ -501,10 +501,10 @@ def test_the_transcript_record_is_the_credential_schemas_subject_less_the_holder
 
 def test_the_handovers_privacy_section_names_every_claim_the_ait_ledger_indexes() -> None:
     """Certify logs every value its ledger indexes (LedgerUtils, at INFO), so the list on the handover's "Certify also
-    logs it" line (wiki/project/issuer-v0.1/sis-adapter-handover.md) is the ait Installation's indexed mappings."""
+    logs it" line (docs/project/issuer-v0.1/sis-adapter-handover.md) is the ait Installation's indexed mappings."""
     properties = (REPO_ROOT / "deploy" / "ait" / "certify-installation.properties").read_text(encoding="utf-8")
     indexed = set(re.findall(r"^mosip\.certify\.indexed-mappings\.(\w+)=", properties, re.M))
-    page = (REPO_ROOT / "wiki" / "project" / "issuer-v0.1" / "sis-adapter-handover.md").read_text(encoding="utf-8")
+    page = (REPO_ROOT / "docs" / "project" / "issuer-v0.1" / "sis-adapter-handover.md").read_text(encoding="utf-8")
     line = next(line for line in page.splitlines() if line.startswith("- **Certify also logs it, and more.**"))
     named = set(re.findall(r"`(\w+)`", line.split(" in plain text: ", 1)[1].split(". ", 1)[0]))
     assert indexed and named == indexed, (named, indexed)

@@ -84,4 +84,4 @@ Later releases: the tag list as of 2026-10-20 is `v0.14.0` then `v1.0.0-alpha.1`
 - GitHub API `repos/inji/inji-certify/tags` and `/releases` (2026-10-20): tags `v1.0.0-alpha.1`, `v0.14.0`, `v0.13.1`, `v0.13.0`, `v0.12.2`, …; releases `v1.0.0-alpha.1` 2026-07-31, `v0.14.0` 2026-03-25, `v0.13.1` 2025-12-05. `https://github.com/mosip/inji-certify/releases/tag/v0.15.0` and `v0.16.0` return 404.
 - docs.inji.io: `inji-certify/releases/version-0.14.0`, `inji-certify/releases/version-1.0.0-alpha.1`, `inji-certify/overview/features/vc-issuance-with-pre-authorised-code-and-credential-offer` (Limitations, Supported Issuance Modes), `inji-certify/releases` (index).
 - `mosip/digital-credential-plugins` tag `v0.6.0`: no file matches `pre-auth`, `preauth` or `tx_code`.
-- Project: `CONTEXT.md`, `wiki/project/issuer-v0.1/responsibilities.md` section 5, `.scratch/issuer-v0.1/issues/04-plugin-config-and-gateway-endpoint.md`, `.scratch/issuer-v0.1/issues/12-*.md`.
+- Project: `CONTEXT.md`, `docs/project/issuer-v0.1/responsibilities.md` section 5, `.scratch/issuer-v0.1/issues/04-plugin-config-and-gateway-endpoint.md`, `.scratch/issuer-v0.1/issues/12-*.md`.

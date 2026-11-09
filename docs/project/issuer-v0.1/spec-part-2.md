@@ -126,7 +126,7 @@ Behaviour:
 Accepted when:
 
 - `PUT` then `GET` round-trips for each path family, 401 without the token, 404 outside the families, and a `PUT` through the public gateway is refused.
-- A short page `wiki/architecture/vdr-publisher.md` states the API as the specification for Jo: paths, methods, auth, status codes, content types, who publishes what and when. Handed to Jo with the end-to-end flows (contact C5).
+- A short page `docs/architecture/vdr-publisher.md` states the API as the specification for Jo: paths, methods, auth, status codes, content types, who publishes what and when. Handed to Jo with the end-to-end flows (contact C5).
 
 ### Issuer identifier: `did:key` in v0.1
 
@@ -242,7 +242,7 @@ Accepted when:
 Behaviour:
 
 - `smoke.sh` runs the whole journey for every credential type in the installation's `smoke.json`: an eligible persona claims by the scripted wallet and by the Portal's hard copy; both verify; a registrar token finds both through the admin API and revokes one of each; after the batch and one publish both verify as revoked; a refused persona is refused on both paths with the same checks. The same script runs for both installations in CI.
-- `wiki/project/issuer-v0.1/flows.md` (the `ISSUER_E2E_FLOWS.md` of `responsibilities.md` section 3) draws each flow as built: wallet claim, hard copy, staff search and revoke, publishing; with the VDR publisher page it goes to Jo (contact C5).
+- `docs/project/issuer-v0.1/flows.md` (the `ISSUER_E2E_FLOWS.md` of `responsibilities.md` section 3) draws each flow as built: wallet claim, hard copy, staff search and revoke, publishing; with the VDR publisher page it goes to Jo (contact C5).
 - `contracts.md`, `deviations.md` and `configuration-contract.md` are updated to what was built; `CONTEXT.md` gains any term the build introduced.
 - v0.1 is tagged on `main`.
 

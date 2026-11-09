@@ -9,7 +9,7 @@ tags:
 
 # SIS Adapter handover
 
-Written 2026-11-03 for the infra team and the SIS Adapter's builders (Jo and Boss). The two master files are still [`adapter/openapi.yaml`](../../../adapter/openapi.yaml) and [`wiki/schemas/ait-transcript-credential.v2.schema.json`](../../schemas/ait-transcript-credential.v2.schema.json). This page says the same things in plain words, plus what the schemas can't say. If this page and the master files disagree, the master files win; tell Thas so the page gets fixed.
+Written 2026-11-03 for the infra team and the SIS Adapter's builders (Jo and Boss). The two master files are still [`src/adapter/openapi.yaml`](../../../src/adapter/openapi.yaml) and [`docs/schemas/ait-transcript-credential.v2.schema.json`](../../schemas/ait-transcript-credential.v2.schema.json). This page says the same things in plain words, plus what the schemas can't say. If this page and the master files disagree, the master files win; tell Thas so the page gets fixed.
 
 ## What the Issuer asks for
 

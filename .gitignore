@@ -14,8 +14,7 @@ deploy/*/private_key/
 *.p12
 portal/*.db
 src/portal/*.db
-.demo-state/*
-!.demo-state/.gitkeep
+.demo-state/
 .DS_Store
 .claude/
 .venv/
@@ -30,4 +29,5 @@ compose.override.yaml
 compose.override.yml
 /AGENTS.md
 /PLAN.md
-/wiki/log.md
+/docs/log.md
+

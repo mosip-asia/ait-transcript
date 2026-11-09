@@ -421,7 +421,7 @@ Deployments are triggered via GitHub Actions: **Actions $\rightarrow$ Deploy $\r
 
 ## 8. Documentation & References
 
-- [Architecture & Topology (`wiki/architecture/vc-stack.md`)](./wiki/architecture/vc-stack.md)
+- [Architecture & Topology (`docs/architecture/vc-stack.md`)](./docs/architecture/vc-stack.md)
 - [ADR 0001: Approval Gate Beside the Data Path](./docs/adr/0001-approval-gate-beside-the-data-path.md)
 - [Inji Certify Standalone Deployment (`deploy/README.md`)](./deploy/README.md)
 - [Gateway Workflow Engine (`src/gateway/README.md`)](./src/gateway/README.md)

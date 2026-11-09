@@ -1,6 +1,6 @@
 """Generate deploy/ait/adapter/student_identity_data.csv from data/students.json.
 
-data/students.json is the single source of truth (see wiki/concepts/transcript-credential.md).
+data/students.json is the single source of truth (see docs/concepts/transcript-credential.md).
 Run: python3 data/generate_csv.py
 """
 

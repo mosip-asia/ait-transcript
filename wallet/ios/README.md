@@ -8,7 +8,7 @@ npm install && (cd ios && pod install)
 open ios/Inji.xcworkspace          # pick your iPhone, Run (or Archive for TestFlight)
 ```
 
-`BUNDLE_ID` and `TEAM_ID` are required: the patch carries the placeholders `com.example.aitwallet` and `XXXXXXXXXX`, which the script replaces. Register that bundle id on your Apple Developer team, and create an App Store Connect record before a TestFlight upload. Use a **physical iPhone**: v0.22.1 does not run in the simulator. Connection details, the flow and the full build notes: [wiki/guides/wallet-developer-urls.md](../../wiki/guides/wallet-developer-urls.md).
+`BUNDLE_ID` and `TEAM_ID` are required: the patch carries the placeholders `com.example.aitwallet` and `XXXXXXXXXX`, which the script replaces. Register that bundle id on your Apple Developer team, and create an App Store Connect record before a TestFlight upload. Use a **physical iPhone**: v0.22.1 does not run in the simulator. Connection details, the flow and the full build notes: [docs/guides/wallet-developer-urls.md](../../docs/guides/wallet-developer-urls.md).
 
 ## What `ait-ios.patch` changes (8 files)
 

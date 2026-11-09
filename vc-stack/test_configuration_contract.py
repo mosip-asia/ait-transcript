@@ -1,4 +1,4 @@
-"""The configuration contract page (wiki/project/issuer-v0.1/configuration-contract.md) against the Compose files.
+"""The configuration contract page (docs/project/issuer-v0.1/configuration-contract.md) against the Compose files.
 
 Both directions: every service, image, environment variable, env file, mounted file, host port and Compose variable
 of the folder files vc-stack/compose.yaml includes (vc-stack/<folder>/compose.yaml, each path relative to its own
@@ -23,7 +23,7 @@ import yaml
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 STACK = REPO_ROOT / "vc-stack"
-PAGE = REPO_ROOT / "wiki" / "project" / "issuer-v0.1" / "configuration-contract.md"
+PAGE = REPO_ROOT / "docs" / "project" / "issuer-v0.1" / "configuration-contract.md"
 INSTALLATIONS = REPO_ROOT / "deploy"
 NAMES = sorted(p.parent.name for p in INSTALLATIONS.glob("*/gateway.env"))
 

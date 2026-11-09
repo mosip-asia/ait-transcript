@@ -16,7 +16,7 @@ wallet/
 
 ## `common/`
 
-One file, `.env`: `MIMOTO_HOST`, `ESIGNET_HOST` and `OBSRV_HOST` point at `https://api.transcript-demo.ait-vc.dpi.ait.ac.th`. It is plain JavaScript config read by both platforms. Pointing `OBSRV_HOST` at the platform also stops usage telemetry going to MOSIP. Connection details and the flow: [wiki/guides/wallet-developer-urls.md](../wiki/guides/wallet-developer-urls.md).
+One file, `.env`: `MIMOTO_HOST`, `ESIGNET_HOST` and `OBSRV_HOST` point at `https://api.transcript-demo.ait-vc.dpi.ait.ac.th`. It is plain JavaScript config read by both platforms. Pointing `OBSRV_HOST` at the platform also stops usage telemetry going to MOSIP. Connection details and the flow: [docs/guides/wallet-developer-urls.md](../docs/guides/wallet-developer-urls.md).
 
 ## Android
 

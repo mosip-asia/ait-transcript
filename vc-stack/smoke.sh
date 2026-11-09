@@ -50,7 +50,7 @@ auth_srv=$(echo "$issuer_json" | jq -r '.authorization_servers[0] // empty')
   || fail "Certify authorization_servers must be AUTH_SERVER_ISSUER, $AUTH_SERVER_ISSUER (got: ${auth_srv:-<empty>})"
 ok "Certify OID4VCI authorization_servers name the configured issuer $AUTH_SERVER_ISSUER"
 
-# The context check of wiki/concepts/transcript-context.md ("How it is checked"): the contexts here, issuance and the
+# The context check of docs/concepts/transcript-context.md ("How it is checked"): the contexts here, issuance and the
 # tampered copies below, then the log warnings and the JSON-LD library versions.
 check_contexts http://localhost:9098 "the public gateway"
 

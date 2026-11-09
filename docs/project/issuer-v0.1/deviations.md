@@ -49,7 +49,7 @@ Source: [`spec-part-2.md`](spec-part-2.md). Not yet put to the team.
 
 ## Changes on 2026-11-02
 
-Source: [ADR 0001](../../../docs/adr/0001-approval-gate-beside-the-data-path.md) and [`contracts.md`](contracts.md) section 2. Not yet put to the team. This row departs from v0.1's own part 1, not from the proposal: stories 21 and 22 of the hackathon chain spec (retired: `git show 1d68d74:wiki/project/issuer-v0.1/spec-hackathon-chain.md`) said the plugin knows one URL, one secret and two timeouts and nothing about claims, and the Gateway owns the error vocabulary. Both are reversed.
+Source: [ADR 0001](../../adr/0001-approval-gate-beside-the-data-path.md) and [`contracts.md`](contracts.md) section 2. Not yet put to the team. This row departs from v0.1's own part 1, not from the proposal: stories 21 and 22 of the hackathon chain spec (retired: `git show 1d68d74:wiki/project/issuer-v0.1/spec-hackathon-chain.md`) said the plugin knows one URL, one secret and two timeouts and nothing about claims, and the Gateway owns the error vocabulary. Both are reversed.
 
 | # | Proposal says | v0.1 does | Why | Revisit |
 |---|---|---|---|---|
