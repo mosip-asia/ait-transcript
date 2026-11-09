@@ -67,4 +67,4 @@ To introduce a new credential into the institution:
 1. **Define Schema:** Add `src/vc-lab/schemas/<credential-name>.schema.json`.
 2. **Author JSON-LD Context:** Add `src/vc-lab/contexts/<credential-name>/v1.json` mapping each claim to a URI or `@json` literal.
 3. **Add Clearance Rules:** In `src/gateway/credential_types.py`, add the scope and checklist rules (e.g. holds, eligibility).
-4. **Configure Certify Seed:** Add the credential type row to `deploy/<name>/certify_seed.sql` (or `config/credentials/`).
+4. **Configure Certify Seed:** Add the credential type row to `deploy/<name>/certify_seed.sql` (or `deploy/<name>/credentials/`).

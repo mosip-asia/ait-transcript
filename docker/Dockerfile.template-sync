@@ -8,12 +8,7 @@ ENV UV_COMPILE_BYTECODE=1
 COPY pyproject.toml uv.lock* README.md /app/
 
 # Copy packages specified in pyproject.toml wheel targets
-COPY gateway/ /app/gateway/
-COPY portal/ /app/portal/
-COPY sis-bridge/ /app/sis-bridge/
-COPY adapter/ /app/adapter/
-COPY src/certify_template_sync/ /app/src/certify_template_sync/
-COPY config/credentials/ /app/config/credentials/
+COPY src/ /app/src/
 
 # Synchronize dependencies and install project scripts
 RUN uv sync --no-dev

@@ -115,7 +115,7 @@ fi
 
 # Validate JSON files
 log_info "Validating schema and fixture JSON files..."
-for f in docs/schemas/*.json config/credentials/*.json src/portal/fixtures/*.json; do
+for f in docs/schemas/*.json deploy/*/credentials/*.json src/portal/fixtures/*.json; do
   if [[ -f "$f" ]]; then
     if ! "$PY" -m json.tool "$f" > /dev/null; then
       log_err "Syntax error in $f"

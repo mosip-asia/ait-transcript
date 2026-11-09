@@ -178,7 +178,7 @@ To verify the complete issuer engine, GitOps template, and SIS connectivity end-
 
 ### Declarative GitOps Credential Configuration
 
-Credential templates and configurations are managed natively as **GitOps declarative JSON artifacts** under `config/credentials/` (e.g. `config/credentials/ait-transcript.json`).
+Credential templates and configurations are managed natively as **GitOps declarative JSON artifacts** under `deploy/<installation>/credentials/` (e.g. `deploy/ait/credentials/ait-transcript.json`).
 
 * **Human-Readable & Version-Controlled:** Templates are plain JSON files. No base64-encoded strings or manual SQL seed scripts.
 * **Automatic Init Synchronization:** When executing `docker compose up -d`, the `template-sync` init container runs first, executing an idempotent SQL `UPSERT` into PostgreSQL (`ON CONFLICT (credential_config_key_id) DO UPDATE`) before `certify` boots.

@@ -99,7 +99,7 @@ services:
       database:
         condition: service_healthy
     volumes:
-      - ./config/credentials:/app/config/credentials:ro
+      - ./deploy/${INSTALLATION}/credentials:/app/config/credentials:ro
     environment:
       - POSTGRES_HOST=database
       - POSTGRES_PORT=5432

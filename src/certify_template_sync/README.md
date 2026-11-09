@@ -16,7 +16,7 @@ Traditional seed SQL scripts:
 - Make review in Git PRs nearly impossible.
 
 `certify-template-sync`:
-- Lets you write clean, human-readable JSON in `config/credentials/*.json`.
+- Lets you write clean, human-readable JSON in `deploy/<installation>/credentials/*.json`.
 - Idempotently updates the running database via `ON CONFLICT (credential_config_key_id) DO UPDATE`.
 - Preserves all runtime keys, status lists, and audit ledger entries.
 - Runs with `uv`, plain Python, or via Docker Compose.
@@ -58,7 +58,7 @@ python3 src/certify_template_sync/sync.py --apply
 
 | Environment Variable | Default (Local / Docker) | Description |
 | :--- | :--- | :--- |
-| `CREDENTIALS_DIR` | `./config/credentials` or `/config` | Directory containing credential JSON files |
+| `CREDENTIALS_DIR` | `./deploy/<installation>/credentials` or `/app/config/credentials` | Directory containing credential JSON files |
 | `POSTGRES_HOST` | `localhost` (or `database` in Docker) | PostgreSQL hostname |
 | `POSTGRES_PORT` | `5432` | PostgreSQL port |
 | `POSTGRES_DB` | `inji_certify` | Inji Certify database name |
