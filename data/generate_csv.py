@@ -1,4 +1,4 @@
-"""Generate installations/ait/adapter/student_identity_data.csv from data/students.json.
+"""Generate deploy/ait/adapter/student_identity_data.csv from data/students.json.
 
 data/students.json is the single source of truth (see wiki/concepts/transcript-credential.md).
 Run: python3 data/generate_csv.py
@@ -16,10 +16,10 @@ from ait_courses import enrich_ait_transcript_subject  # noqa: E402
 
 REPO_ROOT = Path(__file__).parent.parent
 STUDENTS_JSON = Path(__file__).parent / "students.json"
-OUT_CSV = REPO_ROOT / "installations" / "ait" / "adapter" / "student_identity_data.csv"
+OUT_CSV = REPO_ROOT / "deploy" / "ait" / "adapter" / "student_identity_data.csv"
 
 # Locked claim list. Order here becomes the CSV column order and matches the
-# credentialSubject of the template in installations/ait/certify_seed.sql.
+# credentialSubject of the template in deploy/ait/certify_seed.sql.
 CLAIM_COLUMNS = [
     "fullName",
     "dateOfBirth",

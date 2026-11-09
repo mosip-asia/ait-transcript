@@ -24,7 +24,7 @@ import yaml
 REPO_ROOT = Path(__file__).resolve().parent.parent
 STACK = REPO_ROOT / "vc-stack"
 PAGE = REPO_ROOT / "wiki" / "project" / "issuer-v0.1" / "configuration-contract.md"
-INSTALLATIONS = REPO_ROOT / "installations"
+INSTALLATIONS = REPO_ROOT / "deploy"
 NAMES = sorted(p.parent.name for p in INSTALLATIONS.glob("*/gateway.env"))
 
 SCOPES = {"installation", "shared", "environment"}
@@ -281,7 +281,7 @@ def test_mimoto_config_comes_from_demo() -> None:
     assert len(hosts) == 1, hosts
     host = hosts.pop()
     assert services()[host][0] == "vc-stack/demo", (host, services()[host][0])
-    assert {"vc-stack/config", "installations/<name>/mimoto-issuers-config.json"} <= mounts[host], mounts[host]
+    assert {"vc-stack/config", "deploy/<name>/mimoto-issuers-config.json"} <= mounts[host], mounts[host]
     for service, (folder, _) in services().items():
         if folder == "vc-stack/issuer":
             found = {s for s in mounts.get(service, set()) if s == "vc-stack/config" or "mimoto" in s}

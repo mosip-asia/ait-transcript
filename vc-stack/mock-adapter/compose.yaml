@@ -12,7 +12,7 @@ services:
       - ADAPTER_CSV=/data/student_identity_data.csv
     volumes:
       # Compose refuses this file when INSTALLATION is unset, as it does issuer/ and demo/.
-      - ../../installations/${INSTALLATION:?set INSTALLATION in vc-stack/.env}/adapter:/data:ro
+      - ../../deploy/${INSTALLATION:?set INSTALLATION in vc-stack/.env}/adapter:/data:ro
     networks:
       - network
 

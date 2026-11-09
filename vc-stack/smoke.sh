@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Automated smoke checks for Phase 1 (curl/jq). Run from vc-stack/ after bootstrap.
-# The same script for every installation: what differs comes from installations/$INSTALLATION (the stand-in realm and
+# The same script for every installation: what differs comes from deploy/$INSTALLATION (the stand-in realm and
 # the Mimoto issuer id, set by installation.sh, the Authorization Server settings, which must name the stand-in, and smoke.json: a list with one entry per credential type, each with the
 # credential configuration, its scope, the eligible persona (or a list of them), each refused persona with the check it fails, the claims
 # to tamper and, optionally, the Mimoto PDF template). Every issued, refused and tampered case runs for every type.
@@ -126,7 +126,7 @@ adapter_test() {
   docker compose run --rm --no-deps -T -v "$STACK_DIR/../adapter:/demo/adapter:ro" demo-app python adapter/test_adapter.py "$@"
 }
 adapter_rc=0
-adapter_test http://adapter:8000 "/demo/installations/$INSTALLATION/adapter/student_identity_data.csv" \
+adapter_test http://adapter:8000 "/demo/deploy/$INSTALLATION/adapter/student_identity_data.csv" \
   http://adapter-copy:8000 /demo/.demo-state/adapter-copy/student_identity_data.csv || adapter_rc=$?
 docker rm -f adapter-copy >/dev/null 2>&1 || true
 rm -rf "$adapter_copy_dir"

@@ -135,7 +135,7 @@ The Issuer has no public service of its own. An ingress in front of it, `public-
 | env | `POSTGRES_USER` | | shared | `postgres`, the superuser every service of the Issuer uses today |
 | env | `POSTGRES_PASSWORD` | | shared | Secret, committed test-only ([Fixtures to replace](#fixtures-to-replace)) |
 | mount | `/docker-entrypoint-initdb.d/certify_init.sql` | `vc-stack/certify_init.sql` | shared | Certify's schema; runs on an empty data directory only |
-| mount | `/docker-entrypoint-initdb.d/certify_seed.sql` | `installations/<name>/certify_seed.sql` | installation | The `credential_config` rows (templates, contexts, scopes); runs after `certify_init.sql`, on an empty data directory only |
+| mount | `/docker-entrypoint-initdb.d/certify_seed.sql` | `deploy/<name>/certify_seed.sql` | installation | The `credential_config` rows (templates, contexts, scopes); runs after `certify_init.sql`, on an empty data directory only |
 | mount | `/var/lib/postgresql/data` | `issuer-db` | shared | The named volume holding Certify's data, its signing key included (`certify.key_alias`, `certify.key_store`) |
 | port | `6440:5432` | | shared | Internal |
 
@@ -158,14 +158,14 @@ Runs as `root` with `host.docker.internal` mapped to the host (the local context
 | env | `CERTIFY_RECORD_URL` | | environment | The properties' `mosip.certify.adapter.record-url`, passed only when `vc-stack/.env` sets it; unset, the properties fall back to the Mock Adapter's record URL |
 | env | `MOSIP_CERTIFY_GATEWAY_ENABLED` | | environment | The plugin's switch over the properties' `true`, passed only when `vc-stack/.env` sets it; the no-Gateway forms set it to `false` |
 | env | `MOSIP_CERTIFY_GATEWAY_URL` | | environment | The Gateway's URL over the properties' `http://gateway:8000`, passed only when `vc-stack/.env` sets it; the no-Gateway forms set it to `NO GATEWAY` |
-| env_file | `installations/<name>/authorization-server.env` | | installation | The Authorization Server's five settings ([Authorization Server](#authorization-server)), each overridable in `vc-stack/.env` |
+| env_file | `deploy/<name>/authorization-server.env` | | installation | The Authorization Server's five settings ([Authorization Server](#authorization-server)), each overridable in `vc-stack/.env` |
 | env | `AUTH_SERVER_ISSUER` | | environment | The properties' authorization URL and issuer URI |
 | env | `AUTH_SERVER_JWKS_URL` | | environment | The properties' JWK set URI |
 | env | `AUTH_SERVER_TOKEN_ENDPOINT` | | environment | Not read by Certify |
 | env | `AUTH_SERVER_PUBLIC_URL` | | environment | Not read by Certify |
 | env | `AUTH_SERVER_WALLET_CLIENT_ID` | | environment | The first of the properties' allowed audiences |
 | mount | `/home/mosip/config/certify-default.properties` | `vc-stack/config/certify-default.properties` | shared | Base settings: database, keystore (type, path, password), cache, status list |
-| mount | `/home/mosip/config/certify-installation.properties` | `installations/<name>/certify-installation.properties` | installation | The per-instance properties: the Authorization Server keys read from the settings (authorization URL, issuer URI, JWK set URI, and the allowed audiences: the wallet client, the in-network credential endpoints and `<CERTIFY_PUBLIC_BASE_URL>/v1/certify/issuance/credential`), the plugin's ten keys including the switch and the Gateway token, the issuer display, `did-url`, the indexed mappings (the plugin's trace keys `tokenSub` and `tokenClientId` among them). `bootstrap.sh` rewrites its `did-url` line after a fresh keystore |
+| mount | `/home/mosip/config/certify-installation.properties` | `deploy/<name>/certify-installation.properties` | installation | The per-instance properties: the Authorization Server keys read from the settings (authorization URL, issuer URI, JWK set URI, and the allowed audiences: the wallet client, the in-network credential endpoints and `<CERTIFY_PUBLIC_BASE_URL>/v1/certify/issuance/credential`), the plugin's ten keys including the switch and the Gateway token, the issuer display, `did-url`, the indexed mappings (the plugin's trace keys `tokenSub` and `tokenClientId` among them). `bootstrap.sh` rewrites its `did-url` line after a fresh keystore |
 | mount | `/home/inji/CERTIFY_PKCS12` | `vc-stack/data/CERTIFY_PKCS12` | shared | The keystore directory; Certify creates `local.p12`, the signing key, on first start (git-ignored; ask 2) |
 | mount | `/home/mosip/config/vp_request_config.json` | `vc-stack/config/vp_request_config.json` | shared | Stock Certify file |
 | mount | `/home/inji/additional_jars/issuer-data-provider-plugin.jar` | `vc-stack/plugins/issuer-data-provider-plugin.jar` | shared | The plugin jar, a single read-only file ([Plugin jar](#plugin-jar)) |
@@ -241,7 +241,7 @@ No host port; reached as `http://gateway:8000`. Its startup touches nothing exte
 
 | Kind | Name | Source | Scope | Notes |
 |---|---|---|---|---|
-| env_file | `installations/<name>/gateway.env` | | installation | The Gateway's three settings below |
+| env_file | `deploy/<name>/gateway.env` | | installation | The Gateway's three settings below |
 | env | `GATEWAY_ENABLED_SCOPES` | | installation | Space-separated scopes the Gateway serves |
 | env | `GATEWAY_ELIGIBILITY_URL` | | environment | The Mock Adapter's `http://adapter:8000/student/{sub}/eligibility` unless `vc-stack/.env` sets it; infra's Adapter's when the Mock Adapter is dropped (`contracts.md` section 2b) |
 | env | `GATEWAY_AUTH_TOKEN` | | installation | Secret: equals the plugin's `mosip.certify.gateway.auth-token` |
@@ -367,7 +367,7 @@ No host port; reached as `http://adapter:8000`.
 | Kind | Name | Source | Scope | Notes |
 |---|---|---|---|---|
 | env | `ADAPTER_CSV` | | shared | `/data/student_identity_data.csv` |
-| mount | `/data` | `installations/<name>/adapter` | installation | Read-only; the CSV is read on every request, so an edit needs no restart |
+| mount | `/data` | `deploy/<name>/adapter` | installation | Read-only; the CSV is read on every request, so an edit needs no restart |
 
 ### Fixtures to replace
 
@@ -458,7 +458,7 @@ Test harness, not deployed.
 | env | `MOSIP_SECURITY_ORIGINS` | | environment | From `INJI_WEB_URL` |
 | mount | `/home/mosip/mimoto-default.properties` | `vc-stack/config/mimoto-default.properties` | shared | |
 | mount | `/home/mosip/mimoto-bootstrap.properties` | `vc-stack/config/mimoto-bootstrap.properties` | shared | |
-| mount | `/home/mosip/mimoto-issuers-config.json` | `installations/<name>/mimoto-issuers-config.json` | installation | Rendered from the installation's template (git-ignored) |
+| mount | `/home/mosip/mimoto-issuers-config.json` | `deploy/<name>/mimoto-issuers-config.json` | installation | Rendered from the installation's template (git-ignored) |
 | mount | `/home/mosip/mimoto-trusted-verifiers.json` | `vc-stack/config/mimoto-trusted-verifiers.json` | shared | |
 | mount | `/home/mosip/certs/oidckeystore.p12` | `vc-stack/certs/oidckeystore.p12` | shared | Generated by `bootstrap.sh` (git-ignored) |
 | port | `9099:8099` | | shared | Internal; not deployed |
@@ -472,7 +472,7 @@ Test harness, not deployed.
 | env | `DEFAULT_LANG` | | shared | `en` |
 | env | `MIMOTO_URL` | | environment | `<INJI_WEB_URL>/v1/mimoto` |
 | mount | `/home/mosip/mimoto-default.properties` | `vc-stack/config/mimoto-default.properties` | shared | |
-| mount | `/home/mosip/mimoto-issuers-config.json` | `installations/<name>/mimoto-issuers-config.json` | installation | |
+| mount | `/home/mosip/mimoto-issuers-config.json` | `deploy/<name>/mimoto-issuers-config.json` | installation | |
 | mount | `/home/mosip/mimoto-trusted-verifiers.json` | `vc-stack/config/mimoto-trusted-verifiers.json` | shared | |
 | mount | `/home/mosip/credential-template.html` | `vc-stack/config/credential-template.html` | shared | PDF template |
 | mount | `/home/mosip/AITUniversity-ait-transcript-template.html` | `vc-stack/config/AITUniversity-ait-transcript-template.html` | shared | The transcript's PDF template |
@@ -507,7 +507,7 @@ Two servers. Port 80 is the ingress of transcript-demo: it routes `/contexts/` t
 | mount | `/etc/nginx/mobile/public-gateway-mobile.conf` | `vc-stack/config/public-gateway-mobile.conf` | shared | Phone-only locations for the Inji mobile wallet, rendered for an installation that carries the template (`ait`); test harness |
 | mount | `/etc/nginx/mobile/mimoto-issuers-mobile.json` | `vc-stack/config/mimoto-issuers-mobile.json` | shared | The phone's issuer list, rendered with the file above; test harness |
 | mount | `/config/server` | `vc-stack/config` | shared | Read-only; served at `/` on port 8080 to Mimoto: the shared configuration, including `certify-default.properties` with the keystore and database passwords. Never public |
-| mount | `/config/installation/mimoto-issuers-config.json` | `installations/<name>/mimoto-issuers-config.json` | installation | Read-only; Mimoto's issuer list at `/mimoto-issuers-config.json` on port 8080 (test harness) |
+| mount | `/config/installation/mimoto-issuers-config.json` | `deploy/<name>/mimoto-issuers-config.json` | installation | Read-only; Mimoto's issuer list at `/mimoto-issuers-config.json` on port 8080 (test harness) |
 | port | `9098:80` | | shared | Public: Certify's public base URL and the JSON-LD contexts, for the paths of the [Ingress allowlist](#ingress-allowlist) only |
 
 ### `demo-app`
@@ -521,7 +521,7 @@ The Portal. Its image already contains `portal/` and `data/`; the source mounts 
 | env | `INJI_VERIFY_URL` | | environment | Links to the Verify UI |
 | env | `CERTIFY_PUBLIC_BASE_URL` | | environment | Read only by the issuer-list render |
 | env | `INSTALLATION` | | installation | Which directory the render writes into |
-| env_file | `installations/<name>/authorization-server.env` | | installation | The Authorization Server's five settings ([Authorization Server](#authorization-server)), each overridable in `vc-stack/.env` |
+| env_file | `deploy/<name>/authorization-server.env` | | installation | The Authorization Server's five settings ([Authorization Server](#authorization-server)), each overridable in `vc-stack/.env` |
 | env | `AUTH_SERVER_ISSUER` | | environment | The issuer-list render (phone metadata) |
 | env | `AUTH_SERVER_JWKS_URL` | | environment | Not read |
 | env | `AUTH_SERVER_TOKEN_ENDPOINT` | | environment | The issuer-list render, and the smoke's token request (`vc-stack/issue_and_verify.py` runs in this image) |
@@ -531,7 +531,7 @@ The Portal. Its image already contains `portal/` and `data/`; the source mounts 
 | mount | `/demo/data` | `data` | shared | Development only |
 | mount | `/demo/.demo-state` | `.demo-state` | shared | The request database; persistent |
 | mount | `/demo/vc-stack/config` | `vc-stack/config` | shared | Render output (phone-only files) |
-| mount | `/demo/installations` | `installations` | shared | Render output (`mimoto-issuers-config.json`) |
+| mount | `/demo/deploy` | `deploy` | shared | Render output (`mimoto-issuers-config.json`) |
 | port | `4100:4100` | | shared | Public: the Portal |
 
 ### Fixtures to replace

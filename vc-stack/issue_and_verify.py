@@ -83,7 +83,10 @@ def build_proof(key: ec.EllipticCurvePrivateKey, client_id: str, audience: str, 
 
 def credential_request(client: httpx.Client, installation: str, persona: str, scope: str) -> httpx.Response:
     """The persona's OpenID4VCI credential request, the same one a wallet makes, answered as Certify answers it."""
-    realm = json.loads((Path("installations") / installation / "keycloak-realm.json").read_text(encoding="utf-8"))
+    realm_path = Path("deploy") / installation / "keycloak-realm.json"
+    if not realm_path.is_file():
+        realm_path = Path("installations") / installation / "keycloak-realm.json"
+    realm = json.loads(realm_path.read_text(encoding="utf-8"))
     user = next(u for u in realm["users"] if u["username"] == persona)
     password = next(c["value"] for c in user["credentials"] if c["type"] == "password")
 

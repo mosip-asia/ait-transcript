@@ -1,5 +1,5 @@
 """The INSTALLATION guard: run-demo.sh, bootstrap.sh, smoke.sh and issuer-smoke.sh refuse to start
-unless INSTALLATION names a directory under installations/, before Docker is touched.
+unless INSTALLATION names a directory under deploy/, before Docker is touched.
 
 Runs the scripts from a throwaway copy of the repo layout with docker, jq and curl
 replaced by stubs that only record their calls. No Docker needed.
@@ -24,7 +24,7 @@ def run(script: str, installation: str | None, dot_env: str = "", marker: str = 
     with tempfile.TemporaryDirectory() as td:
         root = Path(td)
         (root / "vc-stack").mkdir()
-        (root / "installations" / "ait").mkdir(parents=True)
+        (root / "deploy" / "ait").mkdir(parents=True)
         for path in REPO_ROOT.glob("*.sh"):
             shutil.copy(path, root / path.name)
         for path in (REPO_ROOT / "vc-stack").glob("*.sh"):

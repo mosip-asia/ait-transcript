@@ -28,7 +28,7 @@ from pathlib import Path
 
 STACK_DIR = Path(__file__).resolve().parent
 REPO_ROOT = STACK_DIR.parent
-INSTALLATION_DIR = REPO_ROOT / "installations" / os.environ.get("INSTALLATION", "ait")
+INSTALLATION_DIR = REPO_ROOT / "deploy" / os.environ.get("INSTALLATION", "ait")
 
 INJI_WEB_ORIGIN = "http://localhost:4004"
 KEYCLOAK_PUBLIC = "http://localhost:9080"

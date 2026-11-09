@@ -1,4 +1,4 @@
-"""Render installations/$INSTALLATION/mimoto-issuers-config.json from its .template.
+"""Render deploy/$INSTALLATION/mimoto-issuers-config.json from its .template.
 
 What changes with deployment is where the wallet (Inji Web) is publicly
 reachable — redirect_uri / token_endpoint both point back at it (see
@@ -45,7 +45,7 @@ def authorization_server(installation: str, env: dict[str, str]) -> dict[str, st
     Every value is ${KEY:-default}, so a key set (non-empty) in env wins: under Compose env already holds the
     resolved values, on the host the file's stand-in values apply.
     """
-    path = REPO_ROOT / "installations" / installation / "authorization-server.env"
+    path = REPO_ROOT / "deploy" / installation / "authorization-server.env"
     settings = {}
     for line in path.read_text(encoding="utf-8").splitlines():
         if line.strip() and not line.startswith("#"):
@@ -58,7 +58,7 @@ def authorization_server(installation: str, env: dict[str, str]) -> dict[str, st
 
 def render(env: dict[str, str]) -> dict[Path, str]:
     """Return {output path: content} for the given environment."""
-    installation_dir = REPO_ROOT / "installations" / env["INSTALLATION"]
+    installation_dir = REPO_ROOT / "deploy" / env["INSTALLATION"]
     template = installation_dir / "mimoto-issuers-config.json.template"
     values = {"INJI_WEB_URL": env.get("INJI_WEB_URL", "http://localhost:4004"),
               **authorization_server(env["INSTALLATION"], env)}

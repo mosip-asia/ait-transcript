@@ -1,7 +1,7 @@
 __pycache__/
 *.pyc
-installations/ait/adapter/student_identity_data.csv
-installations/*/mimoto-issuers-config.json
+deploy/ait/adapter/student_identity_data.csv
+deploy/*/mimoto-issuers-config.json
 vc-stack/.env
 vc-stack/certs/
 vc-stack/data/

@@ -27,14 +27,14 @@ from contextlib import contextmanager
 from pathlib import Path
 
 GATEWAY_DIR = Path(__file__).resolve().parents[1]
-REPO_ROOT = GATEWAY_DIR.parent if (GATEWAY_DIR.parent / "installations").exists() else GATEWAY_DIR.parent.parent
+REPO_ROOT = GATEWAY_DIR.parent if (GATEWAY_DIR.parent / "deploy").exists() else GATEWAY_DIR.parent.parent
 # The Gateway's modules (the image has them too); data/'s generator in host mode only.
 sys.path.insert(0, str(GATEWAY_DIR))
 sys.path.insert(0, str(REPO_ROOT / "data"))
 
 import credential_types as ct  # noqa: E402
 
-INSTALLATIONS = REPO_ROOT / "installations"
+INSTALLATIONS = REPO_ROOT / "deploy"
 ROSTER = INSTALLATIONS / "hackathon" / "adapter" / "student_identity_data.csv"
 # The host-mode CSV per installation: None is the one generated from data/students.json.
 HOST_CSV = {"ait": None, "hackathon": ROSTER}

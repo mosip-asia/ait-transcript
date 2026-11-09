@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Start the full AIT Transcript VC demo: CSV sync, Inji stack, demo app (all Docker).
-# INSTALLATION (environment, else vc-stack/.env, else the git-ignored vc-stack/.installation marker) names the installations/ directory: INSTALLATION=ait ./run-demo.sh
+# INSTALLATION (environment, else vc-stack/.env, else the git-ignored vc-stack/.installation marker) names the deploy/ directory: INSTALLATION=ait ./run-demo.sh
 # Without the Gateway: COMPOSE_FILE=compose-no-gateway.yaml ./run-demo.sh (relative to vc-stack/; smoke.sh takes the same).
 set -euo pipefail
 

@@ -21,7 +21,7 @@ on:
   workflow_dispatch:
     inputs:
       installation:
-        description: "Installation to deploy (installations/<name>/)"
+        description: "Installation to deploy (deploy/<name>/)"
         type: choice
         options: [ait, hackathon]
         default: ait

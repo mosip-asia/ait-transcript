@@ -33,7 +33,7 @@ sys.path.insert(0, str(GATEWAY_DIR.parent / "data"))
 
 import credential_types as ct  # noqa: E402
 
-INSTALLATIONS = GATEWAY_DIR.parent / "installations"
+INSTALLATIONS = GATEWAY_DIR.parent / "deploy"
 ROSTER = INSTALLATIONS / "hackathon" / "adapter" / "student_identity_data.csv"
 # The host-mode CSV per installation: None is the one generated from data/students.json.
 HOST_CSV = {"ait": None, "hackathon": ROSTER}

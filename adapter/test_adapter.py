@@ -35,7 +35,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(Path(__file__).parent.parent / "data"))
 import generate_csv as gc  # noqa: E402
 
-ROSTER = Path(__file__).parent.parent / "installations" / "hackathon" / "adapter" / "student_identity_data.csv"
+ROSTER = Path(__file__).parent.parent / "deploy" / "hackathon" / "adapter" / "student_identity_data.csv"
 # The scopes the hackathon Installation enables: both read the roster row.
 ROSTER_SCOPES = ("developer_passport_vc_ldp", "achievement_certificate_vc_ldp")
 ELIGIBILITY = ("holds", "conferralStatus", "balance")  # the transcript CSV's eligibility columns
@@ -267,7 +267,7 @@ def template_claims() -> dict[str, set[str]]:
     import base64
 
     found = {}
-    for seed in (Path(__file__).parent.parent / "installations").glob("*/certify_seed.sql"):
+    for seed in (Path(__file__).parent.parent / "deploy").glob("*/certify_seed.sql"):
         for row in seed.read_text(encoding="utf-8").split("INSERT INTO certify.credential_config")[1:]:
             (scope,) = re.findall(r"'([a-z_]+_vc_ldp)'", row)
             (template,) = re.findall(r"'(ewo[A-Za-z0-9+/=]+)'", row)
@@ -502,7 +502,7 @@ def test_the_handovers_privacy_section_names_every_claim_the_ait_ledger_indexes(
     """Certify logs every value its ledger indexes (LedgerUtils, at INFO), so the list on the handover's "Certify also
     logs it" line (wiki/project/issuer-v0.1/sis-adapter-handover.md) is the ait Installation's indexed mappings."""
     root = Path(__file__).parent.parent
-    properties = (root / "installations" / "ait" / "certify-installation.properties").read_text(encoding="utf-8")
+    properties = (root / "deploy" / "ait" / "certify-installation.properties").read_text(encoding="utf-8")
     indexed = set(re.findall(r"^mosip\.certify\.indexed-mappings\.(\w+)=", properties, re.M))
     page = (root / "wiki" / "project" / "issuer-v0.1" / "sis-adapter-handover.md").read_text(encoding="utf-8")
     line = next(line for line in page.splitlines() if line.startswith("- **Certify also logs it, and more.**"))

@@ -21,8 +21,8 @@ info:
       it yet; until it does, the Gateway reads the mock's.
 
     Each caller is set with the whole URL, `{sub}` included, so the path is the deployment's to choose: the plugin
-    through `CERTIFY_RECORD_URL`, defaulted in `installations/<name>/certify-installation.properties`, the Gateway
-    through `GATEWAY_ELIGIBILITY_URL`, defaulted in `installations/<name>/gateway.env`; `vc-stack/.env` sets either
+    through `CERTIFY_RECORD_URL`, defaulted in `deploy/<name>/certify-installation.properties`, the Gateway
+    through `GATEWAY_ELIGIBILITY_URL`, defaulted in `deploy/<name>/gateway.env`; `vc-stack/.env` sets either
     per environment. The caller fills in `{sub}` URL-encoded as one path segment and adds nothing else.
 
     A record schema per scope (its `x-scope`) lists exactly the claims its Certify template substitutes. A record may

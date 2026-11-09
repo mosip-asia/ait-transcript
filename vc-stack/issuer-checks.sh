@@ -1,7 +1,7 @@
 # Sourced by smoke.sh and issuer-smoke.sh, from vc-stack/ after installation.sh: the checks the Issuer passes with the
 # mock Adapter beside it, and the helpers both scripts use. `docker compose` finds the stack the caller runs:
 # compose.yaml by default, or the file COMPOSE_FILE names (issuer-dev.yaml, or a no-Gateway form). The caller sets
-# REPO_ROOT and FIXTURES (installations/$INSTALLATION/smoke.json); issuer_checks leaves Certify's issuer metadata in
+# REPO_ROOT and FIXTURES (deploy/$INSTALLATION/smoke.json); issuer_checks leaves Certify's issuer metadata in
 # issuer_json. GATE_ENABLED (true or false) and GATE_URL are the plugin's switch as Certify runs it.
 
 fail() { echo "FAIL: $*" >&2; exit 1; }

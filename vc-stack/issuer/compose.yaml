@@ -10,10 +10,10 @@ services:
       - POSTGRES_PASSWORD=postgres
     volumes:
       - ../certify_init.sql:/docker-entrypoint-initdb.d/certify_init.sql
-      # Every per-installation file comes from installations/$INSTALLATION (set in .env);
+      # Every per-installation file comes from deploy/$INSTALLATION (set in .env);
       # Compose refuses the whole file when it is unset, as it does mock-adapter/ and demo/.
       # The credential_config rows; the name sorts after certify_init.sql, which creates the table.
-      - ../../installations/${INSTALLATION:?set INSTALLATION in vc-stack/.env}/certify_seed.sql:/docker-entrypoint-initdb.d/certify_seed.sql
+      - ../../deploy/${INSTALLATION:?set INSTALLATION in vc-stack/.env}/certify_seed.sql:/docker-entrypoint-initdb.d/certify_seed.sql
       # Named, so a redeploy or a down then up keeps Certify's signing key (its key_alias and key_store rows) and so
       # the did:key; bootstrap.sh --wipe (down -v) removes it, and a changed seed still needs that wipe.
       - issuer-db:/var/lib/postgresql/data
@@ -61,10 +61,10 @@ services:
     # that iss exactly or JWT validation fails, so AUTH_SERVER_ISSUER is the Docker URL, not the browser's. The
     # installation's Certify properties read the issuer, the JWK set URL and the wallet client (an allowed audience).
     env_file:
-      - ../../installations/${INSTALLATION}/authorization-server.env
+      - ../../deploy/${INSTALLATION}/authorization-server.env
     volumes:
       - ../config/certify-default.properties:/home/mosip/config/certify-default.properties
-      - ../../installations/${INSTALLATION}/certify-installation.properties:/home/mosip/config/certify-installation.properties
+      - ../../deploy/${INSTALLATION}/certify-installation.properties:/home/mosip/config/certify-installation.properties
       - ../data/CERTIFY_PKCS12:/home/inji/CERTIFY_PKCS12
       - ../config/vp_request_config.json:/home/mosip/config/vp_request_config.json
       # The Data-provider plugin, built by run-demo.sh. A single file, never the directory, so the four

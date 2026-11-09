@@ -112,7 +112,7 @@ CREDENTIAL = {
     },
     "proof": {"type": "Ed25519Signature2020", "proofValue": "z..."},
 }
-# The AIT installation's tampered claims (installations/ait/smoke.json).
+# The AIT installation's tampered claims (deploy/ait/smoke.json).
 TAMPER = ["fullName", "courses[0].courses[0].grade"]
 SUCCESS = {"allChecksSuccessful": True, "schemaAndSignatureCheck": {"valid": True, "error": None},
            "expiryCheck": {"valid": True}, "statusCheck": [], "claims": {}}

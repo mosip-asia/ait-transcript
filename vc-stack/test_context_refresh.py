@@ -46,7 +46,7 @@ def main() -> None:
             time.sleep(1)
         time.sleep(2)
         # The schema and the AIT rows each connect to inji_certify themselves, in the stack's init order.
-        for seed in (STACK / "certify_init.sql", STACK.parent / "installations" / "ait" / "certify_seed.sql"):
+        for seed in (STACK / "certify_init.sql", STACK.parent / "deploy" / "ait" / "certify_seed.sql"):
             psql(name, stdin=seed.read_text(), db="postgres")
 
         ctx, tpl = row(name)

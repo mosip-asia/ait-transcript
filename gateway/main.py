@@ -10,7 +10,7 @@ answers another status or answers data that does not parse; a check that raises 
 Startup touches nothing external, so Certify, the adapter and the Gateway start in any order; it refuses an
 eligibility URL that is not an http(s) URL holding `{sub}`.
 
-Settings come from the environment, which Compose fills from installations/<name>/gateway.env.
+Settings come from the environment, which Compose fills from deploy/<name>/gateway.env.
 Run: uvicorn main:from_env --factory
 """
 

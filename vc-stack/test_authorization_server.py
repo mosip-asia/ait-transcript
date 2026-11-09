@@ -17,7 +17,7 @@ import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-INSTALLATIONS = REPO_ROOT / "installations"
+INSTALLATIONS = REPO_ROOT / "deploy"
 NAMES = sorted(p.parent.name for p in INSTALLATIONS.glob("*/smoke.json"))
 sys.path.insert(0, str(REPO_ROOT / "data"))
 import render_mimoto_issuers_config as r  # noqa: E402
@@ -39,12 +39,12 @@ CERTIFY_DOMAIN = "http://certify-nginx"
 # (rendered from the settings and committed), and the hackathon roster, whose authEndpoint is a credential claim.
 REALM_PATH_ALLOWED = [
     re.compile(p) for p in (
-        r"^installations/[^/]+/authorization-server\.env$",
+        r"^deploy/[^/]+/authorization-server\.env$",
         r"\.md$",
         r"(^|/)test_[^/]*\.py$",
         r"Test\.java$",
         r"^vc-stack/config/mimoto-issuers-mobile\.json$",
-        r"^installations/hackathon/adapter/student_identity_data\.csv$",
+        r"^deploy/hackathon/adapter/student_identity_data\.csv$",
     )
 ]
 # A path into one of the installations' stand-in realms.

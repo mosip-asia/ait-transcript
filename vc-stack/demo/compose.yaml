@@ -48,7 +48,7 @@ services:
       - ../config/mimoto-default.properties:/home/mosip/mimoto-default.properties
       - ../config/mimoto-bootstrap.properties:/home/mosip/mimoto-bootstrap.properties
       # Compose refuses this file when INSTALLATION is unset, as it does issuer/ and mock-adapter/.
-      - ../../installations/${INSTALLATION:?set INSTALLATION in vc-stack/.env}/mimoto-issuers-config.json:/home/mosip/mimoto-issuers-config.json
+      - ../../deploy/${INSTALLATION:?set INSTALLATION in vc-stack/.env}/mimoto-issuers-config.json:/home/mosip/mimoto-issuers-config.json
       - ../config/mimoto-trusted-verifiers.json:/home/mosip/mimoto-trusted-verifiers.json
       - ../certs/oidckeystore.p12:/home/mosip/certs/oidckeystore.p12
     # public-gateway's port 8080 is Mimoto's Spring config server (mimoto-bootstrap.properties), read at start.
@@ -68,7 +68,7 @@ services:
       - MIMOTO_URL=${INJI_WEB_URL:-http://localhost:4004}/v1/mimoto
     volumes:
       - ../config/mimoto-default.properties:/home/mosip/mimoto-default.properties
-      - ../../installations/${INSTALLATION}/mimoto-issuers-config.json:/home/mosip/mimoto-issuers-config.json
+      - ../../deploy/${INSTALLATION}/mimoto-issuers-config.json:/home/mosip/mimoto-issuers-config.json
       - ../config/mimoto-trusted-verifiers.json:/home/mosip/mimoto-trusted-verifiers.json
       - ../config/credential-template.html:/home/mosip/credential-template.html
       - ../config/AITUniversity-ait-transcript-template.html:/home/mosip/AITUniversity-ait-transcript-template.html
@@ -137,7 +137,7 @@ services:
       - ../config/mimoto-issuers-mobile.json:/etc/nginx/mobile/mimoto-issuers-mobile.json:ro
       # Mimoto's config server (the second server in public-gateway-nginx.conf).
       - ../config:/config/server:ro
-      - ../../installations/${INSTALLATION}/mimoto-issuers-config.json:/config/installation/mimoto-issuers-config.json:ro
+      - ../../deploy/${INSTALLATION}/mimoto-issuers-config.json:/config/installation/mimoto-issuers-config.json:ro
     # Every upstream resolves per request (resolver + set in public-gateway-nginx.conf), so it starts before
     # mimoto-service, which needs its config server, and without keycloak, which Mode A leaves down.
     depends_on:
@@ -164,18 +164,18 @@ services:
       - INJI_VERIFY_URL=${INJI_VERIFY_URL:-http://localhost:4007}
       # Only data/render_mimoto_issuers_config.py reads this one (phone-only gateway files).
       - CERTIFY_PUBLIC_BASE_URL=${CERTIFY_PUBLIC_BASE_URL:-http://certify-nginx}
-      # Which installations/ directory data/render_mimoto_issuers_config.py renders into.
+      # Which deploy/ directory data/render_mimoto_issuers_config.py renders into.
       - INSTALLATION=${INSTALLATION}
     # The Authorization Server's settings: the sign-out link (portal/requests.py), the issuer-list render, and the
     # smoke's token request (vc-stack/issue_and_verify.py runs in this image).
     env_file:
-      - ../../installations/${INSTALLATION}/authorization-server.env
+      - ../../deploy/${INSTALLATION}/authorization-server.env
     volumes:
       - ../../portal:/demo/portal
       - ../../data:/demo/data
       - ../../.demo-state:/demo/.demo-state
       - ../../vc-stack/config:/demo/vc-stack/config
-      - ../../installations:/demo/installations
+      - ../../deploy:/demo/deploy
     networks:
       - network
     # Server-to-server calls to Certify's ledger-search/credentials/status (registrar VC lifecycle);

@@ -59,16 +59,12 @@ ait-transcript/
 ├── .env.example                          # Root developer environment configuration
 ├── pyproject.toml / uv.lock              # Modern Python dependency management (uv)
 │
-├── deploy/                               # STANDALONE PRODUCTION / STAGING DEPLOYMENT
-│   ├── compose.yaml                      # Pulls pre-built registry images (no source build)
-│   ├── .env.example                      # Production environment template
-│   ├── config/                           # Self-contained Inji Certify properties & SQL schemas
+├── deploy/                               # DEPLOYMENT OVERLAYS & PLATFORM RUNTIME
+│   ├── base/                             # Shared Inji platform defaults (properties, nginx, SQL)
+│   ├── ait/                              # Academic Transcript tenant profile
+│   ├── hackathon/                        # Developer Passport & Achievement tenant profile
 │   ├── remote-deploy.sh                  # Automated VM deployment script used by CI/CD
 │   └── smoke.sh                          # Headless OpenID4VCI issuance smoke test (pure bash)
-│
-├── installations/                        # MULTI-TENANT CONFIGURATION PROFILES
-│   ├── ait/                              # Academic Transcript profile
-│   └── hackathon/                        # Developer Passport & Achievement profile
 │
 └── vc-stack/                             # FULL DEMO STACK (Inji Web, Keycloak, Portal, Verify)
 ```

@@ -13,7 +13,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 import render_mimoto_issuers_config as r  # noqa: E402
 
 AIT = {"INSTALLATION": "ait"}
-MIMOTO_OUT = r.REPO_ROOT / "installations" / "ait" / "mimoto-issuers-config.json"
+MIMOTO_OUT = r.REPO_ROOT / "deploy" / "ait" / "mimoto-issuers-config.json"
 PUBLIC = {
     **AIT,
     "INJI_WEB_URL": "https://wallet.demo.example",
@@ -28,7 +28,7 @@ def test_issuer_list_is_rendered_from_and_into_the_installation() -> None:
     out = r.render(AIT)
     repo_root = Path(__file__).resolve().parent.parent
     assert {p.resolve() for p in out} == {
-        repo_root / "installations" / "ait" / "mimoto-issuers-config.json",
+        repo_root / "deploy" / "ait" / "mimoto-issuers-config.json",
         repo_root / "vc-stack" / "config" / "mimoto-issuers-mobile.json",
         repo_root / "vc-stack" / "config" / "public-gateway-mobile.conf",
     }
@@ -79,7 +79,7 @@ def test_an_installation_without_the_mobile_wallet_renders_only_mimotos_list() -
     # No public-gateway-mobile.conf.template in the installation: the tracked phone files in vc-stack/config/ stay untouched.
     for env in ({"INSTALLATION": "hackathon"}, {**PUBLIC, "INSTALLATION": "hackathon"}):
         out = r.render(env)
-        hackathon_list = r.REPO_ROOT / "installations" / "hackathon" / "mimoto-issuers-config.json"
+        hackathon_list = r.REPO_ROOT / "deploy" / "hackathon" / "mimoto-issuers-config.json"
         assert list(out) == [hackathon_list], list(out)
         assert json.loads(out[hackathon_list])["issuers"][0]["issuer_id"] == "AITHackathon"
 

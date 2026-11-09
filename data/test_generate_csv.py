@@ -75,7 +75,7 @@ def test_columns_carry_no_course_table_html() -> None:
     assert "courseTableHtml" not in gc.CSV_COLUMNS
 
 
-AIT = gc.REPO_ROOT / "installations" / "ait"
+AIT = gc.REPO_ROOT / "deploy" / "ait"
 
 
 def seed_value(pattern: str) -> str:
@@ -133,7 +133,7 @@ def test_personas_cover_each_transcript_check() -> None:
 def test_csv_goes_to_the_ait_installation_adapter() -> None:
     # Certify and, later, the mock adapter mount it from there (spec: Directory layout).
     repo_root = Path(__file__).resolve().parent.parent
-    assert gc.OUT_CSV.resolve() == repo_root / "installations" / "ait" / "adapter" / "student_identity_data.csv"
+    assert gc.OUT_CSV.resolve() == repo_root / "deploy" / "ait" / "adapter" / "student_identity_data.csv"
 
 
 if __name__ == "__main__":

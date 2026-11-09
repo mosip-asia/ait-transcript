@@ -1,8 +1,6 @@
 # Verifiable Credential Platform Deployment
 
-This directory contains standalone deployment manifests and runtime configurations for staging and production environments.
-
-Unlike root development (`compose.yaml`), the deployment compose manifest pulls pre-built immutable container images from the GitHub Container Registry and requires no local compilers, JDKs, or Python toolchains.
+This directory contains deployment overlays and runtime configurations for staging and production environments.
 
 ---
 
@@ -10,27 +8,45 @@ Unlike root development (`compose.yaml`), the deployment compose manifest pulls 
 
 ```
 deploy/
-├── compose.yaml          # Deployment compose manifest (pulls registry images)
-├── .env.example          # Environment template for deployments
-├── config/               # Self-contained Inji Certify properties & SQL schemas
-│   ├── certify_init.sql
-│   ├── certify-default.properties
-│   ├── certify-nginx.conf
-│   └── vp_request_config.json
-└── remote-deploy.sh      # Automated VM deployment script used by CI/CD
+├── base/                      # Common Inji platform defaults
+│   ├── certify_init.sql       # Postgres schema initialization
+│   ├── certify-default.properties # Base Inji Certify Spring properties
+│   ├── certify-nginx.conf     # Nginx reverse proxy routing
+│   └── vp_request_config.json # OpenID4VP request specifications
+├── ait/                       # AIT Tenant profile (academic transcript)
+│   ├── certify-installation.properties
+│   ├── keycloak-realm.json
+│   ├── mimoto-issuers-config.json.template
+│   ├── gateway.env
+│   ├── smoke.json
+│   └── adapter/
+├── hackathon/                 # Hackathon Tenant profile (developer passport & achievements)
+│   ├── certify-installation.properties
+│   ├── keycloak-realm.json
+│   ├── mimoto-issuers-config.json.template
+│   ├── gateway.env
+│   ├── smoke.json
+│   └── adapter/
+├── remote-deploy.sh           # Automated VM deployment script used by CI/CD
+└── smoke.sh                   # Pure Bash issuance smoke test
 ```
 
 ---
 
-## 2. Quickstart: Deploying to a Server or VM
+## 2. Quickstart: Deploying the Platform
+
+From the repository root:
 
 ```bash
-cd deploy
-
-# 1. Configure deployment environment
+# 1. Configure environment
 cp .env.example .env
 
-# 2. Deploy services
-docker compose pull
+# 2. Select target tenant (ait or hackathon) in .env:
+# INSTALLATION=ait
+
+# 3. Deploy services
 docker compose up -d
+
+# 4. Verify issuance
+./deploy/smoke.sh
 ```

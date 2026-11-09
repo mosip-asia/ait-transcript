@@ -10,7 +10,7 @@ services:
       context: ../..
       dockerfile: gateway/Dockerfile
     env_file:
-      - ../../installations/${INSTALLATION:?set INSTALLATION in vc-stack/.env}/gateway.env
+      - ../../deploy/${INSTALLATION:?set INSTALLATION in vc-stack/.env}/gateway.env
     restart: unless-stopped
     networks:
       - network

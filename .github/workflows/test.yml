@@ -12,7 +12,7 @@ on:
 permissions:
   contents: read
 
-# The installations/ directory the host tests run against; stack-smoke runs every installation.
+# The deploy/ directory the host tests run against; stack-smoke runs every installation.
 env:
   INSTALLATION: ait
 
@@ -31,7 +31,7 @@ jobs:
 
       - run: pip install -r portal/requirements.txt -r gateway/requirements.txt tzdata
 
-      # The readiness test reads installations/ait/mimoto-issuers-config.json, which is git-ignored.
+      # The readiness test reads deploy/ait/mimoto-issuers-config.json, which is git-ignored.
       - name: Render the issuer config
         run: python data/render_mimoto_issuers_config.py
 
