@@ -40,33 +40,45 @@ The codebase is organized into modular components separating pure source code, c
 
 ```
 ait-transcript/
-├── src/                                  # 100% PURE APPLICATION SOURCE CODE
-│   ├── issuer/                           # Java 21 SPI Data-Provider Plugin (pom.xml + src/)
-│   ├── gateway/                          # Institutional clearance & permission workflow engine
-│   ├── certify_template_sync/            # GitOps template synchronizer module
-│   └── vc-lab/                           # VC Designer: W3C JSON-LD contexts, schemas, visual templates
+├── scripts/                               # AUTOMATION & PIPELINES
+│   ├── deploy.sh                          # Deploy or update platform compose stack
+│   ├── release.sh                         # Build and release artifacts/images
+│   └── smoke-test.sh                      # Post-deployment OpenID4VCI smoke test
 │
-├── config/                               # DECLARATIVE REPOSITORY CONFIGURATION
-│   └── credentials/                      # Declarative JSON credential configurations (e.g. ait-transcript.json)
+├── deploy/                               # DEPLOYMENT OVERLAYS & PLATFORM RUNTIME
+│   ├── base/                             # Shared Inji platform defaults (properties, nginx, SQL)
+│   ├── ait/                              # Academic Transcript tenant profile
+│   └── hackathon/                        # Developer Passport & Achievement tenant profile
+│
+├── tests/                                # INTEGRATION & SYSTEM TEST SUITES
+│   ├── test_installations.py             # Tenant identities vs CSV rows
+│   ├── test_authorization_server.py      # Authorization server contract tests
+│   ├── test_inji_web_vc_readiness.py     # Inji Web OpenID4VCI readiness checks
+│   ├── test_issue_and_verify.py          # Scripted issuance and tamper verification
+│   └── test_context_refresh.py           # Context and template refresh tests
+│
+├── src/                                  # CORE SOURCE CODE
+│   ├── adapter/                          # Mock Student Information System (SIS) Adapter (FastAPI)
+│   ├── certify_template_sync/            # Dynamic Inji Certify template synchronizer
+│   ├── gateway/                          # Institutional clearance & permission workflow engine
+│   ├── issuer/                           # Java 21 SPI Data-Provider Plugin (pom.xml + src/)
+│   ├── portal/                           # Demonstration Portal (Registrar & Student UI)
+│   ├── sis_bridge/                       # Temporary SIS protocol compatibility bridge
+│   ├── tools/                            # Developer utilities (CSV generators, mock rendering)
+│   ├── vc-lab/                           # VC Designer: W3C JSON-LD contexts, schemas, visual templates
+│   └── verifier/                         # Custom Branded Credential Verifier UI & API
 │
 ├── docker/                               # CONTAINER PACKAGING RECIPES
 │   ├── Dockerfile.certify                # Bakes src/issuer SPI plugin into Inji Certify
 │   ├── Dockerfile.gateway                # Packages src/gateway
 │   └── Dockerfile.template-sync          # Packages certify_template_sync (uv + Alpine)
 │
-├── compose.yaml                          # Local developer platform compose (builds from src/)
+├── compose.yaml                          # Core Issuer Platform compose (Certify, DB, Nginx, VDR)
+├── compose.verify.yaml                   # Verifier stack compose (custom Verifier + Verify service)
+├── compose.demo.yaml                     # Full demo stack compose (Inji Web mock wallet, demo app, Keycloak)
 ├── compose.dev.yaml                      # Loop 3: Hot JAR mount dev overlay (~3s reload)
 ├── .env.example                          # Root developer environment configuration
-├── pyproject.toml / uv.lock              # Modern Python dependency management (uv)
-│
-├── deploy/                               # DEPLOYMENT OVERLAYS & PLATFORM RUNTIME
-│   ├── base/                             # Shared Inji platform defaults (properties, nginx, SQL)
-│   ├── ait/                              # Academic Transcript tenant profile
-│   ├── hackathon/                        # Developer Passport & Achievement tenant profile
-│   ├── remote-deploy.sh                  # Automated VM deployment script used by CI/CD
-│   └── smoke.sh                          # Headless OpenID4VCI issuance smoke test (pure bash)
-│
-└── vc-stack/                             # FULL DEMO STACK (Inji Web, Keycloak, Portal, Verify)
+└── pyproject.toml / uv.lock              # Modern Python dependency management (uv)
 ```
 
 ---
@@ -297,16 +309,20 @@ docker compose up -d
 Brings up the complete multi-service demonstration journey (Inji Web Wallet, Keycloak OAuth Server, Registrar Portal, and Inji Verify):
 
 ```bash
-chmod +x run-demo.sh vc-stack/bootstrap.sh vc-stack/smoke.sh vc-stack/issuer-smoke.sh
-INSTALLATION=ait ./run-demo.sh
+./scripts/deploy.sh ait
 ```
 
-`run-demo.sh` prepares the database, generates mock student data, renders Mimoto issuer configurations, compiles the plugin JAR, brings up the containers in order, and verifies health. A successful start ends with `Stack is healthy.`
+`./scripts/deploy.sh` builds the plugin JAR via an isolated compiler container (if not present), applies database migrations, starts Inji Certify, Certify Nginx, VDR, and template-sync, waits for health, and executes the post-deployment issuance smoke test.
 
 #### To Reset or Switch Installation:
 ```bash
-INSTALLATION=ait ./run-demo.sh --wipe          # Reset AIT stack
-INSTALLATION=hackathon ./run-demo.sh --wipe    # Switch to Hackathon profile
+./scripts/deploy.sh ait --wipe          # Reset AIT stack with clean database
+./scripts/deploy.sh hackathon --wipe    # Switch to Hackathon profile
+```
+
+#### To Run Full Demo Stack (Mock Wallet & Verifier):
+```bash
+docker compose -f compose.yaml -f compose.verify.yaml -f compose.demo.yaml up -d
 ```
 
 ---
@@ -317,19 +333,21 @@ All test suites are automated and runnable locally on your host or in CI.
 
 ### Unit & Host Tests (Run without Docker)
 
-Using `uv` (or `.venv`):
-
 ```bash
-# Run all host verification tests:
-python src/tools/test_generate_csv.py
-uv run python vc-stack/test_installation_guard.py
-uv run python vc-stack/test_installations.py
-uv run python vc-stack/test_authorization_server.py
-uv run python vc-stack/test_configuration_contract.py
-uv run python adapter/test_adapter.py
-uv run python src/gateway/tests/test_credential_types.py
-uv run python src/gateway/tests/test_evaluations.py
-uv run python sis-bridge/test_bridge.py
+# Host verification tests:
+python3 src/tools/test_generate_csv.py
+python3 src/tools/test_render_mimoto_issuers_config.py
+python3 src/verifier/test_verifier.py
+python3 tests/test_installations.py
+python3 tests/test_authorization_server.py
+python3 tests/test_inji_web_vc_readiness.py
+
+# Tests requiring virtual environment (FastAPI, cryptography, httpx):
+.venv/bin/python tests/test_issue_and_verify.py
+.venv/bin/python src/adapter/test_adapter.py
+.venv/bin/python src/gateway/tests/test_credential_types.py
+.venv/bin/python src/gateway/tests/test_evaluations.py
+.venv/bin/python src/sis_bridge/test_bridge.py
 
 # Run Java plugin unit tests:
 cd src/issuer && mvn test
@@ -340,9 +358,10 @@ cd src/issuer && mvn test
 | **Gateway** | `src/gateway/tests/test_credential_types.py` | Credential clearance rules, hold checks, zero balance, conferral predicates |
 | **Gateway** | `src/gateway/tests/test_evaluations.py` | In-process evaluation of `POST /evaluations` across all installation personas |
 | **Issuer Plugin** | `src/issuer/` (`mvn test`) | SPI `fetchData()` contract, HTTP retry/timeouts, strict JSON escaping, trace keys |
-| **Adapter** | `adapter/test_adapter.py` | Validates OpenAPI contracts (`adapter/openapi.yaml`) against VCDM 2.0 schemas |
-| **Contract** | `vc-stack/test_configuration_contract.py` | Holds Compose files and architecture documentation in sync |
-| **Auth Server** | `vc-stack/test_authorization_server.py` | Validates OIDC issuer URLs, Keycloak realm mappings, and public endpoints |
+| **Adapter** | `src/adapter/test_adapter.py` | Validates OpenAPI contracts (`openapi.yaml`) against VCDM 2.0 schemas |
+| **Verifier** | `src/verifier/test_verifier.py` | Verifier UI routes, base58btc did:key decoding, VCDM cryptographic proof format |
+| **Auth Server** | `tests/test_authorization_server.py` | Validates OIDC issuer URLs, Keycloak realm mappings, and public endpoints |
+| **Installations** | `tests/test_installations.py` | Verifies identities across CSV, Keycloak realms, and smoke personas |
 
 ---
 
@@ -350,16 +369,15 @@ cd src/issuer && mvn test
 
 A smoke test verifies real cryptographic issuance, signature verification, and ledger recording.
 
-| Smoke Suite | Pre-requisite | Command | Expected Output |
-|---|---|---|---|
-| **Issuer Smoke** | Core platform up | `./vc-stack/issuer-smoke.sh` | `All Issuer-only smoke checks passed.` |
-| **Full Stack Smoke** | Demo stack up | `./vc-stack/smoke.sh` | `All smoke checks passed.` |
+```bash
+./scripts/smoke-test.sh
+```
 
 ---
 
 ## 6. Local Access & Stakeholder Walkthrough
 
-When running the Full Demo Stack (`./run-demo.sh`):
+When running the Full Demo Stack:
 
 ### Local Port Endpoints
 
@@ -367,8 +385,8 @@ When running the Full Demo Stack (`./run-demo.sh`):
 |---|---|---|
 | **Student Portal** | [http://localhost:4100/student/login](http://localhost:4100/student/login) | Student requests transcript |
 | **Registrar Portal** | [http://localhost:4100/registrar/login](http://localhost:4100/registrar/login) | Registrar approves or revokes issuance |
-| **Inji Web Wallet** | [http://localhost:4004](http://localhost:4004) | Digital wallet to claim & store credentials |
-| **Inji Verify** | [http://localhost:4007](http://localhost:4007) | Verifier to validate credential signatures & status |
+| **Inji Web Wallet** | [http://localhost:4004](http://localhost:4004) | Mock digital wallet container to claim & store credentials |
+| **Credential Verifier** | [http://localhost:4007](http://localhost:4007) | Custom branded verifier with camera QR scanner & drag-and-drop validation |
 | **Inji Certify** | [http://localhost:9091](http://localhost:9091) | OpenID4VCI credential issuer & metadata |
 | **Inji Certify Swagger UI** | [http://localhost:9091/v1/certify/swagger-ui/index.html](http://localhost:9091/v1/certify/swagger-ui/index.html) | Interactive API exploration & Swagger testing |
 | **Keycloak Admin** | [http://localhost:9080/admin/](http://localhost:9080/admin/) | Identity provider (`admin` / `admin`) |
@@ -378,7 +396,7 @@ When running the Full Demo Stack (`./run-demo.sh`):
 2. Open **Registrar Portal** ([http://localhost:4100/registrar/login](http://localhost:4100/registrar/login)) $\rightarrow$ Sign in as Academic Registrar $\rightarrow$ Click **Approve**.
 3. Return to Student Portal $\rightarrow$ Click **Claim your credential** $\rightarrow$ Redirects to **Inji Web**.
 4. In Inji Web, sign in (`ait-2026-0001` / `inji`), select **AIT University**, and download the **AIT Transcript**.
-5. Open **Inji Verify** ([http://localhost:4007](http://localhost:4007)) $\rightarrow$ Upload the downloaded credential JSON $\rightarrow$ Verdict reports **`allChecksSuccessful: true`**.
+5. Open **Credential Verifier** ([http://localhost:4007](http://localhost:4007)) $\rightarrow$ Upload the downloaded credential JSON or scan QR code $\rightarrow$ Verdict reports **Authentic Credential Verified**.
 
 ---
 
@@ -423,4 +441,3 @@ Deployments are triggered via GitHub Actions: **Actions $\rightarrow$ Deploy $\r
 - [Inji Certify Standalone Deployment (`deploy/README.md`)](./deploy/README.md)
 - [Gateway Workflow Engine (`src/gateway/README.md`)](./src/gateway/README.md)
 - [VC Lab Designer (`src/vc-lab/README.md`)](./src/vc-lab/README.md)
-- [Inji Mobile Wallet Guide (`wallet/README.md`)](./wallet/README.md)

@@ -1,6 +1,6 @@
 """TEMPORARY: every rule that turns the SIS Adapter's current answer into the Adapter contract's record.
 
-Deleted, with the rest of sis-bridge/ and vc-stack/sis-bridge/, once the SIS Adapter serves
+Deleted once the SIS Adapter serves
 `GET /student/{sub}/transcript` itself (ticket 11). The rules are the changes the SIS Adapter is asked to make, applied here until it makes them:
 
 - the VC envelope (`@context`, `type`, `issuer`, `issuanceDate`) and `credentialSubject.id` are dropped, and so is

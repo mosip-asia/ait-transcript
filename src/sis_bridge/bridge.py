@@ -1,4 +1,4 @@
-"""TEMPORARY SIS bridge: sis-bridge/ and vc-stack/sis-bridge/ are deleted once the SIS Adapter serves the contract's
+"""TEMPORARY SIS bridge: deleted once the SIS Adapter serves the contract's
 `GET /student/{sub}/transcript` itself (ticket 11).
 
 Serves the Adapter contract's transcript path (adapter/openapi.yaml) in front of the SIS Adapter's current route,

@@ -1,8 +1,7 @@
 """Every installation's sign-in identities match its adapter CSV: one Keycloak user per CSV row, with the row's `id`
-as username, plus the smoke's unknown persona, which signs in but has no row; and the smoke personas among them
-(smoke.sh checks the same against the running stack).
+as username, plus the smoke's unknown persona, which signs in but has no row; and the smoke personas among them.
 
-Host only, no Docker. Run: python3 vc-stack/test_installations.py
+Host only, no Docker. Run: python3 tests/test_installations.py
 """
 
 from __future__ import annotations

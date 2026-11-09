@@ -1,11 +1,11 @@
 """The Authorization Server is a per-environment setting of each installation.
 
-installations/<name>/authorization-server.env holds the stand-in realm's values, each overridable in vc-stack/.env
+installations/<name>/authorization-server.env holds the stand-in realm's values, each overridable in .env
 (an environment's own server). Certify's properties and Mimoto's issuer list are rendered here from those settings, as
 Compose and Certify resolve them, for the stand-in and for the campus realm, and no tracked file outside the settings
 names a realm path.
 
-Host only, no Docker. Run: python3 vc-stack/test_authorization_server.py
+Host only, no Docker. Run: python3 tests/test_authorization_server.py
 """
 
 from __future__ import annotations
@@ -22,10 +22,14 @@ NAMES = sorted(p.parent.name for p in INSTALLATIONS.glob("*/smoke.json"))
 sys.path.insert(0, str(REPO_ROOT / "src" / "tools"))
 import render_mimoto_issuers_config as r  # noqa: E402
 
-KEYS = ["AUTH_SERVER_ISSUER", "AUTH_SERVER_JWKS_URL", "AUTH_SERVER_TOKEN_ENDPOINT", "AUTH_SERVER_PUBLIC_URL",
-        "AUTH_SERVER_WALLET_CLIENT_ID"]
+KEYS = [
+    "AUTH_SERVER_ISSUER",
+    "AUTH_SERVER_JWKS_URL",
+    "AUTH_SERVER_TOKEN_ENDPOINT",
+    "AUTH_SERVER_PUBLIC_URL",
+    "AUTH_SERVER_WALLET_CLIENT_ID",
+]
 REALMS = {"ait": "inji", "hackathon": "hackathon"}
-# The campus realm of spec-part-2.md → Campus sign-in, on Dev; the client id is a placeholder until campus IT names it.
 CAMPUS = "https://oauth-dev.ait-itserv.dpi.ait.ac.th/realms/ait-dev"
 CAMPUS_ENV = {
     "AUTH_SERVER_ISSUER": CAMPUS,
@@ -35,21 +39,25 @@ CAMPUS_ENV = {
     "AUTH_SERVER_WALLET_CLIENT_ID": "inji-issuer-mimoto",
 }
 CERTIFY_DOMAIN = "http://certify-nginx"
-# Tracked files that may name a realm path: the settings, documents, tests (their fixtures), the phone's issuer list
-# (rendered from the settings and committed), and the hackathon roster, whose authEndpoint is a credential claim.
 REALM_PATH_ALLOWED = [
-    re.compile(p) for p in (
+    re.compile(p)
+    for p in (
         r"^deploy/[^/]+/authorization-server\.env$",
         r"\.md$",
         r"(^|/)test_[^/]*\.py$",
         r"Test\.java$",
+        r"^deploy/base/mimoto-issuers-mobile\.json$",
         r"^vc-stack/config/mimoto-issuers-mobile\.json$",
         r"^deploy/hackathon/adapter/student_identity_data\.csv$",
     )
 ]
-# A path into one of the installations' stand-in realms.
-REALM_PATH = re.compile(r"/realms/(?:%s)\b" % "|".join(
-    json.loads((INSTALLATIONS / name / "keycloak-realm.json").read_text(encoding="utf-8"))["realm"] for name in NAMES))
+REALM_PATH = re.compile(
+    r"/realms/(?:%s)\b"
+    % "|".join(
+        json.loads((INSTALLATIONS / name / "keycloak-realm.json").read_text(encoding="utf-8"))["realm"]
+        for name in NAMES
+    )
+)
 
 
 def stand_in(installation: str) -> dict[str, str]:
@@ -83,8 +91,11 @@ def mimoto_issuer(installation: str, env: dict[str, str]) -> dict:
 def test_every_installation_has_the_same_settings_each_overridable() -> None:
     assert set(NAMES) == set(REALMS), NAMES
     for name in NAMES:
-        lines = [line for line in (INSTALLATIONS / name / "authorization-server.env").read_text(encoding="utf-8")
-                 .splitlines() if line.strip() and not line.startswith("#")]
+        lines = [
+            line
+            for line in (INSTALLATIONS / name / "authorization-server.env").read_text(encoding="utf-8").splitlines()
+            if line.strip() and not line.startswith("#")
+        ]
         assert [line.split("=", 1)[0] for line in lines] == KEYS, (name, lines)
         for line in lines:
             key = line.split("=", 1)[0]
@@ -102,7 +113,6 @@ def test_the_stand_in_follows_the_keycloak_bases_of_the_environment() -> None:
     assert settings["AUTH_SERVER_PUBLIC_URL"] == "https://keycloak.demo.example/realms/inji"
     assert settings["AUTH_SERVER_JWKS_URL"] == "http://kc:1/realms/inji/protocol/openid-connect/certs"
     assert settings["AUTH_SERVER_ISSUER"] == "http://keycloak:8080/realms/inji"
-    # Compose's ${X:-default} takes the default for an empty value too.
     assert r.authorization_server("ait", {"AUTH_SERVER_ISSUER": ""}) == stand_in("ait")
 
 
@@ -139,8 +149,10 @@ def test_mimotos_issuer_list_names_the_configured_server() -> None:
 def test_the_phones_metadata_maps_the_issuer_to_its_public_url() -> None:
     public = {"CERTIFY_PUBLIC_BASE_URL": "https://api.demo.example", "KEYCLOAK_PUBLIC_BASE_URL": "https://kc.demo.example"}
     snippet = r.render({"INSTALLATION": "ait", **public})[r.GATEWAY_SNIPPET_OUT]
-    assert ("""'"authorization_servers":["http://keycloak:8080/realms/inji"]' """
-            """'"authorization_servers":["https://kc.demo.example/realms/inji"]'""") in snippet
+    assert (
+        """'"authorization_servers":["http://keycloak:8080/realms/inji"]' """
+        """'"authorization_servers":["https://kc.demo.example/realms/inji"]'"""
+    ) in snippet
     snippet = r.render({"INSTALLATION": "ait", **public, **CAMPUS_ENV})[r.GATEWAY_SNIPPET_OUT]
     assert f"""'"authorization_servers":["{CAMPUS}"]' '"authorization_servers":["{CAMPUS}"]'""" in snippet
 

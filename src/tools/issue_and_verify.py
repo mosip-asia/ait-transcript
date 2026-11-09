@@ -1,4 +1,4 @@
-"""Scripted issuance and verification for vc-stack/smoke.sh, without a browser or a wallet.
+"""Scripted issuance and verification without a browser or a wallet.
 
 issue:  a token from the installation's stand-in realm (direct-access grant on the test-only `smoke` client at
         AUTH_SERVER_TOKEN_ENDPOINT, for the persona and the credential scope), a proof JWT signed with a fresh key

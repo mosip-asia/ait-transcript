@@ -30,7 +30,7 @@ src/vc-lab/
 VC Lab is not a heavy background server. It operates in two ways:
 
 ### A. In the Docker Stack (The Mock VDR)
-In Compose (`src/issuer/compose.yaml` or `vc-stack/issuer/compose.yaml`), the `vdr` service runs a lightweight static Nginx container mounting `src/vc-lab/contexts`:
+In Compose (`compose.yaml`), the `vdr` service runs a lightweight static Nginx container mounting `src/vc-lab/contexts`:
 
 ```yaml
 vdr:

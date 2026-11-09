@@ -1,11 +1,7 @@
 __pycache__/
 *.pyc
 deploy/*/mimoto-issuers-config.json
-vc-stack/.env
-vc-stack/certs/
-vc-stack/data/
-vc-stack/plugins/
-plugin/target/
+.certs/
 src/issuer/target/
 target/
 deploy/data/
@@ -19,7 +15,6 @@ src/portal/*.db
 .venv/
 venv/
 .env
-vc-stack/.installation
 .pytest_cache/
 
 # local-only notes, not shared

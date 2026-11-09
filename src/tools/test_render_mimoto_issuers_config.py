@@ -29,8 +29,8 @@ def test_issuer_list_is_rendered_from_and_into_the_installation() -> None:
     repo_root = Path(__file__).resolve().parent.parent.parent
     assert {p.resolve() for p in out} == {
         repo_root / "deploy" / "ait" / "mimoto-issuers-config.json",
-        repo_root / "vc-stack" / "config" / "mimoto-issuers-mobile.json",
-        repo_root / "vc-stack" / "config" / "public-gateway-mobile.conf",
+        repo_root / "deploy" / "base" / "mimoto-issuers-mobile.json",
+        repo_root / "deploy" / "base" / "public-gateway-mobile.conf",
     }
 
 

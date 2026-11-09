@@ -1,26 +1,26 @@
 # Hackathon installation
 
-The files the stack mounts when `INSTALLATION=hackathon` (in `vc-stack/.env` or the environment): `INSTALLATION=hackathon ./run-demo.sh`. Everything else in `vc-stack/` is the same for every installation. Certify's seed runs only on a fresh database, so switching a local stack from another installation needs `--wipe` (`INSTALLATION=hackathon ./run-demo.sh --wipe`), which also renews the signing key and `did:key`.
+The files the stack mounts when `INSTALLATION=hackathon` (in `.env` or the environment): `./scripts/deploy.sh hackathon`. Certify's seed runs only on a fresh database, so switching a local stack from another installation needs `--wipe` (`./scripts/deploy.sh hackathon --wipe`), which also renews the signing key and `did:key`.
 
 How the infra team deploys this directory (the service set, every variable and mounted file, the secrets a deployment replaces, and the ingress allowlist, which is the same for both installations) is the configuration contract, [`docs/project/issuer-v0.1/configuration-contract.md`](../../docs/project/issuer-v0.1/configuration-contract.md); this file lists the values. The committed Gateway token, the realm's users and their passwords, and the `smoke` client are test-only fixtures that a deployment replaces.
 
 | File | Read by | Notes |
 |---|---|---|
-| `certify-installation.properties` | Certify (`installation` profile) | Certify's settings: the Authorization Server keys (read from `authorization-server.env`), the Data-provider plugin's keys (below), the issuer display; `did-url` is `CERTIFY_DID`, which `bootstrap.sh` writes to `vc-stack/.env` |
-| `authorization-server.env` | Certify and the Portal (`demo-app`), through Compose's `env_file`; `bootstrap.sh`, `smoke.sh` | The Authorization Server this installation trusts: issuer, JWKS URL, token endpoint, browser URL and wallet client id, each `${KEY:-<stand-in realm `hackathon`'s value>}`. An environment points the installation at another server by setting the same variable in `vc-stack/.env` (the VM's `app.env`), with no file changed. Certify's properties, Mimoto's issuer template and the Portal's sign-out link read these settings; the configuration contract's Authorization Server section lists them |
-| `certify_seed.sql` | Postgres, first start only | The `credential_config` rows for `developer-passport` and `achievement-certificate`, mounted after `vc-stack/certify_init.sql` |
-| `keycloak-realm.json` | Keycloak (`--import-realm`) | Realm `hackathon`: one user per roster `id`, the `wallet-demo` client, the test-only `smoke` client, the `developer_passport_vc_ldp` and `achievement_certificate_vc_ldp` scopes with Certify's audience. `bootstrap.sh` syncs the `wallet-demo` certificate into it |
+| `certify-installation.properties` | Certify (`installation` profile) | Certify's settings: the Authorization Server keys (read from `authorization-server.env`), the Data-provider plugin's keys (below), the issuer display; `did-url` is `CERTIFY_DID`, set in `.env` |
+| `authorization-server.env` | Certify and the Portal (`demo-app`), through Compose's `env_file` | The Authorization Server this installation trusts: issuer, JWKS URL, token endpoint, browser URL and wallet client id, each `${KEY:-<stand-in realm `hackathon`'s value>}`. An environment points the installation at another server by setting the same variable in `.env`, with no file changed. Certify's properties, Mimoto's issuer template and the Portal's sign-out link read these settings; the configuration contract's Authorization Server section lists them |
+| `certify_seed.sql` | Postgres, first start only | The `credential_config` rows for `developer-passport` and `achievement-certificate`, mounted after `deploy/base/certify_init.sql` |
+| `keycloak-realm.json` | Keycloak (`--import-realm`) | Realm `hackathon`: one user per roster `id`, the `wallet-demo` client, the test-only `smoke` client, the `developer_passport_vc_ldp` and `achievement_certificate_vc_ldp` scopes with Certify's audience |
 | `gateway.env` | The Gateway (`gateway/`), through Compose's `env_file` | Its settings, listed below |
 | `mimoto-issuers-config.json.template` | `src/tools/render_mimoto_issuers_config.py` | Mimoto's issuer list (wallet test harness), with `${INJI_WEB_URL}` left to fill |
-| `mimoto-issuers-config.json` | Mimoto, Inji Web | Rendered by `run-demo.sh` from the template, then patched by `bootstrap.sh`. Git-ignored |
+| `mimoto-issuers-config.json` | Mimoto, Inji Web | Rendered from the template. Git-ignored |
 | `adapter/student_identity_data.csv` | The mock adapter (`adapter/`, mounted read-only at `/data`) | The roster, committed and edited by hand: one row per participant, keyed by `id` (the Keycloak username). The adapter reads it on every request, no restart of anything |
-| `smoke.json` | `vc-stack/smoke.sh`, `vc-stack/issuer-smoke.sh`, `gateway/tests/test_evaluations.py`, `vc-stack/test_inji_web_vc_readiness.py` | The installation's test fixtures, below |
+| `smoke.json` | `scripts/smoke-test.sh`, `tests/` | The installation's test fixtures, below |
 
 The installation's own values:
 
-- Authorization Server: the stand-in Keycloak realm `hackathon` (`http://keycloak:8080/realms/hackathon`) unless the environment sets `AUTH_SERVER_*` in `vc-stack/.env`; see `authorization-server.env`
+- Authorization Server: the stand-in Keycloak realm `hackathon` (`http://keycloak:8080/realms/hackathon`) unless the environment sets `AUTH_SERVER_*` in `.env`; see `authorization-server.env`
 - Keycloak realm: `hackathon`, with wallet client `wallet-demo`; every user's password is `inji` (test-only)
-- Test-only client `smoke`: public, direct-access grant, the two scopes and a hardcoded `client_id` claim; only `vc-stack/issue_and_verify.py` (run by `smoke.sh`) uses it
+- Test-only client `smoke`: public, direct-access grant, the two scopes and a hardcoded `client_id` claim; only `scripts/smoke-test.sh` uses it
 - Scopes: `developer_passport_vc_ldp`, `achievement_certificate_vc_ldp`
 - Credential configuration: `developer-passport`, type `DeveloperPassportCredential`, VCDM 2.0, context `vc-lab/contexts/developer-passport/v1.json` on the VDR (`http://host.docker.internal:9098/contexts/developer-passport/v1.json`); claims `teamId`, `teamName`, `oidcClientId`, `authEndpoint`, `issuerEndpoint`, `verifierEndpoint`, each the roster column of that name
 - Credential configuration: `achievement-certificate`, type `AchievementCertificateCredential`, VCDM 2.0, context `vc-lab/contexts/achievement/v1.json` on the VDR (`http://host.docker.internal:9098/contexts/achievement/v1.json`); claims `teamId` and `award`, each the roster column of that name

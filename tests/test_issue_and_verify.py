@@ -20,8 +20,9 @@ from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.hazmat.primitives.asymmetric.utils import encode_dss_signature
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-import issue_and_verify as iv  # noqa: E402
+REPO_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(REPO_ROOT))
+from src.tools import issue_and_verify as iv  # noqa: E402
 
 
 def mock_client(handler) -> tuple[httpx.Client, list[httpx.Request]]:

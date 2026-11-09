@@ -12,7 +12,8 @@ import time
 import uuid
 from pathlib import Path
 
-STACK = Path(__file__).parent
+REPO_ROOT = Path(__file__).resolve().parent.parent
+BASE = REPO_ROOT / "deploy" / "base"
 LOCAL = "http://host.docker.internal:9098/contexts/transcript/v1.json"
 PUBLIC = "https://api.demo.example/contexts/transcript/v1.json"
 W3C = "https://www.w3.org/ns/credentials/v2"
@@ -24,7 +25,7 @@ def psql(name: str, *args: str, stdin: str | None = None, db: str = "inji_certif
 
 
 def refresh(name: str, url: str) -> str:
-    return psql(name, "-v", f"new_url={url}", stdin=(STACK / "context_refresh.sql").read_text())
+    return psql(name, "-v", f"new_url={url}", stdin=(BASE / "context_refresh.sql").read_text())
 
 
 def row(name: str) -> tuple[str, str]:
@@ -46,7 +47,7 @@ def main() -> None:
             time.sleep(1)
         time.sleep(2)
         # The schema and the AIT rows each connect to inji_certify themselves, in the stack's init order.
-        for seed in (STACK / "certify_init.sql", STACK.parent / "deploy" / "ait" / "certify_seed.sql"):
+        for seed in (BASE / "certify_init.sql", REPO_ROOT / "deploy" / "ait" / "certify_seed.sql"):
             psql(name, stdin=seed.read_text(), db="postgres")
 
         ctx, tpl = row(name)

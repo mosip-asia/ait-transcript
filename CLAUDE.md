@@ -8,18 +8,28 @@ The Issuer: a credential issuer built on pinned upstream Inji images. A wallet a
 
 An **Installation** (`deploy/<name>/`) is one issuing deployment's settings: `ait` issues the AIT transcript, `hackathon` the Developer Passport and the Achievement. Terms are in `CONTEXT.md`. What the Issuer must become is in `docs/project/issuer-v0.1/`; the configuration contract there is checked against the Compose files, and `spec-part-2.md` is planned work, not code.
 
-`wallet/` carries patches, not a wallet: `wallet/apply.sh <platform>` patches Inji Wallet v0.22.1 to talk to the GCP deployment (`wallet/README.md`).
+- **Web Wallet.** End-to-end credential claiming is demonstrated via the Inji Web Wallet container.
 
 ## Commands
 
-The README has every command: [Deploy locally](README.md#deploy-locally) and [How to test](README.md#how-to-test). What to know before running them:
-
-- Everything runs through Docker. On Windows, use WSL2 with the repo cloned into the WSL filesystem, not Git Bash and not `/mnt/c`.
-- `INSTALLATION` (`ait` or `hackathon`) comes from the environment, else `vc-stack/.env`, else the marker `vc-stack/.installation`; the scripts stop before any container starts when it names no directory. Certify's seed runs only on a fresh database, so switching Installation needs `--wipe`.
-- `./run-demo.sh` brings up the whole stack (`vc-stack/compose.yaml`); `vc-stack/issuer-dev.yaml` is the Issuer, the Gateway and the mock Adapter alone, as the dev server runs them.
-- **The gate's switch.** Both Installations commit the gate on (`mosip.certify.gateway.enabled=true` in `certify-installation.properties`). Each stack has a no-Gateway form, `vc-stack/compose-no-gateway.yaml` and `vc-stack/issuer-dev-no-gateway.yaml`: the same folders without `gateway/`, with `vc-stack/issuer/no-gateway.yaml` setting `MOSIP_CERTIFY_GATEWAY_ENABLED=false` and `MOSIP_CERTIFY_GATEWAY_URL=NO GATEWAY` in Certify's environment. Every script runs the file `COMPOSE_FILE` names (relative to `vc-stack/`): `COMPOSE_FILE=compose-no-gateway.yaml ./run-demo.sh`, then the smoke with the same value. Any other switch setting stops Certify at startup.
-- Tests are plain Python scripts, not pytest: `python3 <path>`. Most need no Docker. `./vc-stack/smoke.sh` (full stack) and `./vc-stack/issuer-smoke.sh` (Issuer alone) need the stack up, with either switch setting; both read the personas, scopes and tampered claims from `deploy/<name>/smoke.json`, and both run `vc-stack/issuer-checks.sh` first. CI runs each smoke per Installation and switch setting.
-- `src/portal/` is bind-mounted into demo-app with `--reload`; rebuild demo-app only when `src/portal/requirements.txt` changes.
+- Standard automation scripts in `scripts/`:
+  - `./scripts/deploy.sh [installation] [--wipe]`: Builds plugin JAR if needed and brings up the Issuer Platform stack.
+  - `./scripts/smoke-test.sh [certify_url] [student_id] [config_id]`: Post-deployment OpenID4VCI issuance smoke test.
+  - `./scripts/release.sh`: Build and publish Docker images and release artifacts.
+- Tests are plain Python scripts:
+  - `python3 tests/test_installations.py`
+  - `python3 tests/test_authorization_server.py`
+  - `python3 tests/test_inji_web_vc_readiness.py`
+  - `python3 src/verifier/test_verifier.py`
+  - `python3 src/tools/test_generate_csv.py`
+  - `python3 src/tools/test_render_mimoto_issuers_config.py`
+  - `.venv/bin/python tests/test_issue_and_verify.py`
+  - `.venv/bin/python src/adapter/test_adapter.py`
+  - `.venv/bin/python src/gateway/tests/test_evaluations.py`
+- Compose profiles:
+  - `compose.yaml`: Inji Certify, Certify Nginx, PostgreSQL database, VDR context server, template-sync.
+  - `compose.verify.yaml`: Custom branded Verifier (`src/verifier` on port 4007) and Inji Verify service (port 9095).
+  - `compose.demo.yaml`: End-to-end demo with Inji Web Wallet mock (port 4004), Mimoto (port 9099), Keycloak (port 9080), demo app (port 4100), gateway, and adapter.
 
 Deployment is manual: push, then run the `Deploy` workflow for a commit. A commit that changes an Installation's `certify_seed.sql` needs `wipe=true`, which also renews the signing key and `did:key`.
 
@@ -27,14 +37,12 @@ Deployment is manual: push, then run the `Deploy` workflow for a commit. A commi
 
 - **Data.** `src/portal/fixtures/students.json` is the source of truth for the mock personas; `src/tools/generate_csv.py` can regenerate `deploy/ait/adapter/student_identity_data.csv` from it. Identity is per degree: a student with two degrees is two rows and two Keycloak users. Both `ait` and `hackathon` adapter CSVs are committed.
 - **Data flow.** The token's `sub` and `scope` go from Certify to the plugin, which asks the Gateway's `POST /evaluations` (`{sub, scope}`) when the gate is on, then reads the record at its record URL with `{sub}` filled in (`GET /student/{sub}/transcript`); the Gateway reads only its eligibility URL (`GET /student/{sub}/eligibility`). Both URLs are whole settings the deployment owns. `src/adapter/openapi.yaml` is the contract (a record schema and an eligibility schema per scope, by `x-scope`) and, with `docs/schemas/ait-transcript-credential.v2.schema.json`, a master file: a test holds the transcript record to that schema's subject. `docs/project/issuer-v0.1/contracts.md` section 2 explains it. The Adapter serves values verbatim; the plugin is the only escaper.
-- **Adapter** (`src/adapter/`). The mock, column-driven, reads the CSV on every request and keys a row by its `id`, the `sub`: `/student/{sub}/transcript` serves the record to both Installations' Certify, the scope picking its schema. The record is every column but `id` and the eligibility columns (`holds`, `conferralStatus`, `balance`), and the eligibility path serves those three; on the hackathon roster, which has none of them, both are the whole row but `id`. `python3 src/adapter/test_adapter.py --contract URL SUB SCOPE` checks any Adapter against the contract.
-- **Gateway** (`src/gateway/`, optional). `POST /evaluations`, the read-only Checklist evaluation (`{sub, scope}`, reads only `GATEWAY_ELIGIBILITY_URL`, the mock's `/student/{sub}/eligibility` until the SIS Adapter serves one); it writes nothing, has no database, and its startup touches nothing external. `credential_types.py` is the registry keyed by scope: each type's credential type, its eligibility model following `src/adapter/openapi.yaml` strictly, and its checks (a check returns its failure reason, or `None`). An answer that does not parse is a 502 `gateway_error`; a check that raises is a 500. Settings: `deploy/<name>/gateway.env`.
-- **Data-provider plugin** (`src/issuer/`, Java 21). `IssuerDataProviderPlugin` asks the Gateway's `POST /evaluations` about the token's `sub` when `mosip.certify.gateway.enabled=true`, reads the record at `mosip.certify.adapter.record-url` (from `CERTIFY_RECORD_URL`, an `http(s)` URL holding `{sub}`, checked at startup) with the `sub` filled in, escapes it for the quoted template and adds the trace keys `tokenSub` and `tokenClientId` (indexed in the ledger); a refusal is Certify's error (`invalid_access_token`, `no_record`, `adapter_error`, the Gateway's `error`, `gateway_error`). The gate passes only a `200` evaluation whose checks all passed, a record holding a top-level `null` is `adapter_error`, both answers must be strict JSON, and each read timeout covers the whole answer. Claim types and formats are not checked at issuance: that is the Adapter's job, proven by `--contract`. The switch is required: `true` with an `http(s)` Gateway URL and token, `false` with the URL `NO GATEWAY`; anything else throws in the constructor, and the startup log names the setting. Ten keys in each Installation's properties; `contracts.md` section 2a lists them. Compiled against `certify-integration-api:0.14.0` with every dependency `provided`, so the jar is one class; `run-demo.sh` builds it into `vc-stack/plugins/`.
-- **Registrar approval.** The Portal shows the claim link only after a registrar approves; Certify and Keycloak know nothing of it, so with the gate off every persona with a record is issuable, and with it on every persona the Checklist passes. A deliberate scope cut: do not "fix" it unless asked.
-- **The stack** (`vc-stack/`): one folder per deployment (`issuer/`, `gateway/`, `mock-adapter/`, `verify/`, `demo/`), each `name: vc-stack`, pulled together by `include:`; a no-Gateway form leaves `gateway/` out. Mount sources stay in `vc-stack/`, so folder paths start with `../`. Each group with a database has its own; the Issuer's Postgres holds only Certify's schema. `docs/architecture/vc-stack.md` has the table.
-- **The SIS bridge** (`src/sis_bridge/`, folder `vc-stack/sis-bridge/`), temporary: serves `/student/{sub}/transcript` over the SIS Adapter's current route until the SIS Adapter serves the contract, then it is deleted. It is in no stack file: start it with `docker compose --env-file vc-stack/.env -f vc-stack/sis-bridge/compose.yaml up -d --build`, point `CERTIFY_RECORD_URL` at `http://sis-bridge:8000/student/{sub}/transcript` to use it, and keep `GATEWAY_ELIGIBILITY_URL` on the mock, since it serves no eligibility.
-- **Authorization Server**: set in one place, `deploy/<name>/authorization-server.env`, the only file that names a realm path; `vc-stack/.env` overrides each value.
-- **Contexts**: the JSON-LD contexts in `src/vc-lab/contexts/` are served by `vdr`; the template's `@context` and the `credential_config` row's `context` column must name the same URL. Every claim term is top-level and untyped except `courses` (`@json`), so the signature covers every claim (`docs/concepts/transcript-context.md`).
+- **Adapter** (`src/adapter/`). The mock, column-driven, reads the CSV on every request and keys a row by its `id`, the `sub`: `/student/{sub}/transcript` serves the record to both Installations' Certify, the scope picking its schema.
+- **Gateway** (`src/gateway/`, optional). `POST /evaluations`, the read-only Checklist evaluation (`{sub, scope}`, reads only `GATEWAY_ELIGIBILITY_URL`).
+- **Data-provider plugin** (`src/issuer/`, Java 21). `IssuerDataProviderPlugin` asks the Gateway's `POST /evaluations` about the token's `sub` when `mosip.certify.gateway.enabled=true`, reads the record at `mosip.certify.adapter.record-url` with `{sub}` filled in. Compiled against `certify-integration-api:0.14.0`.
+- **Verifier** (`src/verifier/`, Python/FastAPI). Custom-branded verification portal with camera QR code scanner, JSON drag-and-drop file upload, and REST API (`/api/verify`), performing W3C VCDM 2.0 cryptographic trust checks.
+- **Registrar approval.** The Portal shows the claim link only after a registrar approves.
+- **Contexts**: the JSON-LD contexts in `src/vc-lab/contexts/` are served by `vdr`.
 - **Revocation** is one Certify status API call from the Portal; Certify re-signs the status list about every 60 seconds (`docs/concepts/vc-revocation.md`).
 
 `bootstrap.sh` is idempotent and does what Compose cannot: `.env`, the network, Mimoto's keystore, bring-up order, the did:key refresh after a wipe, the context refresh, and validation.

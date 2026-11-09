@@ -12,8 +12,8 @@ STATUS_PENDING = "pending"
 STATUS_APPROVED = "approved"
 STATUS_REJECTED = "rejected"
 
-# Same vars as vc-stack/demo/compose.yaml's demo-app service — localhost
-# defaults for local dev, set in vc-stack/.env for a public deployment.
+# Same vars as compose.demo.yaml's demo-app service — localhost
+# defaults for local dev, set in .env for a public deployment.
 INJI_WEB_URL = os.environ.get("INJI_WEB_URL", "http://localhost:4004")
 INJI_VERIFY_URL = os.environ.get("INJI_VERIFY_URL", "http://localhost:4007")
 # The installation's Authorization Server, from its authorization-server.env (Compose's env_file); no host default.

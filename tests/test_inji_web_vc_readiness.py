@@ -26,8 +26,8 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
-STACK_DIR = Path(__file__).resolve().parent
-REPO_ROOT = STACK_DIR.parent
+REPO_ROOT = Path(__file__).resolve().parent.parent
+BASE_DIR = REPO_ROOT / "deploy" / "base"
 INSTALLATION_DIR = REPO_ROOT / "deploy" / os.environ.get("INSTALLATION", "ait")
 
 INJI_WEB_ORIGIN = "http://localhost:4004"
@@ -74,13 +74,8 @@ def test_issuers_config_token_endpoint_uses_inji_web_proxy() -> None:
     assert issuer["redirect_uri"] == f"{INJI_WEB_ORIGIN}/redirect"
 
 
-def test_bootstrap_mimoto_public_base_is_4004() -> None:
-    text = (STACK_DIR / "bootstrap.sh").read_text(encoding="utf-8")
-    assert 'LOCAL_MIMOTO_PUBLIC_BASE_URL="http://localhost:4004"' in text
-
-
 def test_mimoto_cors_allows_inji_web_host_port() -> None:
-    props = (STACK_DIR / "config/mimoto-default.properties").read_text(encoding="utf-8")
+    props = (BASE_DIR / "mimoto-default.properties").read_text(encoding="utf-8")
     assert "mosip.security.origins=http://localhost:4004" in props, (
         "Mimoto CORS must allow Inji Web on :4004 (not inji's default :3004) or VC download returns 403 "
         "and Inji Web shows 'session is not valid or session is completed'."
@@ -88,7 +83,7 @@ def test_mimoto_cors_allows_inji_web_host_port() -> None:
 
 
 def test_mimoto_keycloak_external_is_browser_url() -> None:
-    props = (STACK_DIR / "config/mimoto-default.properties").read_text(encoding="utf-8")
+    props = (BASE_DIR / "mimoto-default.properties").read_text(encoding="utf-8")
     assert "keycloak.external.url=http://localhost:9080" in props
     assert "keycloak.internal.url=http://keycloak:8080" in props
 
@@ -171,7 +166,6 @@ def main() -> None:
     args = parser.parse_args()
 
     test_issuers_config_token_endpoint_uses_inji_web_proxy()
-    test_bootstrap_mimoto_public_base_is_4004()
     test_mimoto_cors_allows_inji_web_host_port()
     test_mimoto_keycloak_external_is_browser_url()
     test_keycloak_wallet_demo_redirect_includes_inji_web()

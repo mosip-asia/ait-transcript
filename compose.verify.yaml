@@ -1,0 +1,63 @@
+# ==============================================================================
+# Verifier Service Compose Manifest
+# ==============================================================================
+# Runs the custom AIT Verifiable Credential Verifier UI & API on port 4007,
+# backed by upstream Inji Verify Service and PostgreSQL.
+#
+# Usage:
+#   docker compose -f compose.yaml -f compose.verify.yaml up -d
+# ==============================================================================
+name: ${COMPOSE_PROJECT_NAME}
+
+services:
+  verifier:
+    build:
+      context: .
+      dockerfile: src/verifier/Dockerfile
+    image: ghcr.io/mosip-asia/verifier:local
+    ports:
+      - "4007:4007"
+    environment:
+      - VERIFY_SERVICE_URL=http://verify-service:8080
+      - INSTITUTION_NAME=${INSTITUTION_NAME:-Asian Institute of Technology}
+    depends_on:
+      - verify-service
+
+  verify-service:
+    image: injistack/inji-verify-service:0.17.0
+    user: root
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "9095:8080"
+    environment:
+      - active_profile_env=default
+      - DATABASE_HOST=verify-database
+      - DATABASE_PORT=5432
+      - DATABASE_NAME=inji_verify
+      - DATABASE_SCHEMA=verify
+      - DATABASE_USERNAME=postgres
+      - DATABASE_PASSWORD=postgres
+      - INJI_VP_REQUEST_LONG_POLLING_TIMEOUT=55000
+      - INJI_VP_SUBMISSION_BASE_URL=${INJI_VERIFY_PUBLIC_BASE_URL:-http://localhost:9095}/v1/verify
+      - INJI_DID_VERIFY_URI=${INJI_VERIFY_DID_URI:-did:web:localhost%3A9095:v1:verify}
+      - INJI_DID_VERIFY_PUBLIC_KEY_URI=${INJI_VERIFY_DID_PUBLIC_KEY_URI:-did:web:localhost%3A9095:v1:verify#key-0}
+      - INJI_KEYSTORE_FILE_PASS=mosip
+      - INJI_VERIFY_REDIRECT_URI=${INJI_VERIFY_REDIRECT_URI:-http://localhost:4007}
+      - INJI_VERIFY_CLAIMS_WITH_META_DATA=_sd,_sd_alg,iss,cnf,sub,aud,exp,nbf,iat,cti
+    depends_on:
+      verify-database:
+        condition: service_healthy
+
+  verify-database:
+    image: postgres:15
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+    volumes:
+      - ./deploy/base/verify_init.sql:/docker-entrypoint-initdb.d/verify_init.sql
+    healthcheck:
+      test: ["CMD", "pg_isready", "-h", "127.0.0.1", "-U", "postgres", "-d", "inji_verify"]
+      interval: 2s
+      timeout: 3s
+      retries: 60

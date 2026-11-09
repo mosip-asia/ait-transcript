@@ -1,7 +1,0 @@
-.env
-certs/
-data/
-.tools/
-*.p12
-*.bak
-*.log

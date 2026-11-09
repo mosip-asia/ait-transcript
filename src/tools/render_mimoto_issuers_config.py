@@ -6,7 +6,7 @@ AGENTS.md's App-level config note) — and the Authorization Server, whose
 token endpoint and wallet client id come from the installation's
 authorization-server.env. INJI_WEB_URL defaults to localhost for local dev;
 a public deployment sets it, and any Authorization Server setting, in
-vc-stack/.env.
+.env.
 
 Also renders the two files the public gateway (`api.`) needs so the Inji
 mobile wallet can use the same Mimoto/Certify. The phone cannot use Mimoto's
@@ -16,7 +16,7 @@ but a phone cannot resolve. Inji Web and Mimoto never go through the gateway
 for these two paths, so the gateway serves the phone its own copies and
 Mimoto's file is left alone (docs/reference/inji-mobile-wallet.md). Only an
 installation that carries public-gateway-mobile.conf.template gets them; for any
-other the tracked files in vc-stack/config/ are left as they are.
+other the tracked files in deploy/base/ are left as they are.
 """
 
 from __future__ import annotations
@@ -27,7 +27,7 @@ import re
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
-CONFIG_DIR = REPO_ROOT / "vc-stack" / "config"
+CONFIG_DIR = REPO_ROOT / "deploy" / "base"
 MOBILE_ISSUERS_OUT = CONFIG_DIR / "mimoto-issuers-mobile.json"
 GATEWAY_SNIPPET_OUT = CONFIG_DIR / "public-gateway-mobile.conf"
 
