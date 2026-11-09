@@ -7,10 +7,10 @@ WORKDIR /bridge
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1
 
-COPY sis-bridge/requirements.txt requirements.txt
+COPY src/sis_bridge/requirements.txt requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY sis-bridge/bridge.py sis-bridge/sis_mapping.py data/ait_courses.py ./
+COPY src/sis_bridge/bridge.py src/sis_bridge/sis_mapping.py data/ait_courses.py ./
 
 EXPOSE 8000
 

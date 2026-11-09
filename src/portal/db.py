@@ -6,7 +6,7 @@ import os
 import sqlite3
 from pathlib import Path
 
-_DEFAULT_DB = Path(__file__).resolve().parent.parent / "demo_requests.db"
+_DEFAULT_DB = Path(__file__).resolve().parents[2] / "demo_requests.db"
 
 
 def db_path() -> str:

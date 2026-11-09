@@ -18,9 +18,10 @@ import time
 from pathlib import Path
 
 HERE = Path(__file__).parent
+REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(HERE))
-sys.path.insert(0, str(HERE.parent / "data"))  # ait_courses, which the image copies next to the bridge
-sys.path.insert(0, str(HERE.parent / "adapter"))  # the Adapter's contract mode
+sys.path.insert(0, str(REPO_ROOT / "data"))  # ait_courses, which the image copies next to the bridge
+sys.path.insert(0, str(REPO_ROOT / "src" / "adapter"))  # the Adapter's contract mode
 from fastapi import FastAPI, Request  # noqa: E402
 from fastapi.responses import JSONResponse, PlainTextResponse  # noqa: E402
 
@@ -31,7 +32,7 @@ from test_adapter import (  # noqa: E402
 
 SCOPE = "ait_transcript_vc_ldp"
 SAMPLE = json.loads((HERE / "fixtures" / "st123456.json").read_text(encoding="utf-8"))
-HANDOVER = HERE.parent / "wiki" / "project" / "issuer-v0.1" / "sis-adapter-handover.md"
+HANDOVER = REPO_ROOT / "wiki" / "project" / "issuer-v0.1" / "sis-adapter-handover.md"
 
 # The course and term fields the SIS does not serve.
 NO_HOURS = {"lec": "", "lab": ""}

@@ -6,10 +6,10 @@ WORKDIR /adapter
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1
 
-COPY adapter/requirements.txt requirements.txt
+COPY src/adapter/requirements.txt requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY adapter/main.py main.py
+COPY src/adapter/main.py main.py
 
 EXPOSE 8000
 

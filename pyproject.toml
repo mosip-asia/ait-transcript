@@ -32,4 +32,10 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["gateway", "portal", "sis-bridge", "adapter", "src/certify_template_sync"]
+packages = [
+    "src/adapter",
+    "src/certify_template_sync",
+    "src/gateway",
+    "src/portal",
+    "src/sis_bridge",
+]

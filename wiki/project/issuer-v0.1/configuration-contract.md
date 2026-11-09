@@ -187,7 +187,7 @@ No host port; reached through `certify-nginx`'s `/contexts/` (and, on transcript
 
 | Kind | Name | Source | Scope | Notes |
 |---|---|---|---|---|
-| mount | `/usr/share/nginx/html/contexts` | `vc-lab/contexts` | shared | Read-only; every installation's JSON-LD contexts, served under `/contexts/` |
+| mount | `/usr/share/nginx/html/contexts` | `src/vc-lab/contexts` | shared | Read-only; every installation's JSON-LD contexts, served under `/contexts/` |
 
 ### Cache and scaling
 
@@ -224,7 +224,7 @@ The Gateway is the optional Approval gate: with the gate on, Certify's Data-prov
 
 | Compose service | Component | Image | Deployed |
 |---|---|---|---|
-| `gateway` | The Gateway (checklist runner) | built from `gateway/Dockerfile` | yes |
+| `gateway` | The Gateway (checklist runner) | built from `src/gateway/Dockerfile` | yes |
 
 ### Compose variables
 
@@ -352,7 +352,7 @@ The mock Adapter serves records to Certify's Data-provider plugin and eligibilit
 
 | Compose service | Component | Image | Deployed |
 |---|---|---|---|
-| `adapter` | The mock data adapter | built from `adapter/Dockerfile` | yes, until infra's Adapter serves credential data |
+| `adapter` | The mock data adapter | built from `src/adapter/Dockerfile` | yes, until infra's Adapter serves credential data |
 
 ### Compose variables
 
@@ -400,7 +400,7 @@ Everything the demo needs besides the Issuer, Verify and the Adapter: the stand-
 | `keycloak-server` | Keycloak, the Authorization Server's stand-in | `quay.io/keycloak/keycloak:24.0` | yes, until the campus server |
 | `keycloak` | Keycloak's nginx | `nginx:stable` | yes, until the campus server |
 | `public-gateway` | Public gateway (nginx), and Mimoto's config server | `nginx:stable` | yes |
-| `demo-app` | The Portal (still named `demo-app` in Compose) | built from `portal/Dockerfile` | yes |
+| `demo-app` | The Portal (still named `demo-app` in Compose) | built from `src/portal/Dockerfile` | yes |
 
 ### Compose variables
 
@@ -527,7 +527,7 @@ The Portal. Its image already contains `portal/` and `data/`; the source mounts 
 | env | `AUTH_SERVER_TOKEN_ENDPOINT` | | environment | The issuer-list render, and the smoke's token request (`vc-stack/issue_and_verify.py` runs in this image) |
 | env | `AUTH_SERVER_PUBLIC_URL` | | environment | The sign-out link, and the issuer-list render (phone metadata) |
 | env | `AUTH_SERVER_WALLET_CLIENT_ID` | | environment | The sign-out link, and the issuer-list render |
-| mount | `/demo/portal` | `portal` | shared | Development only |
+| mount | `/demo/src/portal` | `src/portal` | shared | Development only |
 | mount | `/demo/data` | `data` | shared | Development only |
 | mount | `/demo/.demo-state` | `.demo-state` | shared | The request database; persistent |
 | mount | `/demo/vc-stack/config` | `vc-stack/config` | shared | Render output (phone-only files) |

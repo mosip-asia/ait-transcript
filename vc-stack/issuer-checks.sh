@@ -47,8 +47,8 @@ check_contexts() {
     [[ -n "$ctx_url" ]] || fail "$config @context names no context under /contexts/"
     ctx_path="${ctx_url#*/contexts/}"
     served_ctx=$(curl -sf "$base/contexts/$ctx_path") || fail "$name does not serve /contexts/$ctx_path"
-    [[ "$(jq -S . <<<"$served_ctx")" == "$(jq -S . "$REPO_ROOT/vc-lab/contexts/$ctx_path")" ]] \
-      || fail "$name's /contexts/$ctx_path differs from vc-lab/contexts/$ctx_path"
+    [[ "$(jq -S . <<<"$served_ctx")" == "$(jq -S . "$REPO_ROOT/src/vc-lab/contexts/$ctx_path")" ]] \
+      || fail "$name's /contexts/$ctx_path differs from src/vc-lab/contexts/$ctx_path"
     ok "$name serves /contexts/$ctx_path from the VDR"
   done
 }

@@ -13,6 +13,7 @@ deploy/data/
 deploy/*/private_key/
 *.p12
 portal/*.db
+src/portal/*.db
 .demo-state/*
 !.demo-state/.gitkeep
 .DS_Store

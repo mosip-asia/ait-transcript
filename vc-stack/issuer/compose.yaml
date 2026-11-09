@@ -101,7 +101,7 @@ services:
     container_name: vdr
     image: nginx:stable
     volumes:
-      - ../../vc-lab/contexts:/usr/share/nginx/html/contexts:ro
+      - ../../src/vc-lab/contexts:/usr/share/nginx/html/contexts:ro
     restart: unless-stopped
     networks:
       - network

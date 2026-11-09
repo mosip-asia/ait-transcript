@@ -152,7 +152,7 @@ services:
     container_name: demo-app
     build:
       context: ../..
-      dockerfile: portal/Dockerfile
+      dockerfile: src/portal/Dockerfile
     ports:
       - "4100:4100"
     environment:
@@ -171,7 +171,7 @@ services:
     env_file:
       - ../../deploy/${INSTALLATION}/authorization-server.env
     volumes:
-      - ../../portal:/demo/portal
+      - ../../src/portal:/demo/src/portal
       - ../../data:/demo/data
       - ../../.demo-state:/demo/.demo-state
       - ../../vc-stack/config:/demo/vc-stack/config

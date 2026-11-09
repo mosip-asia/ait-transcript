@@ -31,11 +31,12 @@ import sys
 import tempfile
 from pathlib import Path
 
+REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(Path(__file__).parent))
-sys.path.insert(0, str(Path(__file__).parent.parent / "data"))
+sys.path.insert(0, str(REPO_ROOT / "data"))
 import generate_csv as gc  # noqa: E402
 
-ROSTER = Path(__file__).parent.parent / "deploy" / "hackathon" / "adapter" / "student_identity_data.csv"
+ROSTER = REPO_ROOT / "deploy" / "hackathon" / "adapter" / "student_identity_data.csv"
 # The scopes the hackathon Installation enables: both read the roster row.
 ROSTER_SCOPES = ("developer_passport_vc_ldp", "achievement_certificate_vc_ldp")
 ELIGIBILITY = ("holds", "conferralStatus", "balance")  # the transcript CSV's eligibility columns
@@ -154,7 +155,7 @@ def test_mock_adapter_on_the_hackathon_roster() -> None:
 
 
 OPENAPI = Path(__file__).parent / "openapi.yaml"
-PLUGIN = Path(__file__).parent.parent / "plugin/src/main/java/asia/mosip/issuer/plugin/IssuerDataProviderPlugin.java"
+PLUGIN = REPO_ROOT / "src/issuer/src/main/java/asia/mosip/issuer/plugin/IssuerDataProviderPlugin.java"
 # Certify's reserved keys and the plugin's trace keys: no record may carry one (spec, "Shaping the data map").
 FORBIDDEN_KEYS = {"id", "_holderId", "_issuer", "validFrom", "validUntil", "credentialStatus", "tokenSub", "tokenClientId"}
 
@@ -174,7 +175,7 @@ def resolve(schema: dict, contract: dict) -> dict:
 ELIGIBILITY_PATH = "/student/{sub}/eligibility"
 # The record URL both Installations' Certify reads on the mock, as a path.
 TRANSCRIPT_URL = "/student/{sub}/transcript"
-CREDENTIAL_SCHEMA = Path(__file__).parent.parent / "wiki" / "schemas" / "ait-transcript-credential.v2.schema.json"
+CREDENTIAL_SCHEMA = REPO_ROOT / "wiki" / "schemas" / "ait-transcript-credential.v2.schema.json"
 
 
 def answer_schemas(contract: dict, path: str) -> list[dict]:
@@ -267,7 +268,7 @@ def template_claims() -> dict[str, set[str]]:
     import base64
 
     found = {}
-    for seed in (Path(__file__).parent.parent / "deploy").glob("*/certify_seed.sql"):
+    for seed in (REPO_ROOT / "deploy").glob("*/certify_seed.sql"):
         for row in seed.read_text(encoding="utf-8").split("INSERT INTO certify.credential_config")[1:]:
             (scope,) = re.findall(r"'([a-z_]+_vc_ldp)'", row)
             (template,) = re.findall(r"'(ewo[A-Za-z0-9+/=]+)'", row)
@@ -410,7 +411,7 @@ def test_every_field_a_gateway_model_requires_is_required_in_openapi_yaml() -> N
     eligibility schema. Fields the YAML requires and no model reads are fine."""
     from pydantic import TypeAdapter
 
-    sys.path.insert(0, str(Path(__file__).parent.parent / "gateway"))
+    sys.path.insert(0, str(REPO_ROOT / "src" / "gateway"))
     import credential_types as ct
 
     spec = load_contract()
@@ -501,10 +502,9 @@ def test_the_transcript_record_is_the_credential_schemas_subject_less_the_holder
 def test_the_handovers_privacy_section_names_every_claim_the_ait_ledger_indexes() -> None:
     """Certify logs every value its ledger indexes (LedgerUtils, at INFO), so the list on the handover's "Certify also
     logs it" line (wiki/project/issuer-v0.1/sis-adapter-handover.md) is the ait Installation's indexed mappings."""
-    root = Path(__file__).parent.parent
-    properties = (root / "deploy" / "ait" / "certify-installation.properties").read_text(encoding="utf-8")
+    properties = (REPO_ROOT / "deploy" / "ait" / "certify-installation.properties").read_text(encoding="utf-8")
     indexed = set(re.findall(r"^mosip\.certify\.indexed-mappings\.(\w+)=", properties, re.M))
-    page = (root / "wiki" / "project" / "issuer-v0.1" / "sis-adapter-handover.md").read_text(encoding="utf-8")
+    page = (REPO_ROOT / "wiki" / "project" / "issuer-v0.1" / "sis-adapter-handover.md").read_text(encoding="utf-8")
     line = next(line for line in page.splitlines() if line.startswith("- **Certify also logs it, and more.**"))
     named = set(re.findall(r"`(\w+)`", line.split(" in plain text: ", 1)[1].split(". ", 1)[0]))
     assert indexed and named == indexed, (named, indexed)

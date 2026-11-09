@@ -7,7 +7,7 @@ services:
     container_name: adapter
     build:
       context: ../..
-      dockerfile: adapter/Dockerfile
+      dockerfile: src/adapter/Dockerfile
     environment:
       - ADAPTER_CSV=/data/student_identity_data.csv
     volumes:
