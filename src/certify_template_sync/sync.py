@@ -217,7 +217,7 @@ def generate_full_sql(configs):
 def execute_sql(sql_content):
     """Executes SQL using psycopg if available, otherwise falls back to docker compose exec psql."""
     host = os.getenv("POSTGRES_HOST", "localhost")
-    port = int(os.getenv("POSTGRES_PORT", "6440" if host in ("localhost", "127.0.0.1") else "5432"))
+    port = int(os.getenv("POSTGRES_PORT", "5432"))
     dbname = os.getenv("POSTGRES_DB", "inji_certify")
     user = os.getenv("POSTGRES_USER", "postgres")
     password = os.getenv("POSTGRES_PASSWORD", "postgres")
@@ -257,7 +257,7 @@ def execute_sql(sql_content):
 def query_db_keys():
     """Queries existing credential keys from the database."""
     host = os.getenv("POSTGRES_HOST", "localhost")
-    port = int(os.getenv("POSTGRES_PORT", "6440" if host in ("localhost", "127.0.0.1") else "5432"))
+    port = int(os.getenv("POSTGRES_PORT", "5432"))
     dbname = os.getenv("POSTGRES_DB", "inji_certify")
     user = os.getenv("POSTGRES_USER", "postgres")
     password = os.getenv("POSTGRES_PASSWORD", "postgres")

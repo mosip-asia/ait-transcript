@@ -60,7 +60,7 @@ python3 src/certify_template_sync/sync.py --apply
 | :--- | :--- | :--- |
 | `CREDENTIALS_DIR` | `./config/credentials` or `/config` | Directory containing credential JSON files |
 | `POSTGRES_HOST` | `localhost` (or `database` in Docker) | PostgreSQL hostname |
-| `POSTGRES_PORT` | `6440` (or `5432` in Docker) | PostgreSQL port |
+| `POSTGRES_PORT` | `5432` | PostgreSQL port |
 | `POSTGRES_DB` | `inji_certify` | Inji Certify database name |
 | `POSTGRES_USER` | `postgres` | Database username |
 | `POSTGRES_PASSWORD` | `postgres` | Database password |

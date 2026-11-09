@@ -24,7 +24,7 @@ services:
       timeout: 3s
       retries: 60
     ports:
-      - "6440:5432"
+      - "${POSTGRES_PORT:-5432}:5432"
     networks:
       - network
 
@@ -52,17 +52,17 @@ services:
     ports:
       - "9090:8090"
     environment:
-      - container_user=mosip
       - active_profile_env=default, installation
-      - SPRING_CONFIG_NAME=certify
-      - SPRING_CONFIG_LOCATION=/home/mosip/config/
-      - enable_certify_artifactory=false
-      - download_hsm_client=false
-      - mosip_certify_domain_url=${CERTIFY_PUBLIC_BASE_URL:-http://localhost:9091}
       - CERTIFY_DID=${CERTIFY_DID:-did:key:z6MkpPLACEHOLDERreplaceMeViaBootstrapDidRefreshScript1}
       - CERTIFY_RECORD_URL=${CERTIFY_RECORD_URL:-http://adapter:8000/student/{sub}/transcript}
+      - container_user=mosip
+      - download_hsm_client=false
+      - enable_certify_artifactory=false
       - MOSIP_CERTIFY_GATEWAY_ENABLED=${MOSIP_CERTIFY_GATEWAY_ENABLED:-true}
       - MOSIP_CERTIFY_GATEWAY_URL=${MOSIP_CERTIFY_GATEWAY_URL:-http://gateway:8000}
+      - mosip_certify_domain_url=${CERTIFY_PUBLIC_BASE_URL:-http://localhost:9091}
+      - SPRING_CONFIG_LOCATION=/home/mosip/config/
+      - SPRING_CONFIG_NAME=certify
     env_file:
       - ../installations/ait/authorization-server.env
     volumes:
