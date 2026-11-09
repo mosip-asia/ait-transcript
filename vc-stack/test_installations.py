@@ -15,15 +15,10 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 INSTALLATIONS = REPO_ROOT / "deploy"
 NAMES = sorted(p.parent.name for p in INSTALLATIONS.glob("*/smoke.json"))
-sys.path.insert(0, str(REPO_ROOT / "data"))
 
 
 def csv_ids(installation: str) -> list[str]:
-    """The adapter CSV's id column: generated from data/students.json for ait, the committed file otherwise."""
-    if installation == "ait":
-        import generate_csv as gc
-
-        return [row["id"] for row in gc.build_rows(gc.load_students()["students"])]
+    """The adapter CSV's id column for the installation."""
     with open(INSTALLATIONS / installation / "adapter" / "student_identity_data.csv", newline="", encoding="utf-8") as f:
         return [row["id"] for row in csv.DictReader(f)]
 

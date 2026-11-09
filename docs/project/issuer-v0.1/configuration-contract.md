@@ -103,7 +103,7 @@ What an installation trusts is five settings in `installations/<name>/authorizat
 |---|---|---|---|---|
 | `AUTH_SERVER_ISSUER` | Certify (`mosip.certify.authorization.url`, `mosip.certify.authn.issuer-uri`, so its metadata's `authorization_servers`); the phone metadata's rewrite | `http://keycloak:8080/realms/inji` | `http://keycloak:8080/realms/hackathon` | The server's issuer, exactly as its tokens carry `iss`, reachable from Mimoto in the network |
 | `AUTH_SERVER_JWKS_URL` | Certify (`mosip.certify.authn.jwk-set-uri`) | `http://host.docker.internal:9080/realms/inji/protocol/openid-connect/certs` | `http://host.docker.internal:9080/realms/hackathon/protocol/openid-connect/certs` | The server's JWKS URL, reachable from Certify |
-| `AUTH_SERVER_TOKEN_ENDPOINT` | Mimoto's issuer list (`authorization_audience`, `proxy_token_endpoint`), rendered by `data/render_mimoto_issuers_config.py` and patched by `bootstrap.sh`; the smoke's token request | `http://keycloak:8080/realms/inji/protocol/openid-connect/token` | `http://keycloak:8080/realms/hackathon/protocol/openid-connect/token` | The server's token endpoint, reachable in the network |
+| `AUTH_SERVER_TOKEN_ENDPOINT` | Mimoto's issuer list (`authorization_audience`, `proxy_token_endpoint`), rendered by `scripts/render_mimoto_issuers_config.py` and patched by `bootstrap.sh`; the smoke's token request | `http://keycloak:8080/realms/inji/protocol/openid-connect/token` | `http://keycloak:8080/realms/hackathon/protocol/openid-connect/token` | The server's token endpoint, reachable in the network |
 | `AUTH_SERVER_PUBLIC_URL` | The Portal's sign-out link; `bootstrap.sh` and `smoke.sh` (Mimoto's `authorization_endpoint` must start with it); the phone metadata | `http://localhost:9080/realms/inji` | `http://localhost:9080/realms/hackathon` | The issuer as a browser reaches it; for a server with one public name, the issuer itself |
 | `AUTH_SERVER_WALLET_CLIENT_ID` | Mimoto's issuer list (`client_id`); Certify's first allowed audience; the Portal's sign-out link | `wallet-demo` | `wallet-demo` | The client the server registers for Mimoto (test harness) |
 
@@ -373,7 +373,7 @@ No host port; reached as `http://adapter:8000`.
 
 | Fixture | Where it is read | Committed value |
 |---|---|---|
-| The CSV, its whole content | `installations/<name>/adapter/student_identity_data.csv` | `ait`: generated from `data/students.json` (git-ignored), one row per degree; `hackathon`: the committed roster, edited by hand |
+| The CSV, its whole content | `installations/<name>/adapter/student_identity_data.csv` | `ait`: generated from `src/portal/fixtures/students.json` (committed), one row per degree; `hackathon`: the committed roster, edited by hand |
 
 The Mock Adapter itself is the fixture: the real Adapter (`contracts.md` section 2b) replaces it by changing `CERTIFY_RECORD_URL` and `GATEWAY_ELIGIBILITY_URL`.
 
@@ -512,7 +512,7 @@ Two servers. Port 80 is the ingress of transcript-demo: it routes `/contexts/` t
 
 ### `demo-app`
 
-The Portal. Its image already contains `portal/` and `data/`; the source mounts and uvicorn's `--reload` are for local development, and the `vc-stack/config` and `installations` mounts let `run-demo.sh` render the issuer lists in this container. A deployment needs only `.demo-state` persistent.
+The Portal. Its image already contains `src/portal/`; the source mounts and uvicorn's `--reload` are for local development, and the `vc-stack/config` and `installations` mounts let `run-demo.sh` render the issuer lists in this container. A deployment needs only `.demo-state` persistent.
 
 | Kind | Name | Source | Scope | Notes |
 |---|---|---|---|---|
@@ -528,7 +528,7 @@ The Portal. Its image already contains `portal/` and `data/`; the source mounts 
 | env | `AUTH_SERVER_PUBLIC_URL` | | environment | The sign-out link, and the issuer-list render (phone metadata) |
 | env | `AUTH_SERVER_WALLET_CLIENT_ID` | | environment | The sign-out link, and the issuer-list render |
 | mount | `/demo/src/portal` | `src/portal` | shared | Development only |
-| mount | `/demo/data` | `data` | shared | Development only |
+| mount | `/demo/scripts` | `scripts` | shared | Development only |
 | mount | `/demo/.demo-state` | `.demo-state` | shared | The request database; persistent |
 | mount | `/demo/vc-stack/config` | `vc-stack/config` | shared | Render output (phone-only files) |
 | mount | `/demo/deploy` | `deploy` | shared | Render output (`mimoto-issuers-config.json`) |
@@ -559,7 +559,7 @@ The values in `installations/<name>/`, which every deployment above mounts; each
 | Scopes | `ait_transcript_vc_ldp` | `developer_passport_vc_ldp`, `achievement_certificate_vc_ldp` |
 | Credential configurations and types | `ait-transcript` (`AitTranscriptCredential`) | `developer-passport` (`DeveloperPassportCredential`), `achievement-certificate` (`AchievementCertificateCredential`) |
 | JSON-LD contexts (`vc-lab/contexts/`) | `transcript/v1.json` | `developer-passport/v1.json`, `achievement/v1.json` |
-| Adapter CSV (`adapter/student_identity_data.csv`) | Generated from `data/students.json` (git-ignored), one row per degree | The committed roster, edited by hand, one row per participant |
+| Adapter CSV (`adapter/student_identity_data.csv`) | Generated from `src/portal/fixtures/students.json` (committed), one row per degree | The committed roster, edited by hand, one row per participant |
 | Enabled Gateway types (`GATEWAY_ENABLED_SCOPES`) | `ait_transcript_vc_ldp` | `developer_passport_vc_ldp achievement_certificate_vc_ldp` |
 | Gateway checks | `no_holds`, `conferred`, `zero_balance` | Developer Passport `on_roster`; Achievement `on_roster`, `winner` |
 | Gateway token (`GATEWAY_AUTH_TOKEN`, equal to the plugin's `mosip.certify.gateway.auth-token`), committed test-only value | `dev-only-ait-gateway-token` | `dev-only-hackathon-gateway-token` |

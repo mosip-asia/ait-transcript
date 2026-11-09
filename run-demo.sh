@@ -19,13 +19,13 @@ cd "$STACK"
 "$STACK/bootstrap.sh" --prepare
 
 # The generators run as the host user, so the files they write stay the host's to edit and regenerate.
-echo "==> Regenerate Certify CSV from data/students.json"
+echo "==> Regenerate Certify CSV from students.json"
 # Every image the stack form builds: demo-app, adapter, and gateway unless COMPOSE_FILE names a no-Gateway form.
 docker compose build
-docker compose run --rm --no-deps --user "$(id -u):$(id -g)" demo-app python data/generate_csv.py
+docker compose run --rm --no-deps --user "$(id -u):$(id -g)" demo-app python scripts/generate_csv.py
 
 echo "==> Render mimoto-issuers-config.json from the installation's template"
-docker compose run --rm --no-deps --user "$(id -u):$(id -g)" demo-app python data/render_mimoto_issuers_config.py
+docker compose run --rm --no-deps --user "$(id -u):$(id -g)" demo-app python scripts/render_mimoto_issuers_config.py
 
 # Compose mounts the one jar into Certify's additional_jars/; the Maven repository is cached beside it (both git-ignored).
 echo "==> Build the Certify data-provider plugin (src/issuer/) into vc-stack/plugins/"

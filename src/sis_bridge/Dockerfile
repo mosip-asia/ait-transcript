@@ -1,5 +1,5 @@
 # TEMPORARY SIS bridge, deleted once the SIS Adapter serves the contract itself (ticket 11): the Adapter contract's
-# transcript path in front of the SIS Adapter's current route. data/ait_courses.py is copied in for the course listing.
+# transcript path in front of the SIS Adapter's current route. src/adapter/ait_courses.py is copied in for the course listing.
 FROM python:3.12-slim-bookworm
 
 WORKDIR /bridge
@@ -10,7 +10,7 @@ ENV PYTHONUNBUFFERED=1 \
 COPY src/sis_bridge/requirements.txt requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY src/sis_bridge/bridge.py src/sis_bridge/sis_mapping.py data/ait_courses.py ./
+COPY src/sis_bridge/bridge.py src/sis_bridge/sis_mapping.py src/adapter/ait_courses.py ./
 
 EXPOSE 8000
 

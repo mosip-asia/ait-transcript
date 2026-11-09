@@ -324,7 +324,7 @@ Using `uv` (or `.venv`):
 
 ```bash
 # Run all host verification tests:
-uv run python data/test_generate_csv.py
+python scripts/test_generate_csv.py
 uv run python vc-stack/test_installation_guard.py
 uv run python vc-stack/test_installations.py
 uv run python vc-stack/test_authorization_server.py

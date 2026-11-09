@@ -1,6 +1,6 @@
 """Plain-assert smoke tests for ait_courses.py (PLAN.md Phase 0 Tests).
 
-Run: python3 data/test_ait_courses.py
+Run: python3 src/adapter/test_courses.py
 """
 
 from __future__ import annotations

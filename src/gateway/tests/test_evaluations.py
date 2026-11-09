@@ -28,16 +28,14 @@ from pathlib import Path
 
 GATEWAY_DIR = Path(__file__).resolve().parents[1]
 REPO_ROOT = GATEWAY_DIR.parent if (GATEWAY_DIR.parent / "deploy").exists() else GATEWAY_DIR.parent.parent
-# The Gateway's modules (the image has them too); data/'s generator in host mode only.
 sys.path.insert(0, str(GATEWAY_DIR))
-sys.path.insert(0, str(REPO_ROOT / "data"))
 
 import credential_types as ct  # noqa: E402
 
 INSTALLATIONS = REPO_ROOT / "deploy"
+AIT_ROSTER = INSTALLATIONS / "ait" / "adapter" / "student_identity_data.csv"
 ROSTER = INSTALLATIONS / "hackathon" / "adapter" / "student_identity_data.csv"
-# The host-mode CSV per installation: None is the one generated from data/students.json.
-HOST_CSV = {"ait": None, "hackathon": ROSTER}
+HOST_CSV = {"ait": AIT_ROSTER, "hackathon": ROSTER}
 # The edge cases run on the AIT installation.
 SCOPE = "ait_transcript_vc_ldp"
 ELIGIBLE = "ait-2026-0001"
@@ -77,25 +75,20 @@ def enabled_scopes(installation: str) -> tuple[str, ...]:
 
 @contextmanager
 def mock_adapter(csv_path: Path | None = None):
-    """The mock adapter's app in-process on csv_path, else on a CSV generated from data/students.json:
+    """The mock adapter's app in-process on csv_path, else on the AIT roster CSV:
     (client, csv_path, rows)."""
-    import generate_csv as gc
     from fastapi.testclient import TestClient
 
-    with tempfile.TemporaryDirectory() as td:
-        if csv_path is None:
-            rows = gc.build_rows(gc.load_students()["students"])
-            csv_path = Path(td) / "student_identity_data.csv"
-            gc.write_csv(rows, csv_path)
-        else:
-            with open(csv_path, newline="", encoding="utf-8") as f:
-                rows = list(csv.DictReader(f))
-        os.environ["ADAPTER_CSV"] = str(csv_path)
-        # Loaded by path: the adapter's module is also called main.
-        spec = importlib.util.spec_from_file_location("adapter_main", REPO_ROOT / "src" / "adapter" / "main.py")
-        module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(module)
-        yield TestClient(module.app), csv_path, rows
+    if csv_path is None:
+        csv_path = AIT_ROSTER
+    with open(csv_path, newline="", encoding="utf-8") as f:
+        rows = list(csv.DictReader(f))
+    os.environ["ADAPTER_CSV"] = str(csv_path)
+    # Loaded by path: the adapter's module is also called main.
+    spec = importlib.util.spec_from_file_location("adapter_main", REPO_ROOT / "src" / "adapter" / "main.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    yield TestClient(module.app), csv_path, rows
 
 
 def gateway_app(adapter, enabled_scopes: tuple[str, ...] = (SCOPE,)):

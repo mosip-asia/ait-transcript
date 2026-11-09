@@ -1,4 +1,4 @@
-"""Load mock personas from data/students.json (repo root)."""
+"""Load mock personas from fixtures/students.json."""
 
 from __future__ import annotations
 
@@ -7,8 +7,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
-STUDENTS_JSON = REPO_ROOT / "data" / "students.json"
+STUDENTS_JSON = Path(__file__).resolve().parent / "fixtures" / "students.json"
 
 
 @lru_cache

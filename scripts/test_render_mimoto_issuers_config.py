@@ -1,6 +1,6 @@
 """Plain-assert tests for render_mimoto_issuers_config.py.
 
-Run: python3 data/test_render_mimoto_issuers_config.py
+Run: python3 scripts/test_render_mimoto_issuers_config.py
 """
 
 from __future__ import annotations

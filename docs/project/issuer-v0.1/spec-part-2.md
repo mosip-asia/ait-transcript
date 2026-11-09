@@ -86,7 +86,7 @@ The three endpoints of `contracts.md` section 3, served by the Gateway under the
 Auth:
 
 - Each request carries the signed-in user's access token from the installation's Authorization Server as a bearer token. The Gateway validates it against the server's JWKS (fetched on first use and cached, never at startup) and its issuer, and accepts only tokens whose `azp` is the Portal's client, so no audience mapper is needed on any realm.
-- Staff: the token's `realm_access.roles` contains `registrar`, which Keycloak's default `roles` scope writes, so the only realm change is the role itself. Every stand-in realm gains the realm role `registrar`; on the campus realm the role is asked of campus IT. The AIT realm gets the mock registrars of `data/students.json` as users with the role; the hackathon realm gets one organiser user with it. One role name for both installations in v0.1.
+- Staff: the token's `realm_access.roles` contains `registrar`, which Keycloak's default `roles` scope writes, so the only realm change is the role itself. Every stand-in realm gains the realm role `registrar`; on the campus realm the role is asked of campus IT. The AIT realm gets the mock registrars of `src/portal/fixtures/students.json` as users with the role; the hackathon realm gets one organiser user with it. One role name for both installations in v0.1.
 - Student self-evaluation: open (see Further Notes). Until it is decided every endpoint is staff only, as section 3 says; the proposal was that evaluate also accepts a student's token for the student's own `sub`.
 - No token, a bad signature, the wrong issuer, or an `azp` other than the Portal's client: 401. A valid token without the role on a staff endpoint: 403.
 

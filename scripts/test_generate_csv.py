@@ -1,6 +1,6 @@
 """Plain-assert smoke tests for generate_csv.py (PLAN.md Phase 0 Tests).
 
-Run: python3 data/test_generate_csv.py
+Run: python3 scripts/test_generate_csv.py
 """
 
 from __future__ import annotations

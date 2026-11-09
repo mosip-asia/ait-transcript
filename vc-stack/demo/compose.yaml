@@ -162,9 +162,9 @@ services:
       # of the stack's compose files, localhost by default for local dev.
       - INJI_WEB_URL=${INJI_WEB_URL:-http://localhost:4004}
       - INJI_VERIFY_URL=${INJI_VERIFY_URL:-http://localhost:4007}
-      # Only data/render_mimoto_issuers_config.py reads this one (phone-only gateway files).
+      # Only scripts/render_mimoto_issuers_config.py reads this one (phone-only gateway files).
       - CERTIFY_PUBLIC_BASE_URL=${CERTIFY_PUBLIC_BASE_URL:-http://certify-nginx}
-      # Which deploy/ directory data/render_mimoto_issuers_config.py renders into.
+      # Which deploy/ directory scripts/render_mimoto_issuers_config.py renders into.
       - INSTALLATION=${INSTALLATION}
     # The Authorization Server's settings: the sign-out link (portal/requests.py), the issuer-list render, and the
     # smoke's token request (vc-stack/issue_and_verify.py runs in this image).
@@ -172,7 +172,7 @@ services:
       - ../../deploy/${INSTALLATION}/authorization-server.env
     volumes:
       - ../../src/portal:/demo/src/portal
-      - ../../data:/demo/data
+      - ../../scripts:/demo/scripts
       - ../../.demo-state:/demo/.demo-state
       - ../../vc-stack/config:/demo/vc-stack/config
       - ../../deploy:/demo/deploy

@@ -33,9 +33,8 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(Path(__file__).parent))
-sys.path.insert(0, str(REPO_ROOT / "data"))
-import generate_csv as gc  # noqa: E402
 
+AIT_ROSTER = REPO_ROOT / "deploy" / "ait" / "adapter" / "student_identity_data.csv"
 ROSTER = REPO_ROOT / "deploy" / "hackathon" / "adapter" / "student_identity_data.csv"
 # The scopes the hackathon Installation enables: both read the roster row.
 ROSTER_SCOPES = ("developer_passport_vc_ldp", "achievement_certificate_vc_ldp")
@@ -130,10 +129,10 @@ def host_get(csv_path: Path):
     return get
 
 
-def test_mock_adapter_on_a_generated_csv() -> None:
+def test_mock_adapter_on_the_ait_roster() -> None:
     with tempfile.TemporaryDirectory() as td:
         csv_path = Path(td) / "student_identity_data.csv"
-        gc.write_csv(gc.build_rows(gc.load_students()["students"]), csv_path)
+        csv_path.write_bytes(AIT_ROSTER.read_bytes())
         get = host_get(csv_path)
         check_adapter(get, csv_path)
         check_edit(get, csv_path)
@@ -298,7 +297,7 @@ def test_every_record_schema_lists_exactly_the_claims_its_template_substitutes()
 def test_the_contract_mode_passes_against_the_mock() -> None:
     with tempfile.TemporaryDirectory() as td:
         csv_path = Path(td) / "student_identity_data.csv"
-        gc.write_csv(gc.build_rows(gc.load_students()["students"]), csv_path)
+        csv_path.write_bytes(AIT_ROSTER.read_bytes())
         get = host_get(csv_path)
         for sub in ("ait-2026-0001", "st123456"):  # st123456: the SIS test student, so issuer-dev can gate it
             check_contract(get, TRANSCRIPT_URL, sub, "ait_transcript_vc_ldp")
@@ -314,7 +313,7 @@ def test_the_contract_mode_fails_an_adapter_that_breaks_the_contract() -> None:
     """Each break, served by an otherwise correct Adapter (the mock), fails the contract mode."""
     with tempfile.TemporaryDirectory() as td:
         csv_path = Path(td) / "student_identity_data.csv"
-        gc.write_csv(gc.build_rows(gc.load_students()["students"]), csv_path)
+        csv_path.write_bytes(AIT_ROSTER.read_bytes())
         mock = host_get(csv_path)
 
         def broken(path_start: str, change):

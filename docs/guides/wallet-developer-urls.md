@@ -135,7 +135,7 @@ If the app only says the download failed, the request order on the platform tell
 
 ## Test students
 
-Mock students are defined in [data/students.json](../../data/students.json). Ask the demo owner for the shared test password rather than copying one into a wallet repo.
+Mock students are defined in [src/portal/fixtures/students.json](../../src/portal/fixtures/students.json). Ask the demo owner for the shared test password rather than copying one into a wallet repo.
 
 ## Quick check
 

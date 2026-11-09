@@ -19,7 +19,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 INSTALLATIONS = REPO_ROOT / "deploy"
 NAMES = sorted(p.parent.name for p in INSTALLATIONS.glob("*/smoke.json"))
-sys.path.insert(0, str(REPO_ROOT / "data"))
+sys.path.insert(0, str(REPO_ROOT / "scripts"))
 import render_mimoto_issuers_config as r  # noqa: E402
 
 KEYS = ["AUTH_SERVER_ISSUER", "AUTH_SERVER_JWKS_URL", "AUTH_SERVER_TOKEN_ENDPOINT", "AUTH_SERVER_PUBLIC_URL",

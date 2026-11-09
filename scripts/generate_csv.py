@@ -1,7 +1,7 @@
-"""Generate deploy/ait/adapter/student_identity_data.csv from data/students.json.
+"""Generate deploy/ait/adapter/student_identity_data.csv from src/portal/fixtures/students.json.
 
-data/students.json is the single source of truth (see docs/concepts/transcript-credential.md).
-Run: python3 data/generate_csv.py
+See docs/concepts/transcript-credential.md.
+Run: python3 scripts/generate_csv.py
 """
 
 from __future__ import annotations
@@ -11,11 +11,11 @@ import json
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent))
+REPO_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(REPO_ROOT / "src" / "adapter"))
 from ait_courses import enrich_ait_transcript_subject  # noqa: E402
 
-REPO_ROOT = Path(__file__).parent.parent
-STUDENTS_JSON = Path(__file__).parent / "students.json"
+STUDENTS_JSON = REPO_ROOT / "src" / "portal" / "fixtures" / "students.json"
 OUT_CSV = REPO_ROOT / "deploy" / "ait" / "adapter" / "student_identity_data.csv"
 
 # Locked claim list. Order here becomes the CSV column order and matches the

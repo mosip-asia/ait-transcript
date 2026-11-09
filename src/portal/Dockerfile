@@ -12,7 +12,6 @@ RUN pip install --no-cache-dir -r src/portal/requirements.txt
 
 # Fallback when bind mounts are not used (e.g. image-only smoke). Dev uses compose bind mounts.
 COPY src/portal/ src/portal/
-COPY data/ data/
 
 EXPOSE 4100
 

@@ -33,7 +33,7 @@ jobs:
 
       # The readiness test reads deploy/ait/mimoto-issuers-config.json, which is git-ignored.
       - name: Render the issuer config
-        run: python data/render_mimoto_issuers_config.py
+        run: python scripts/render_mimoto_issuers_config.py
 
       - name: Run test scripts
         run: |
@@ -47,9 +47,9 @@ jobs:
             vc-stack/test_issue_and_verify.py \
             src/portal/test_auth.py \
             src/portal/test_requests.py \
-            data/test_ait_courses.py \
-            data/test_generate_csv.py \
-            data/test_render_mimoto_issuers_config.py \
+            src/adapter/test_courses.py \
+            scripts/test_generate_csv.py \
+            scripts/test_render_mimoto_issuers_config.py \
             src/adapter/test_adapter.py \
             src/sis_bridge/test_bridge.py \
             src/gateway/tests/test_credential_types.py \
@@ -161,7 +161,7 @@ jobs:
       # The git-ignored files the two folders mount: the ait adapter CSV and the plugin jar (as run-demo.sh builds it).
       - name: Generate the adapter CSV and build the plugin jar
         run: |
-          python3 data/generate_csv.py
+          python3 scripts/generate_csv.py
           mkdir -p vc-stack/plugins/.m2
           docker run --rm --user "$(id -u):$(id -g)" \
             -v "$PWD/src/issuer:/src" -w /src \

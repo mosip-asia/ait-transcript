@@ -14,7 +14,7 @@ Deleted, with the rest of sis-bridge/ and vc-stack/sis-bridge/, once the SIS Ada
   gpa, cumGpa }`; a term is named by the SIS's `termLabel` (`term` when the label is empty). The SIS serves no
   lecture or lab hours and no term credits or GPAs, so those are empty strings, as below;
 - numbers become strings, a whole number without a decimal point (`32.0` is `"32"`);
-- `courseList` is built by data/ait_courses.py, the data generator's own function;
+- `courseList` is built by ait_courses.py, the course formatter function;
 - a claim the SIS has no field for is served as an empty string, as is a SIS field that is absent or `null`.
 """
 

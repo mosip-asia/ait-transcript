@@ -20,8 +20,7 @@ from pathlib import Path
 HERE = Path(__file__).parent
 REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(HERE))
-sys.path.insert(0, str(REPO_ROOT / "data"))  # ait_courses, which the image copies next to the bridge
-sys.path.insert(0, str(REPO_ROOT / "src" / "adapter"))  # the Adapter's contract mode
+sys.path.insert(0, str(REPO_ROOT / "src" / "adapter"))  # the Adapter's contract mode and ait_courses
 from fastapi import FastAPI, Request  # noqa: E402
 from fastapi.responses import JSONResponse, PlainTextResponse  # noqa: E402
 

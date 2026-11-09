@@ -19,7 +19,7 @@ from fastapi import FastAPI, HTTPException
 
 app = FastAPI(title="Mock data adapter")
 
-# Stored as JSON text (data/generate_csv.py) and served decoded; every other cell is served verbatim, a cell the
+# Stored as JSON text (scripts/generate_csv.py) and served decoded; every other cell is served verbatim, a cell the
 # row lacks as null. Escaping for Certify's template is the reader's (the Data-provider plugin).
 JSON_COLUMNS = {"courses", "holds"}
 # The transcript's eligibility attributes: on the eligibility path only.
