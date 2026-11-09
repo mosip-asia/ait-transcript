@@ -61,7 +61,7 @@ services:
         bind:
           create_host_path: false
       - ./deploy/config/certify-default.properties:/home/mosip/config/certify-default.properties
-      - ./deploy/config/certify-installation.properties:/home/mosip/config/certify-installation.properties
+      - ./installations/${INSTALLATION}/certify-installation.properties:/home/mosip/config/certify-installation.properties
       - ./deploy/data/CERTIFY_PKCS12:/home/inji/CERTIFY_PKCS12
       - ./deploy/config/vp_request_config.json:/home/mosip/config/vp_request_config.json
     depends_on:
