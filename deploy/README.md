@@ -27,6 +27,9 @@ deploy/
 │   ├── gateway.env
 │   ├── smoke.json
 │   └── adapter/
+├── data/                      # Isolated runtime keystores & state (git-ignored)
+│   ├── ait/CERTIFY_PKCS12
+│   └── hackathon/CERTIFY_PKCS12
 ├── remote-deploy.sh           # Automated VM deployment script used by CI/CD
 └── smoke.sh                   # Pure Bash issuance smoke test
 ```

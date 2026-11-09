@@ -62,7 +62,7 @@ services:
           create_host_path: false
       - ./deploy/base/certify-default.properties:/home/mosip/config/certify-default.properties
       - ./deploy/${INSTALLATION}/certify-installation.properties:/home/mosip/config/certify-installation.properties
-      - ./deploy/data/CERTIFY_PKCS12:/home/inji/CERTIFY_PKCS12
+      - ./deploy/data/${INSTALLATION}/CERTIFY_PKCS12:/home/inji/CERTIFY_PKCS12
       - ./deploy/base/vp_request_config.json:/home/mosip/config/vp_request_config.json
     depends_on:
       database:
@@ -108,3 +108,4 @@ services:
 
 volumes:
   issuer-db:
+    name: ${COMPOSE_PROJECT_NAME}_issuer-db_${INSTALLATION}
