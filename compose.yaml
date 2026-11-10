@@ -87,7 +87,7 @@ services:
     ports:
       - "9098:80"
     volumes:
-      - ./src/vc-lab/contexts:/usr/share/nginx/html/contexts:ro
+      - ./deploy/${INSTALLATION}/contexts:/usr/share/nginx/html/contexts:ro
 
   template-sync:
     build:

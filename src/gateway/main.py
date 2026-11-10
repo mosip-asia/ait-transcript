@@ -27,7 +27,10 @@ from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, ConfigDict, Field, StrictStr, ValidationError
 
-import credential_types as ct
+try:
+    import credential_types as ct
+except ImportError:
+    from gateway import credential_types as ct
 
 
 @dataclass(frozen=True)
@@ -139,3 +142,22 @@ def create_app(settings: Settings, adapter: httpx.Client | None = None) -> FastA
 
 def from_env() -> FastAPI:
     return create_app(Settings.from_env())
+
+
+def main() -> None:
+    import uvicorn
+
+    if "GATEWAY_ENABLED_SCOPES" not in os.environ:
+        os.environ["GATEWAY_ENABLED_SCOPES"] = "ait_transcript_vc_ldp"
+    if "GATEWAY_ELIGIBILITY_URL" not in os.environ:
+        os.environ["GATEWAY_ELIGIBILITY_URL"] = "http://localhost:8000/student/{sub}/eligibility"
+    if "GATEWAY_AUTH_TOKEN" not in os.environ:
+        os.environ["GATEWAY_AUTH_TOKEN"] = "dev-only-ait-gateway-token"
+
+    host = os.environ.get("GATEWAY_HOST", "0.0.0.0")
+    port = int(os.environ.get("GATEWAY_PORT", "8000"))
+    uvicorn.run("gateway.main:from_env", factory=True, host=host, port=port)
+
+
+if __name__ == "__main__":
+    main()

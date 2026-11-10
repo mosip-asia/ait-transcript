@@ -1,1 +1,0 @@
-"""SIS Translation Bridge Service."""

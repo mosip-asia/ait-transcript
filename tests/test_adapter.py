@@ -31,8 +31,9 @@ import sys
 import tempfile
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(Path(__file__).parent))
+REPO_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(REPO_ROOT / "mock" / "adapter"))
+sys.path.insert(0, str(REPO_ROOT / "src" / "gateway"))
 
 AIT_ROSTER = REPO_ROOT / "deploy" / "ait" / "adapter" / "student_identity_data.csv"
 ROSTER = REPO_ROOT / "deploy" / "hackathon" / "adapter" / "student_identity_data.csv"
@@ -115,12 +116,15 @@ def check_roster_rows(get, rows: list[dict]) -> None:
 
 def host_get(csv_path: Path):
     """`get(path)` over the adapter's app in-process, serving csv_path."""
+    import importlib.util
     from fastapi.testclient import TestClient
 
     os.environ["ADAPTER_CSV"] = str(csv_path)
-    import main
+    spec = importlib.util.spec_from_file_location("mock_adapter_main", REPO_ROOT / "mock" / "adapter" / "main.py")
+    adapter_main = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(adapter_main)
 
-    client = TestClient(main.app)
+    client = TestClient(adapter_main.app)
 
     def get(path: str) -> tuple[int, object]:
         r = client.get(path)
@@ -153,7 +157,7 @@ def test_mock_adapter_on_the_hackathon_roster() -> None:
         assert get("/student/hack-2026-0003/eligibility")[1]["teamId"] == ""
 
 
-OPENAPI = Path(__file__).parent / "openapi.yaml"
+OPENAPI = REPO_ROOT / "docs" / "contracts" / "adapter-openapi.yaml"
 PLUGIN = REPO_ROOT / "src/issuer/src/main/java/asia/mosip/issuer/plugin/IssuerDataProviderPlugin.java"
 # Certify's reserved keys and the plugin's trace keys: no record may carry one (spec, "Shaping the data map").
 FORBIDDEN_KEYS = {"id", "_holderId", "_issuer", "validFrom", "validUntil", "credentialStatus", "tokenSub", "tokenClientId"}

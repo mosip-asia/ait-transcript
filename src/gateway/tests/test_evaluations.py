@@ -85,7 +85,7 @@ def mock_adapter(csv_path: Path | None = None):
         rows = list(csv.DictReader(f))
     os.environ["ADAPTER_CSV"] = str(csv_path)
     # Loaded by path: the adapter's module is also called main.
-    spec = importlib.util.spec_from_file_location("adapter_main", REPO_ROOT / "src" / "adapter" / "main.py")
+    spec = importlib.util.spec_from_file_location("adapter_main", REPO_ROOT / "mock" / "adapter" / "main.py")
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     yield TestClient(module.app), csv_path, rows

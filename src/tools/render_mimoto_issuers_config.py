@@ -105,7 +105,10 @@ def render(env: dict[str, str]) -> dict[Path, str]:
 
 
 def main() -> None:
-    for path, content in render(dict(os.environ)).items():
+    env = dict(os.environ)
+    if "INSTALLATION" not in env:
+        env["INSTALLATION"] = "ait"
+    for path, content in render(env).items():
         path.write_text(content, encoding="utf-8")
         print(f"Wrote {path}")
 

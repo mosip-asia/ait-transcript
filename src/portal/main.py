@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import quote
@@ -306,3 +307,15 @@ def registrar_reissue(request: Request, student_id: str, degree_id: str) -> Redi
     except req_workflow.RequestWorkflowError as exc:
         return _redirect(f"/registrar?action_error={quote(str(exc))}")
     return _redirect("/registrar")
+
+
+def main() -> None:
+    import uvicorn
+
+    host = os.environ.get("PORTAL_HOST", "0.0.0.0")
+    port = int(os.environ.get("PORTAL_PORT", "4100"))
+    uvicorn.run("portal.main:app", host=host, port=port, reload=True)
+
+
+if __name__ == "__main__":
+    main()

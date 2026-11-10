@@ -58,19 +58,22 @@ ait-transcript/
 │   └── test_context_refresh.py           # Context and template refresh tests
 │
 ├── src/                                  # CORE SOURCE CODE
-│   ├── adapter/                          # Mock Student Information System (SIS) Adapter (FastAPI)
 │   ├── certify_template_sync/            # Dynamic Inji Certify template synchronizer
 │   ├── gateway/                          # Institutional clearance & permission workflow engine
 │   ├── issuer/                           # Java 21 SPI Data-Provider Plugin (pom.xml + src/)
 │   ├── portal/                           # Demonstration Portal (Registrar & Student UI)
-│   ├── sis_bridge/                       # Temporary SIS protocol compatibility bridge
 │   ├── tools/                            # Developer utilities (CSV generators, mock rendering)
-│   ├── vc-lab/                           # VC Designer: W3C JSON-LD contexts, schemas, visual templates
+│   ├── vc-lab/                           # Visual Credential Studio & Designer (Planned)
 │   └── verifier/                         # Custom Branded Credential Verifier UI & API
+│
+├── mock/                                 # OFFLINE DEMO MOCKS
+│   └── adapter/                          # Standalone Mock SIS Adapter (FastAPI)
+│
+├── docs/contracts/                       # API CONTRACTS & SCHEMAS
+│   └── adapter-openapi.yaml              # Canonical Adapter OpenAPI 3.1 specification
 │
 ├── docker/                               # CONTAINER PACKAGING RECIPES
 │   ├── Dockerfile.certify                # Bakes src/issuer SPI plugin into Inji Certify
-│   ├── Dockerfile.gateway                # Packages src/gateway
 │   └── Dockerfile.template-sync          # Packages certify_template_sync (uv + Alpine)
 │
 ├── compose.yaml                          # Core Issuer Platform compose (Certify, DB, Nginx, VDR)
@@ -344,10 +347,10 @@ python3 tests/test_inji_web_vc_readiness.py
 
 # Tests requiring virtual environment (FastAPI, cryptography, httpx):
 .venv/bin/python tests/test_issue_and_verify.py
-.venv/bin/python src/adapter/test_adapter.py
+.venv/bin/python tests/test_adapter.py
+.venv/bin/python tests/test_courses.py
 .venv/bin/python src/gateway/tests/test_credential_types.py
 .venv/bin/python src/gateway/tests/test_evaluations.py
-.venv/bin/python src/sis_bridge/test_bridge.py
 
 # Run Java plugin unit tests:
 cd src/issuer && mvn test
@@ -358,8 +361,8 @@ cd src/issuer && mvn test
 | **Gateway** | `src/gateway/tests/test_credential_types.py` | Credential clearance rules, hold checks, zero balance, conferral predicates |
 | **Gateway** | `src/gateway/tests/test_evaluations.py` | In-process evaluation of `POST /evaluations` across all installation personas |
 | **Issuer Plugin** | `src/issuer/` (`mvn test`) | SPI `fetchData()` contract, HTTP retry/timeouts, strict JSON escaping, trace keys |
-| **Adapter** | `src/adapter/test_adapter.py` | Validates OpenAPI contracts (`openapi.yaml`) against VCDM 2.0 schemas |
-| **Verifier** | `src/verifier/test_verifier.py` | Verifier UI routes, base58btc did:key decoding, VCDM cryptographic proof format |
+| **Adapter Contract** | `tests/test_adapter.py` | Validates OpenAPI contracts (`adapter-openapi.yaml`) against VCDM 2.0 schemas |
+| **Verifier** | `src/verifier/test_verifier.py` | Verifier UI branding overlay, CSS theme variables, SVG logo |
 | **Auth Server** | `tests/test_authorization_server.py` | Validates OIDC issuer URLs, Keycloak realm mappings, and public endpoints |
 | **Installations** | `tests/test_installations.py` | Verifies identities across CSV, Keycloak realms, and smoke personas |
 

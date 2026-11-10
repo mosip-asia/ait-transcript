@@ -12,10 +12,10 @@ import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
-sys.path.insert(0, str(REPO_ROOT / "src" / "adapter"))
+sys.path.insert(0, str(REPO_ROOT / "mock" / "adapter"))
 from ait_courses import enrich_ait_transcript_subject  # noqa: E402
 
-STUDENTS_JSON = REPO_ROOT / "src" / "portal" / "fixtures" / "students.json"
+STUDENTS_JSON = REPO_ROOT / "tests" / "fixtures" / "students.json"
 OUT_CSV = REPO_ROOT / "deploy" / "ait" / "adapter" / "student_identity_data.csv"
 
 # Locked claim list. Order here becomes the CSV column order and matches the

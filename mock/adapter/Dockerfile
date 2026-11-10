@@ -6,10 +6,11 @@ WORKDIR /adapter
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1
 
-COPY src/adapter/requirements.txt requirements.txt
+COPY mock/adapter/requirements.txt requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY src/adapter/main.py main.py
+COPY mock/adapter/main.py main.py
+COPY mock/adapter/ait_courses.py ait_courses.py
 
 EXPOSE 8000
 

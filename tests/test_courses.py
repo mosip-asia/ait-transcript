@@ -8,7 +8,8 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent))
+REPO_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(REPO_ROOT / "mock" / "adapter"))
 from ait_courses import (  # noqa: E402
     PackValidationError,
     enrich_ait_transcript_subject,

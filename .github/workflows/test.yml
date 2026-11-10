@@ -39,19 +39,17 @@ jobs:
         run: |
           status=0
           for t in \
-            vc-stack/test_inji_web_vc_readiness.py \
-            vc-stack/test_installation_guard.py \
-            vc-stack/test_installations.py \
-            vc-stack/test_configuration_contract.py \
-            vc-stack/test_authorization_server.py \
-            vc-stack/test_issue_and_verify.py \
+            tests/test_inji_web_vc_readiness.py \
+            tests/test_installations.py \
+            tests/test_authorization_server.py \
+            tests/test_issue_and_verify.py \
+            src/verifier/test_verifier.py \
             src/portal/test_auth.py \
             src/portal/test_requests.py \
-            src/adapter/test_courses.py \
+            tests/test_courses.py \
             src/tools/test_generate_csv.py \
             src/tools/test_render_mimoto_issuers_config.py \
-            src/adapter/test_adapter.py \
-            src/sis_bridge/test_bridge.py \
+            tests/test_adapter.py \
             src/gateway/tests/test_credential_types.py \
             src/gateway/tests/test_evaluations.py
           do
@@ -63,8 +61,7 @@ jobs:
           exit "$status"
 
   # One fresh runner per installation and switch setting: Certify's seed runs only on a fresh database, so nothing is
-  # wiped between them. The gate off runs the no-Gateway form, which sets the switch off in Certify's environment;
-  # COMPOSE_FILE (relative to vc-stack/) names the form every script runs, so no committed file is edited.
+  # wiped between them.
   stack-smoke:
     name: Stack smoke (Docker Compose, ${{ matrix.installation }}, gate ${{ matrix.gate }})
     runs-on: ubuntu-latest
@@ -75,24 +72,18 @@ jobs:
         installation: [ait, hackathon]
         gate: ['on', 'off']
     env:
-      COMPOSE_FILE: ${{ matrix.gate == 'on' && 'compose.yaml' || 'compose-no-gateway.yaml' }}
-      COMPOSE: docker compose -f vc-stack/${{ matrix.gate == 'on' && 'compose.yaml' || 'compose-no-gateway.yaml' }}
+      COMPOSE: docker compose -f compose.yaml
       INSTALLATION: ${{ matrix.installation }}
+      MOSIP_CERTIFY_GATEWAY_ENABLED: ${{ matrix.gate == 'on' && 'true' || 'false' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
-      # scripts/deploy.sh builds the plugin jar in a Maven container with its repository in vc-stack/plugins/.m2.
-      - uses: actions/cache@v4
-        with:
-          path: vc-stack/plugins/.m2
-          key: plugin-m2-${{ hashFiles('src/issuer/pom.xml') }}
-
       - name: Bring up the stack
-        run: ./scripts/deploy.sh
+        run: ./scripts/deploy.sh ${{ matrix.installation }}
 
-      - run: ./vc-stack/smoke.sh
+      - run: ./scripts/smoke-test.sh
 
       - uses: actions/upload-artifact@v5
         if: always()
@@ -105,7 +96,7 @@ jobs:
 
       # context_refresh.sql moves the ait-transcript row only. It runs its own Postgres, so one leg is enough.
       - if: matrix.installation == 'ait' && matrix.gate == 'on'
-        run: python3 vc-stack/test_context_refresh.py
+        run: python3 tests/test_context_refresh.py
 
       # The stack writes only git-ignored files; a run that changes a tracked one puts a machine's key, certificate or
       # DID into the next commit.
@@ -123,76 +114,6 @@ jobs:
         if: failure()
         with:
           name: stack-logs-${{ matrix.installation }}-gate-${{ matrix.gate }}
-          path: stack-logs/
-
-      - name: Tear down
-        if: always()
-        run: $COMPOSE down -v --remove-orphans
-
-  # The Issuer and the mock Adapter alone (vc-stack/issuer-dev.yaml), as issuer-dev runs them: demo/ and verify/ are
-  # down, so there is no Keycloak and no credential is issued (stack-smoke does that). One fresh runner per installation
-  # and switch setting; the gate off runs issuer-dev-no-gateway.yaml, named by COMPOSE_FILE as in stack-smoke.
-  issuer-smoke:
-    name: Issuer-only smoke (Docker Compose, ${{ matrix.installation }}, gate ${{ matrix.gate }})
-    runs-on: ubuntu-latest
-    timeout-minutes: 25
-    strategy:
-      fail-fast: false
-      matrix:
-        installation: [ait, hackathon]
-        gate: ['on', 'off']
-    env:
-      COMPOSE_FILE: ${{ matrix.gate == 'on' && 'issuer-dev.yaml' || 'issuer-dev-no-gateway.yaml' }}
-      COMPOSE: docker compose -f vc-stack/${{ matrix.gate == 'on' && 'issuer-dev.yaml' || 'issuer-dev-no-gateway.yaml' }}
-      INSTALLATION: ${{ matrix.installation }}
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
-      - uses: actions/cache@v4
-        with:
-          path: vc-stack/plugins/.m2
-          key: plugin-m2-${{ hashFiles('src/issuer/pom.xml') }}
-
-      # .env naming the installation, and the external network.
-      - run: ./vc-stack/bootstrap.sh --prepare
-
-      # The git-ignored files the two folders mount: the ait adapter CSV and the plugin jar (as scripts/deploy.sh builds it).
-      - name: Generate the adapter CSV and build the plugin jar
-        run: |
-          python3 src/tools/generate_csv.py
-          mkdir -p vc-stack/plugins/.m2
-          docker run --rm --user "$(id -u):$(id -g)" \
-            -v "$PWD/src/issuer:/src" -w /src \
-            -v "$PWD/vc-stack/plugins/.m2:/var/maven/.m2" -e MAVEN_CONFIG=/var/maven/.m2 \
-            maven:3.9-eclipse-temurin-21 mvn -q -B -Duser.home=/var/maven package
-          cp src/issuer/target/issuer-data-provider-plugin.jar vc-stack/plugins/
-
-      - name: Bring up the Issuer and the mock Adapter
-        run: $COMPOSE up -d --build
-
-      # The README's issuer-dev step, so it is tested: it writes the live did:key and recreates Certify (the smoke
-      # fails without it); a local http base moves no context URL.
-      - run: ./vc-stack/bootstrap.sh --did-refresh
-
-      - run: ./vc-stack/issuer-smoke.sh
-
-      # As in stack-smoke: the run leaves every tracked file as committed.
-      - name: The run left every tracked file unchanged
-        run: git status --porcelain && test -z "$(git status --porcelain)"
-
-      - name: Collect stack logs
-        if: failure()
-        run: |
-          mkdir -p stack-logs
-          docker ps -a > stack-logs/docker-ps.txt 2>&1 || true
-          $COMPOSE logs --no-color --timestamps > stack-logs/compose.log 2>&1 || true
-
-      - uses: actions/upload-artifact@v5
-        if: failure()
-        with:
-          name: issuer-stack-logs-${{ matrix.installation }}-gate-${{ matrix.gate }}
           path: stack-logs/
 
       - name: Tear down

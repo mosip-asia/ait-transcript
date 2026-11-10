@@ -7,7 +7,10 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
-STUDENTS_JSON = Path(__file__).resolve().parent / "fixtures" / "students.json"
+REPO_ROOT = Path(__file__).resolve().parents[2]
+_PRIMARY_FIXTURE = REPO_ROOT / "tests" / "fixtures" / "students.json"
+_CONTAINER_FIXTURE = Path("/demo/tests/fixtures/students.json")
+STUDENTS_JSON = _PRIMARY_FIXTURE if _PRIMARY_FIXTURE.exists() else _CONTAINER_FIXTURE
 
 
 @lru_cache

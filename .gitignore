@@ -9,6 +9,7 @@ deploy/*/private_key/
 *.p12
 portal/*.db
 src/portal/*.db
+*.db
 .demo-state/
 .DS_Store
 .claude/

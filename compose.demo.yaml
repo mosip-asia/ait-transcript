@@ -130,6 +130,7 @@ services:
       - ./src/portal:/demo/src/portal
       - ./scripts:/demo/scripts
       - ./deploy:/demo/deploy
+      - ./tests/fixtures:/demo/tests/fixtures:ro
     depends_on:
       - certify-nginx
 
@@ -144,7 +145,7 @@ services:
   adapter:
     build:
       context: .
-      dockerfile: src/adapter/Dockerfile
+      dockerfile: mock/adapter/Dockerfile
     environment:
       - ADAPTER_CSV=/data/student_identity_data.csv
     volumes:

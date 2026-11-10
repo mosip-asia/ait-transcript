@@ -108,7 +108,7 @@ def test_template_and_context_column_name_the_same_vdr_url() -> None:
 
 def test_context_v1_signs_every_generated_claim() -> None:
     # Claim terms at the top level, untyped strings except courses as a JSON literal (spec: Context fix).
-    context = gc.REPO_ROOT / "src" / "vc-lab" / "contexts" / "transcript" / "v1.json"
+    context = gc.REPO_ROOT / "deploy" / "ait" / "contexts" / "transcript" / "v1.json"
     terms = json.loads(context.read_text(encoding="utf-8"))["@context"]
     assert terms["ait"] == "https://ait.example/transcript#"
     assert terms["AitTranscriptCredential"] == "ait:AitTranscriptCredential"

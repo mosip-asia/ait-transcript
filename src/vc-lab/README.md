@@ -1,70 +1,28 @@
-# VC Lab: Credential Designer & Schema Registry
+# VC Lab: Drag-and-Drop Visual Credential Studio (Planned)
 
-**VC Lab** is the design studio and schema registry for the Verifiable Credential Platform. It is the single source of truth for:
-1. **W3C JSON-LD Contexts** (`contexts/`): Machine-readable semantic definitions required by W3C VCDM 2.0.
-2. **Credential Schemas** (`schemas/`): JSON Schemas defining required attributes, types, and constraints.
-3. **Visual Templates** (`templates/`): Print-accurate HTML/CSS designs for generating verifiable A4 PDFs.
+**VC Lab** is the visual design studio for the Verifiable Credential Platform. It allows institutional administrators and credential designers to visually compose, preview, and export W3C VCDM 2.0 Verifiable Credentials.
 
 ---
 
-## 1. Directory Structure
+## 1. Planned Capabilities
 
-```
-src/vc-lab/
-├── contexts/                 # Versioned W3C JSON-LD Contexts
-│   ├── transcript/v1.json    #   - AIT Academic Transcript context
-│   ├── developer-passport/   #   - Hackathon Developer Passport context
-│   └── achievement/          #   - Hackathon Achievement Badge context
-├── schemas/                  # Credential JSON Schemas
-│   └── ait-transcript-credential.v2.schema.json
-├── templates/                # Visual PDF Rendering Templates
-│   ├── pdf-ait-transcript-template.html
-│   └── ait_courses.py
-└── README.md
-```
+1. **Visual Schema & Claim Designer (Drag-and-Drop):**
+   - Add, reorder, and configure credential subject claims (e.g., student name, degree, GPA, honors, conferral date).
+   - Specify claim data types (strings, dates, structured objects) and required validations.
+2. **Visual Card & Certificate Layout Designer:**
+   - Drag-and-drop canvas to design credential cards and printable PDF diplomas/transcripts.
+   - Institutional branding, logos, security watermarks, and QR code placement.
+3. **Automated Export & Multi-Tenant Deployment:**
+   - **W3C JSON-LD Contexts:** Generates versioned `@context` JSON definitions, saved to `deploy/<tenant>/contexts/<credential-name>/v1.json`.
+   - **Inji Certify Configurations:** Generates credential configuration JSON, saved to `deploy/<tenant>/credentials/<credential-name>.json` for GitOps template sync.
+   - **Verification Rules:** Generates verification rules and claim display definitions for Inji Verify.
 
 ---
 
-## 2. How VC Lab "Runs" in the Architecture
+## 2. Multi-Tenant VDR Architecture
 
-VC Lab is not a heavy background server. It operates in two ways:
+Static W3C JSON-LD contexts are served per installation tenant by the `vdr` service in `compose.yaml`:
+- **AIT Tenant:** `deploy/ait/contexts/` $\rightarrow$ served at `http://host.docker.internal:9098/contexts/`
+- **Hackathon Tenant:** `deploy/hackathon/contexts/` $\rightarrow$ served at `http://host.docker.internal:9098/contexts/`
 
-### A. In the Docker Stack (The Mock VDR)
-In Compose (`compose.yaml`), the `vdr` service runs a lightweight static Nginx container mounting `src/vc-lab/contexts`:
-
-```yaml
-vdr:
-  image: nginx:stable
-  volumes:
-    - ../../src/vc-lab/contexts:/usr/share/nginx/html/contexts:ro
-```
-
-- When **Inji Certify** issues a credential, or **Inji Verify** validates one, their cryptographic engines resolve the `@context` URL by fetching from the VDR (via `certify-nginx` on port `9091`):
-  ```
-  GET http://localhost:9091/contexts/transcript/v1.json
-  ```
-- Nginx reads files live from disk, so any schema or context edit takes effect immediately without restarting containers.
-
-### B. Running a Local Context Preview Server (Host Mode)
-If you are developing or testing new credential contexts locally without running Docker:
-
-```bash
-# Start a simple HTTP server from the contexts folder:
-cd src/vc-lab/contexts
-python3 -m http.server 9091
-```
-
-Now you can curl and inspect the context at:
-```bash
-curl http://localhost:9091/transcript/v1.json | jq .
-```
-
----
-
-## 3. Designing a New Credential Type
-
-To introduce a new credential into the institution:
-1. **Define Schema:** Add `src/vc-lab/schemas/<credential-name>.schema.json`.
-2. **Author JSON-LD Context:** Add `src/vc-lab/contexts/<credential-name>/v1.json` mapping each claim to a URI or `@json` literal.
-3. **Add Clearance Rules:** In `src/gateway/credential_types.py`, add the scope and checklist rules (e.g. holds, eligibility).
-4. **Configure Certify Seed:** Add the credential type row to `deploy/<name>/certify_seed.sql` (or `deploy/<name>/credentials/`).
+Inji Certify and Inji Verify resolve the `@context` URLs over HTTP from `vdr` live at runtime.
