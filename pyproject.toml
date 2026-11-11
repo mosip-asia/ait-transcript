@@ -1,6 +1,6 @@
 [project]
 name = "ait-issuer-platform"
-version = "0.1.0"
+version = "0.0.1"
 description = "AIT Verifiable Credential Platform: Inji Certify Issuer, Permission/Workflow Gate, and VC Lab Designer"
 readme = "README.md"
 requires-python = ">=3.11"
