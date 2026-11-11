@@ -433,7 +433,12 @@ This ensures that administrative pre-issuance and automated test harnesses remai
 
 ### Continuous Deployment
 
-Deployments are triggered via GitHub Actions: **Actions $\rightarrow$ Deploy $\rightarrow$ Run workflow** (executes `deploy/remote-deploy.sh` on the VM).
+Continuous Deployment is automated via GitHub Actions (`.github/workflows/cd.yml`) across three environments:
+- **dev**: Deployed on tag push (`v*`) cut from `dev` branch to the development VM.
+- **uat**: Deployed on fast-forward push to `uat` branch (`scripts/release.sh promote uat`).
+- **production**: Deployed on fast-forward push to `main` branch (`scripts/release.sh promote main`).
+
+Target hosts execute `scripts/deploy.sh` over an encrypted NetBird mesh network via SSH.
 
 ---
 

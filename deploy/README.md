@@ -30,8 +30,7 @@ deploy/
 │   ├── adapter/
 │   ├── vp_request_config.json # OpenID4VP request specifications
 │   └── private_key/           # Isolated signing keystore (git-ignored)
-├── remote-deploy.sh           # Automated VM deployment script used by CI/CD
-└── smoke.sh                   # Pure Bash issuance smoke test
+└── base/                      # Shared base SQL initializers and templates
 ```
 
 ---

@@ -1,3 +1,5 @@
-# Shell scripts run on Linux (GitHub runners and the demo VM): keep LF even in
-# Windows checkouts, where core.autocrlf would otherwise turn them into CRLF.
-*.sh text eol=lf
+# Store and check out every text file with LF. Shell scripts, Dockerfiles and
+# configs run on Linux, where CRLF breaks them. Only Windows batch files keep CRLF.
+* text=auto eol=lf
+*.bat text eol=crlf
+*.cmd text eol=crlf

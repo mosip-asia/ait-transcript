@@ -1,18 +1,28 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# Release Helper Script for ait-transcript
+# Release and promotion helper: the SAME file across mosip-asia repositories
+# (ait-oauth-adapter, ait-sis-adapter, ait-transcript). Each repository's own checks
+# (tests, realm files, compose configuration...) live in scripts/release-checks.sh,
+# which defines run_release_checks.
 #
-# Automates the safe promotion from 'dev' to 'main', creates an annotated
-# SemVer release tag, and triggers the CD deployment pipeline (.github/workflows/deploy.yml).
+# One pipeline (.github/workflows/cd.yml), three environments:
+#   dev         <- every release tag v* cut from 'dev'   (VM ait-itserv-dev)
+#   uat         <- every push to branch 'uat'             (VM ait-itserv-uat)
+#   production  <- every push to branch 'main'            (campus VM ait-itserv-vm)
 #
-# Usage:
-#   ./scripts/release.sh <version>
-#   ./scripts/release.sh v0.1.0
+# Usage (Git Bash on Windows; any bash elsewhere):
+#   scripts/release.sh vX.Y.Z                 Run the checks, tag the tip of origin/dev as vX.Y.Z and
+#                                              push the tag (it deploys to dev), then create the
+#                                              GitHub Release.
+#   scripts/release.sh promote uat [vX.Y.Z]    Fast-forward branch 'uat' to a release tag (default:
+#                                              the newest tag on dev); the push deploys it to uat.
+#   scripts/release.sh promote main [vX.Y.Z]   Fast-forward branch 'main' to the release tag that
+#                                              'uat' is at; the push deploys it to production.
 #
-# Resume: if a previous run created the tag locally but the push to GitHub failed
-# (the tag is missing on origin and points at origin/main), running the script
-# again with the same version pushes the tag and creates the GitHub Release
-# instead of starting over.
+# Rules: versions only go up and tags never move (Fail Forward); a promotion is a fast-forward
+# to a release tag, never a merge commit or a force push. Resume: if a run created the tag
+# locally but its push failed, run the same command again. Pushes and the GitHub Release are
+# retried, since GitHub answers transient 5xx errors now and then.
 # ==============================================================================
 set -euo pipefail
 
@@ -34,7 +44,7 @@ retry() {
   local attempts="$1" delay="$2" n=1
   shift 2
   until "$@"; do
-    if (( n >= attempts )); then
+    if ((n >= attempts)); then
       return 1
     fi
     log_warn "Attempt ${n}/${attempts} failed: $*. Retrying in ${delay}s..."
@@ -43,213 +53,307 @@ retry() {
   done
 }
 
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
+confirm() {
+  local answer
+  read -r -p "$1 [y/N]: " answer
+  [[ "$answer" == "y" || "$answer" == "Y" ]]
+}
+
+banner() {
+  echo ""
+  echo -e "${BOLD}======================================================================${NC}"
+  echo -e "${BOLD}  $*${NC}"
+  echo -e "${BOLD}======================================================================${NC}"
+}
+
+SCRIPT_PATH="${BASH_SOURCE[0]}"
+ROOT_DIR="$(cd "$(dirname "$SCRIPT_PATH")/.." && pwd -P)"
 cd "$ROOT_DIR"
 
-# Docker Compose on Windows splits COMPOSE_FILE on ';' unless told otherwise; this script uses ':'.
+# Docker Compose on Windows splits COMPOSE_FILE on ';' unless told otherwise; the checks use ':'.
 export COMPOSE_PATH_SEPARATOR=:
 
-# Python for the JSON check
-PY=""
-for candidate in python3 python; do
-  if "$candidate" -c 'import sys; sys.exit(0)' >/dev/null 2>&1; then
-    PY="$candidate"
-    break
-  fi
-done
-if [[ -z "$PY" ]]; then
-  log_err "No working Python interpreter found ('python3' or 'python'); needed to validate JSON files."
-  exit 1
-fi
+SEMVER='^v[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?$'
+REPO_SLUG="$(git remote get-url origin | sed -E 's#\.git$##; s#^.*github\.com[:/]##')"
+ACTIONS_URL="https://github.com/${REPO_SLUG}/actions/workflows/cd.yml"
 
-# ------------------------------------------------------------------------------
-# 1. Parse & Validate Arguments
-# ------------------------------------------------------------------------------
-VERSION="${1:-}"
+describe_env() {
+  case "$1" in
+    dev) echo "dev (VM ait-itserv-dev)" ;;
+    uat) echo "uat (VM ait-itserv-uat)" ;;
+    main) echo "production (campus VM ait-itserv-vm)" ;;
+  esac
+}
 
-if [[ -z "$VERSION" ]]; then
-  echo -e "${BOLD}Target Release Version (e.g., v0.1.0):${NC} "
-  read -r VERSION
-fi
+usage() {
+  sed -n '2,24p' "$SCRIPT_PATH" | sed 's/^# \{0,1\}//'
+}
 
-if [[ ! "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?$ ]]; then
-  log_err "Invalid version tag '${VERSION}'."
-  log_err "Version must follow Semantic Versioning with a leading 'v' (e.g. v0.1.0, v1.0.0, v1.0.0-rc1)."
-  exit 1
-fi
-
-# ------------------------------------------------------------------------------
-# 2. Local Pre-Flight Safety Checks
-# ------------------------------------------------------------------------------
-log_info "Running local pre-flight checks..."
-
-# Check working tree is clean
-if [[ -n "$(git status --porcelain)" ]]; then
-  log_err "Working tree is dirty. Please commit, stash, or discard local changes first:"
-  git status -s
-  exit 1
-fi
-
-log_info "Fetching latest remote refs from origin..."
-git fetch origin
-
-RESUME=false
-if git ls-remote --tags origin | grep -q "refs/tags/${VERSION}$"; then
-  log_err "Tag '${VERSION}' already exists on remote 'origin': this version is released."
-  exit 1
-fi
-
-if git rev-parse -q --verify "refs/tags/${VERSION}" >/dev/null; then
-  TAG_COMMIT="$(git rev-list -n 1 "$VERSION")"
-  MAIN_COMMIT="$(git rev-parse origin/main)"
-  if [[ "$TAG_COMMIT" == "$MAIN_COMMIT" ]]; then
-    log_warn "Tag '${VERSION}' exists locally at ${TAG_COMMIT:0:7} (= origin/main) but not on origin."
-    log_warn "Resuming the interrupted release: the tag will be pushed and the GitHub Release created."
-    RESUME=true
+# release_tags [ref]: release tags (vX.Y.Z), oldest first; only those reachable from ref if given
+release_tags() {
+  if [[ -n "${1:-}" ]]; then
+    git tag --merged "$1" --list 'v*'
   else
-    log_err "Tag '${VERSION}' exists locally at ${TAG_COMMIT:0:7}, but origin/main is at ${MAIN_COMMIT:0:7}."
-    log_err "Delete the local tag ('git tag -d ${VERSION}') or push 'main' first, then run again."
+    git tag --list 'v*'
+  fi | { grep -E "$SEMVER" || true; } | sort -V
+}
+
+# ------------------------------------------------------------------------------
+# release vX.Y.Z: tag the tip of origin/dev; the tag push deploys it to dev
+# ------------------------------------------------------------------------------
+release() {
+  local version="$1"
+  if [[ ! "$version" =~ $SEMVER ]]; then
+    log_err "Invalid version tag '${version}'."
+    log_err "Use Semantic Versioning with a leading 'v' (e.g. v0.0.10, v1.0.0, v1.0.0-rc1)."
     exit 1
   fi
-fi
 
-# Validate JSON files
-log_info "Validating schema and fixture JSON files..."
-for f in docs/schemas/*.json deploy/*/credentials/*.json src/portal/fixtures/*.json; do
-  if [[ -f "$f" ]]; then
-    if ! "$PY" -m json.tool "$f" > /dev/null; then
-      log_err "Syntax error in $f"
+  log_info "Running local pre-flight checks..."
+  if [[ -n "$(git status --porcelain)" ]]; then
+    log_err "Working tree is dirty. Please commit, stash, or discard local changes first:"
+    git status -s
+    exit 1
+  fi
+
+  log_info "Fetching the latest branches and tags from origin..."
+  retry 3 5 git fetch -q --tags origin
+  local dev_commit
+  dev_commit="$(git rev-parse origin/dev)"
+
+  # A tag on origin means the version is released; a local-only tag at origin/dev means an
+  # earlier run was interrupted after creating it, and this run resumes from the push.
+  local resume=false
+  if git ls-remote --exit-code --tags origin "refs/tags/${version}" >/dev/null 2>&1; then
+    log_err "Tag '${version}' already exists on origin: this version is released."
+    log_err "To move it on: scripts/release.sh promote uat ${version}"
+    exit 1
+  fi
+  if git rev-parse -q --verify "refs/tags/${version}" >/dev/null; then
+    local tag_commit
+    tag_commit="$(git rev-parse "${version}^{commit}")"
+    if [[ "$tag_commit" == "$dev_commit" ]]; then
+      log_warn "Tag '${version}' exists locally at ${tag_commit:0:7} (= origin/dev) but not on origin."
+      log_warn "Resuming the interrupted release: the tag will be pushed and the GitHub Release created."
+      resume=true
+    else
+      log_err "Tag '${version}' exists locally at ${tag_commit:0:7}, but origin/dev is at ${dev_commit:0:7}."
+      log_err "Delete the local tag ('git tag -d ${version}') and run again."
       exit 1
     fi
   fi
-done
-log_ok "JSON syntax verified."
 
-# Validate Docker Compose configuration
-log_info "Validating Docker Compose configurations..."
-if [[ ! -f .env ]]; then
-  cp .env.example .env
-  TEMP_ENV=true
-else
-  TEMP_ENV=false
-fi
-
-if ! docker compose config --quiet; then
-  log_err "Base compose.yaml configuration failed validation."
-  [[ "$TEMP_ENV" == true ]] && rm -f .env
-  exit 1
-fi
-
-[[ "$TEMP_ENV" == true ]] && rm -f .env
-log_ok "Docker Compose configuration verified."
-
-if [[ "$RESUME" == false ]]; then
-  # ----------------------------------------------------------------------------
-  # 3. Synchronize 'dev' with Remote
-  # ----------------------------------------------------------------------------
-  CURRENT_BRANCH="$(git rev-parse --abbrev-ref HEAD)"
-  DEV_BRANCH="dev"
-  if ! git show-ref --verify --quiet refs/heads/dev && ! git show-ref --verify --quiet refs/remotes/origin/dev; then
-    DEV_BRANCH="$CURRENT_BRANCH"
+  local previous
+  previous="$(release_tags | tail -n 1)"
+  if [[ "$resume" == false && -n "$previous" ]]; then
+    if [[ "$(printf '%s\n%s\n' "$previous" "$version" | sort -V | tail -n 1)" != "$version" ]]; then
+      log_err "Version ${version} is not higher than the newest release ${previous}: versions only go up."
+      exit 1
+    fi
   fi
 
-  if [[ "$CURRENT_BRANCH" != "$DEV_BRANCH" ]]; then
-    log_info "Switching to '${DEV_BRANCH}' branch..."
-    git checkout "$DEV_BRANCH"
+  if [[ "$resume" == false ]]; then
+    if [[ "$(git rev-parse --abbrev-ref HEAD)" != "dev" ]]; then
+      log_info "Switching to 'dev'..."
+      git checkout -q dev
+    fi
+    log_info "Updating 'dev' from origin (fast-forward only)..."
+    git merge -q --ff-only origin/dev
+    if [[ "$(git rev-parse HEAD)" != "$dev_commit" ]]; then
+      log_err "Local 'dev' ($(git rev-parse --short HEAD)) has commits that are not on origin/dev (${dev_commit:0:7})."
+      log_err "Releases are cut from what is on GitHub: merge them through a pull request first."
+      exit 1
+    fi
+    log_ok "'dev' matches origin/dev at ${dev_commit:0:7}."
+
+    log_info "Running this repository's release checks (scripts/release-checks.sh)..."
+    # shellcheck source=/dev/null
+    source scripts/release-checks.sh
+    run_release_checks
+    log_ok "Release checks passed."
   fi
 
-  log_info "Pulling latest changes on '${DEV_BRANCH}'..."
-  git pull origin "$DEV_BRANCH" || true
-
-  # ----------------------------------------------------------------------------
-  # 4. Promote into 'main'
-  # ----------------------------------------------------------------------------
-  log_info "Switching to 'main' branch..."
-  git checkout main
-  log_info "Pulling latest changes on 'main'..."
-  git pull origin main
-
-  log_info "Merging '${DEV_BRANCH}' into 'main'..."
-  if ! git merge --ff-only "$DEV_BRANCH"; then
-    log_warn "Fast-forward merge not possible. Performing standard merge commit..."
-    git merge -m "Merge branch '${DEV_BRANCH}' for release ${VERSION}" "$DEV_BRANCH"
-  fi
-  log_ok "'main' successfully updated with latest changes from '${DEV_BRANCH}'."
-fi
-
-# ------------------------------------------------------------------------------
-# 5. Preview & Confirmation Gate
-# ------------------------------------------------------------------------------
-echo ""
-echo -e "${BOLD}======================================================================${NC}"
-if [[ "$RESUME" == true ]]; then
-  echo -e "${BOLD}                      RESUME RELEASE: ${GREEN}${VERSION}${NC}"
-else
-  echo -e "${BOLD}                      RELEASE PREVIEW: ${GREEN}${VERSION}${NC}"
-fi
-echo -e "${BOLD}======================================================================${NC}"
-
-if [[ "$RESUME" == true ]]; then
-  echo -e "Tag ${YELLOW}${VERSION}${NC} already points at $(git rev-parse --short "${VERSION}^{commit}") (= origin/main); 'main' is already pushed."
-  echo -e "This run only pushes the tag (which triggers CD) and creates the GitHub Release."
-else
-  LAST_TAG="$(git describe --tags --abbrev=0 2>/dev/null || echo "")"
-  if [[ -n "$LAST_TAG" ]]; then
-    echo -e "Commits included since last tag (${YELLOW}${LAST_TAG}${NC}):"
-    git log --oneline "${LAST_TAG}..main"
+  # Preview & confirmation gate
+  if [[ "$resume" == true ]]; then
+    banner "RESUME RELEASE: ${GREEN}${version}${NC}"
+    echo -e "Tag ${YELLOW}${version}${NC} already points at ${dev_commit:0:7} (= origin/dev)."
+    echo -e "This run only pushes the tag (which deploys to dev) and creates the GitHub Release."
   else
-    echo -e "Initial release commits:"
-    git log --oneline -n 10 main
+    banner "RELEASE PREVIEW: ${GREEN}${version}${NC}"
+    local since
+    since="$(release_tags origin/dev | tail -n 1)"
+    if [[ -n "$since" ]]; then
+      echo -e "Commits since ${YELLOW}${since}${NC}:"
+      git --no-pager log --oneline "${since}..${dev_commit}"
+    else
+      echo -e "Initial release commits:"
+      git --no-pager log --oneline -n 10 "$dev_commit"
+    fi
   fi
-fi
+  echo -e "${BOLD}Release commit:${NC} ${dev_commit:0:7} (tip of origin/dev)"
+  echo -e "${BOLD}Tag:${NC}            ${version}"
+  echo -e "${BOLD}Deploys to:${NC}     $(describe_env dev), when the tag is pushed"
+  echo -e "${BOLD}Then:${NC}           scripts/release.sh promote uat ${version}"
+  echo ""
 
-echo -e "${BOLD}Target Commit on main:${NC} $(git rev-parse --short main)"
-echo -e "${BOLD}Pushed Tag:${NC}            ${VERSION}"
-echo -e "${BOLD}Deployment Target:${NC}     AIT Campus VM (transcript-demo)"
-echo -e "${BOLD}======================================================================${NC}"
-echo ""
+  if ! confirm "Tag ${version} and deploy it to dev?"; then
+    log_warn "Release aborted; nothing was tagged or pushed."
+    exit 0
+  fi
 
-read -r -p "Deploy release ${VERSION} to production? [y/N]: " CONFIRM
-if [[ "$CONFIRM" != "y" && "$CONFIRM" != "Y" ]]; then
-  log_warn "Release aborted by user."
-  exit 0
-fi
+  if [[ "$resume" == false ]]; then
+    log_info "Creating annotated tag '${version}' on ${dev_commit:0:7}..."
+    git tag -a "$version" -m "Release $version" "$dev_commit"
+  fi
+
+  log_info "Pushing tag '${version}' (this starts the deployment to dev)..."
+  if ! retry 3 5 git push -q origin "refs/tags/${version}"; then
+    log_err "Pushing tag '${version}' failed three times (the tag exists locally)."
+    log_err "Run the same command again later to resume: scripts/release.sh ${version}"
+    exit 1
+  fi
+  log_ok "Tag '${version}' pushed to GitHub."
+
+  # GitHub Release with auto-generated notes if the gh CLI is authenticated
+  if command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
+    log_info "Creating the GitHub Release with auto-generated release notes..."
+    if retry 3 10 gh release create "$version" --title "Release $version" --generate-notes >/dev/null; then
+      log_ok "GitHub Release published."
+    else
+      log_warn "GitHub Release not created (the deployment is already triggered by the tag). Create it later with:"
+      log_warn "  gh release create ${version} --title \"Release ${version}\" --generate-notes"
+    fi
+  fi
+
+  banner "${GREEN}🎉 Release ${version} cut: deploying to dev${NC}"
+  echo -e "Watch the deployment: ${BLUE}${ACTIONS_URL}${NC}"
+  echo -e "After testing on dev: ${BOLD}scripts/release.sh promote uat ${version}${NC}"
+  echo ""
+}
 
 # ------------------------------------------------------------------------------
-# 6. Push 'main', Tag, and Trigger CD
+# promote uat|main [vX.Y.Z]: fast-forward the branch to a release tag; the push deploys it
 # ------------------------------------------------------------------------------
-if [[ "$RESUME" == false ]]; then
-  log_info "Pushing 'main' to origin..."
-  if ! retry 3 5 git push origin main; then
-    log_err "Pushing 'main' failed three times. Nothing was tagged; fix the cause and run the script again."
+promote() {
+  local target="${1:-}" version="${2:-}"
+  if [[ "$target" != "uat" && "$target" != "main" ]]; then
+    log_err "Usage: scripts/release.sh promote uat|main [vX.Y.Z]"
+    exit 2
+  fi
+  if [[ -n "$version" && ! "$version" =~ $SEMVER ]]; then
+    log_err "Invalid version tag '${version}'."
     exit 1
   fi
 
-  log_info "Creating annotated tag '${VERSION}'..."
-  git tag -a "$VERSION" -m "Release $VERSION"
-fi
+  log_info "Fetching the latest branches and tags from origin..."
+  retry 3 5 git fetch -q --tags origin
 
-log_info "Pushing tag '${VERSION}' to trigger CD workflow..."
-if ! retry 3 5 git push origin "$VERSION"; then
-  log_err "Pushing tag '${VERSION}' failed three times (the tag exists locally)."
-  log_err "Run the same command again later to resume: ./scripts/release.sh ${VERSION}"
-  exit 1
-fi
-
-log_ok "Tag '${VERSION}' successfully pushed to GitHub!"
-
-# Create GitHub Release with auto-generated notes if gh CLI is authenticated
-if command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
-  log_info "Creating GitHub Release with auto-generated release notes..."
-  if retry 3 10 gh release create "$VERSION" --title "Release $VERSION" --generate-notes; then
-    log_ok "GitHub Release published."
+  local src tag
+  if [[ "$target" == "uat" ]]; then
+    tag="${version:-$(release_tags origin/dev | tail -n 1)}"
+    if [[ -z "$tag" ]]; then
+      log_err "There is no release tag on dev yet: run scripts/release.sh vX.Y.Z first."
+      exit 1
+    fi
+    if ! git ls-remote --exit-code --tags origin "refs/tags/${tag}" >/dev/null 2>&1; then
+      log_err "Tag '${tag}' is not on origin: release it first with scripts/release.sh ${tag}"
+      exit 1
+    fi
+    src="$(git rev-parse "${tag}^{commit}")"
+    if ! git merge-base --is-ancestor "$src" origin/dev; then
+      log_err "Tag '${tag}' (${src:0:7}) is not on 'dev': only releases cut from dev are promoted."
+      exit 1
+    fi
   else
-    log_warn "GitHub Release not created (the deployment is already triggered by the tag)."
+    if ! git rev-parse -q --verify origin/uat >/dev/null; then
+      log_err "Branch 'uat' does not exist yet: run scripts/release.sh promote uat first."
+      exit 1
+    fi
+    src="$(git rev-parse origin/uat)"
+    if [[ -n "$version" ]]; then
+      if ! git tag --points-at "$src" | grep -qxF "$version"; then
+        log_err "'uat' (${src:0:7}) is not at ${version}: promote ${version} to uat and test it there first."
+        exit 1
+      fi
+      tag="$version"
+    else
+      tag="$(git tag --points-at "$src" --list 'v*' | { grep -E "$SEMVER" || true; } | sort -V | tail -n 1)"
+    fi
+    if [[ -z "$tag" ]]; then
+      log_err "'uat' (${src:0:7}) is not at a release tag: only a released and tested commit goes to production."
+      exit 1
+    fi
   fi
-fi
 
-echo ""
-echo -e "${GREEN}${BOLD}======================================================================${NC}"
-echo -e "${GREEN}${BOLD} 🎉 Release ${VERSION} successfully cut!${NC}"
-echo -e "${GREEN}${BOLD}======================================================================${NC}"
-exit 0
+  local current=""
+  if git rev-parse -q --verify "origin/${target}" >/dev/null; then
+    current="$(git rev-parse "origin/${target}")"
+    if [[ "$current" == "$src" ]]; then
+      log_ok "'${target}' is already at ${tag} (${src:0:7}): nothing to do."
+      exit 0
+    fi
+    if ! git merge-base --is-ancestor "$current" "$src"; then
+      log_err "'${target}' (${current:0:7}) is not an ancestor of ${tag} (${src:0:7}): a promotion is a fast-forward only."
+      log_err "Either the version is older than what '${target}' has, or '${target}' was changed directly. Never force-push it."
+      exit 1
+    fi
+  fi
+
+  banner "PROMOTE ${GREEN}${tag}${NC}${BOLD} to '${target}'"
+  if [[ -n "$current" ]]; then
+    echo -e "Commits that reach '${target}' (from ${current:0:7}):"
+    git --no-pager log --oneline "${current}..${src}"
+  else
+    echo -e "'${target}' does not exist on origin yet: it is created at ${tag}."
+    git --no-pager log --oneline -n 5 "$src"
+  fi
+  echo -e "${BOLD}Promotes:${NC}   ${tag} (${src:0:7})"
+  echo -e "${BOLD}Deploys to:${NC} $(describe_env "$target"), when '${target}' is pushed"
+  echo ""
+  if [[ "$target" == "main" ]]; then
+    log_warn "This deploys to PRODUCTION (the campus VM)."
+  fi
+
+  if ! confirm "Promote ${tag} to '${target}' and deploy it?"; then
+    log_warn "Promotion aborted; nothing was pushed."
+    exit 0
+  fi
+
+  log_info "Pushing ${tag} to '${target}' (this starts the deployment)..."
+  if ! retry 3 5 git push -q origin "${src}:refs/heads/${target}"; then
+    log_err "Pushing '${target}' failed three times. Run the same command again later."
+    exit 1
+  fi
+
+  banner "${GREEN}🎉 ${tag} promoted to '${target}': deploying to $(describe_env "$target")${NC}"
+  echo -e "Watch the deployment: ${BLUE}${ACTIONS_URL}${NC}"
+  if [[ "$target" == "uat" ]]; then
+    echo -e "After testing on UAT: ${BOLD}scripts/release.sh promote main${NC}"
+  fi
+  echo ""
+}
+
+# ------------------------------------------------------------------------------
+# Entry point
+# ------------------------------------------------------------------------------
+case "${1:-}" in
+  promote)
+    shift
+    promote "$@"
+    ;;
+  -h | --help)
+    usage
+    ;;
+  "")
+    usage
+    echo ""
+    read -r -p "Version to release (e.g. v0.0.10), or Enter to stop: " ANSWER
+    if [[ -z "$ANSWER" ]]; then
+      exit 0
+    fi
+    release "$ANSWER"
+    ;;
+  *)
+    release "$1"
+    ;;
+esac

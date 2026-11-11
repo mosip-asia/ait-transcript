@@ -1,0 +1,23 @@
+# Pre-commit hook configuration for ait-transcript
+# Install hooks locally: uv run pre-commit install (or pre-commit install)
+# Run manually:         uv run pre-commit run --all-files
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+        args: [--unsafe]
+      - id: check-toml
+      - id: check-json
+
+  - repo: local
+    hooks:
+      - id: data-guard-check
+        name: AIT Verification Suite (Data Guard & Tests)
+        entry: bash scripts/check.sh
+        language: system
+        pass_filenames: false
+        always_run: true

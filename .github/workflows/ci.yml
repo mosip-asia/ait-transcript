@@ -1,0 +1,83 @@
+name: 🧪 CI
+
+# Triggered only when cutting a release tag (v*) or via manual dispatch.
+# Never runs on regular pushes or commits.
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  plugin:
+    name: ☕ Inji Plugin JAR (Maven)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+          cache-dependency-path: src/issuer/pom.xml
+
+      - name: Build Inji Certify Data Provider Plugin
+        run: mvn -B -f src/issuer/pom.xml package
+
+      - name: Upload Plugin JAR Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: issuer-data-provider-plugin-${{ github.sha }}
+          path: src/issuer/target/issuer-data-provider-plugin.jar
+          if-no-files-found: error
+
+  test:
+    name: 🧪 Host Verification Suite
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Dependencies
+        run: |
+          pip install -r src/portal/requirements.txt -r src/gateway/requirements.txt tzdata typer pyyaml jinja2 cryptography python-multipart itsdangerous
+
+      - name: 🛡️ Verify Sensitive Data Guard
+        run: bash scripts/check-data-guard.sh
+
+      - name: 🧪 Run Host Test Suite
+        run: |
+          python src/tools/render_mimoto_issuers_config.py
+          status=0
+          for t in \
+            src/tools/test_generate_csv.py \
+            src/tools/test_render_mimoto_issuers_config.py \
+            src/verifier/test_verifier.py \
+            tests/test_installations.py \
+            tests/test_authorization_server.py \
+            tests/test_inji_web_vc_readiness.py \
+            tests/test_issue_and_verify.py \
+            src/portal/test_auth.py \
+            src/portal/test_requests.py \
+            tests/test_courses.py \
+            tests/test_adapter.py \
+            src/gateway/tests/test_credential_types.py \
+            src/gateway/tests/test_evaluations.py
+          do
+            echo "::group::$t"
+            if python "$t"; then r=PASS; else r=FAIL; status=1; fi
+            echo "::endgroup::"
+            echo "$r $t"
+          done
+          exit "$status"
