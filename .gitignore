@@ -1,13 +1,16 @@
 __pycache__/
 *.pyc
-vc-stack/config/student_identity_data.csv
-vc-stack/config/mimoto-issuers-config.json
-vc-stack/.env
-vc-stack/certs/
-vc-stack/data/
-app/*.db
-.demo-state/*
-!.demo-state/.gitkeep
+deploy/*/mimoto-issuers-config.json
+.certs/
+src/issuer/target/
+target/
+deploy/data/
+deploy/*/private_key/
+*.p12
+portal/*.db
+src/portal/*.db
+*.db
+.demo-state/
 .DS_Store
 .claude/
 .venv/
@@ -16,6 +19,10 @@ venv/
 .pytest_cache/
 
 # local-only notes, not shared
+docker-compose.override.yml
+compose.override.yaml
+compose.override.yml
 /AGENTS.md
 /PLAN.md
-/wiki/log.md
+/docs/log.md
+

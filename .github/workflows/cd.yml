@@ -1,0 +1,196 @@
+name: 🚀 Deployment
+
+# One workflow, three environments. The GitHub Environments dev, uat and production hold the
+# same variable and secret names (SERVER_HOST, SERVER_USER, SERVER_PROJECT_DIR, SSH_PRIVATE_KEY)
+# with their own values; NETBIRD_MANAGEMENT_URL and NETBIRD_SETUP_KEY stay at repository level.
+#   push of a v* tag  (scripts/release.sh vX.Y.Z, cut from dev)  -> dev        (VM ait-itserv-dev)
+#   push to branch uat  (scripts/release.sh promote uat)          -> uat        (VM ait-itserv-uat)
+#   push to branch main (scripts/release.sh promote main)         -> production (campus VM ait-itserv-vm)
+#   workflow_dispatch: redeploy one environment from its own ref (recovery only)
+on:
+  push:
+    tags:
+      - 'v*'
+    branches:
+      - uat
+      - main
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Environment to redeploy. Run it from that environment's ref: dev from a v* tag, uat from branch uat, production from branch main."
+        type: choice
+        required: true
+        options:
+          - dev
+          - uat
+          - production
+      installation:
+        description: "Installation to deploy (deploy/<name>/)"
+        type: choice
+        required: true
+        default: ait
+        options:
+          - ait
+          - hackathon
+      wipe:
+        description: "Wipe database and volumes before bring-up (--wipe)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  resolve:
+    name: 🧭 Resolve the target environment
+    runs-on: ubuntu-latest
+    outputs:
+      environment: ${{ steps.map.outputs.environment }}
+      installation: ${{ steps.map.outputs.installation }}
+      wipe: ${{ steps.map.outputs.wipe }}
+    steps:
+      - name: Map the event to an environment
+        id: map
+        env:
+          EVENT: ${{ github.event_name }}
+          REF: ${{ github.ref }}
+          CHOICE: ${{ inputs.environment }}
+          INSTALLATION_INPUT: ${{ inputs.installation || 'ait' }}
+          WIPE_INPUT: ${{ inputs.wipe || false }}
+        run: |
+          case "$EVENT:$REF" in
+            push:refs/tags/v*)    TARGET=dev ;;
+            push:refs/heads/uat)  TARGET=uat ;;
+            push:refs/heads/main) TARGET=production ;;
+            workflow_dispatch:*)  TARGET="$CHOICE" ;;
+            *) echo "::error::No environment for event '$EVENT' on '$REF'."; exit 1 ;;
+          esac
+          # An environment deploys only from its own ref, also when dispatched by hand.
+          case "$TARGET:$REF" in
+            dev:refs/tags/v*|uat:refs/heads/uat|production:refs/heads/main) ;;
+            *) echo "::error::Environment '$TARGET' deploys only from its own ref (dev: a v* tag, uat: branch uat, production: branch main), not from '$REF'."; exit 1 ;;
+          esac
+          echo "environment=$TARGET" >> "$GITHUB_OUTPUT"
+          echo "installation=$INSTALLATION_INPUT" >> "$GITHUB_OUTPUT"
+          echo "wipe=$WIPE_INPUT" >> "$GITHUB_OUTPUT"
+          echo "Target environment: **$TARGET** (installation: \`$INSTALLATION_INPUT\`, from \`$REF\`, commit \`${GITHUB_SHA::7}\`)" >> "$GITHUB_STEP_SUMMARY"
+
+  deploy:
+    name: 🚀 Deploy to ${{ needs.resolve.outputs.environment }}
+    needs: resolve
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment:
+      name: ${{ needs.resolve.outputs.environment }}
+      url: ${{ steps.record.outputs.url }}
+    # One deployment per environment at a time: a newer run waits; it never cancels a running deployment or rollback.
+    concurrency:
+      group: cd-${{ needs.resolve.outputs.environment }}
+      cancel-in-progress: false
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: 🔍 Validate Deployment Secrets & Variables
+        uses: mosip-asia/actions/preflight-check@v1
+        with:
+          environment: ${{ needs.resolve.outputs.environment }}
+          netbird-setup-key: ${{ secrets.NETBIRD_SETUP_KEY }}
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+          netbird-management-url: ${{ vars.NETBIRD_MANAGEMENT_URL }}
+          server-host: ${{ vars.SERVER_HOST }}
+          server-user: ${{ vars.SERVER_USER }}
+          server-project-dir: ${{ vars.SERVER_PROJECT_DIR }}
+
+      - name: 🛡️ Verify Sensitive Data Guard
+        run: bash scripts/check-data-guard.sh
+
+      - name: 🐳 Validate Docker Compose Configuration
+        run: |
+          cp .env.example .env
+          docker compose config --quiet
+          docker compose -f compose.yaml -f compose.verify.yaml config --quiet
+          docker compose -f compose.yaml -f compose.demo.yaml config --quiet
+          rm -f .env
+
+      - name: 🌐 Connect to NetBird VPN Mesh
+        uses: mosip-asia/actions/netbird-connect@v1
+        with:
+          management-url: ${{ vars.NETBIRD_MANAGEMENT_URL }}
+          setup-key: ${{ secrets.NETBIRD_SETUP_KEY }}
+          server-host: ${{ vars.SERVER_HOST }}
+
+      - name: 🔑 Setup SSH Authentication
+        uses: mosip-asia/actions/ssh-setup@v1
+        with:
+          ssh-key: ${{ secrets.SSH_PRIVATE_KEY }}
+          server-host: ${{ vars.SERVER_HOST }}
+
+      - name: 🚀 Update Repository and Deploy via SSH
+        uses: mosip-asia/actions/ssh-exec@v1
+        with:
+          server-host: ${{ vars.SERVER_HOST }}
+          server-user: ${{ vars.SERVER_USER }}
+          cmd: |
+            set -e
+            AUTH_REPO="https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git"
+            TARGET_DIR="${{ vars.SERVER_PROJECT_DIR }}"
+            INSTALLATION="${{ needs.resolve.outputs.installation }}"
+            WIPE_FLAG="${{ needs.resolve.outputs.wipe }}"
+
+            # First deployment: initialize directory if missing
+            if [ ! -d "$TARGET_DIR/.git" ]; then
+              echo "First deployment: preparing $TARGET_DIR (an existing .env is kept)..."
+              sudo mkdir -p "$TARGET_DIR"
+              sudo chown -R "$(id -u):$(id -g)" "$TARGET_DIR"
+              git -C "$TARGET_DIR" init -q
+              git -C "$TARGET_DIR" remote add origin "$AUTH_REPO"
+            fi
+
+            cd "$TARGET_DIR"
+            git remote set-url origin "$AUTH_REPO"
+            git fetch -q origin --tags
+
+            # 1. The last verified deployment on this host
+            STABLE_REV="$(cat .deploy_success 2>/dev/null || true)"
+            if [ -z "$STABLE_REV" ]; then
+              STABLE_REV="$(git rev-parse -q --verify HEAD 2>/dev/null || true)"
+            fi
+            echo "Last verified deployment on this host: ${STABLE_REV:-none (first deployment)}"
+
+            echo "Checking out ${{ github.ref_name }} (${{ github.sha }})..."
+            git checkout -q -f ${{ github.sha }}
+
+            echo "Running deployment for installation '$INSTALLATION'..."
+            DEPLOY_CMD="bash scripts/deploy.sh $INSTALLATION"
+            if [ "$WIPE_FLAG" = "true" ]; then
+              DEPLOY_CMD="bash scripts/deploy.sh $INSTALLATION --wipe"
+            fi
+
+            if ! eval "$DEPLOY_CMD"; then
+              echo "=========================================================="
+              echo "🚨 DEPLOYMENT OR SMOKE TEST FAILED!"
+              if [ -z "$STABLE_REV" ]; then
+                echo "This was the first deployment on this host: there is nothing to roll back to."
+                echo "=========================================================="
+                exit 1
+              fi
+              echo "Rolling back to the last verified deployment: ${STABLE_REV}"
+              echo "=========================================================="
+              git checkout -q -f "${STABLE_REV}"
+              bash scripts/deploy.sh "$INSTALLATION"
+              echo "✅ Rollback to ${STABLE_REV} complete. Server restored to last verified deployment."
+              echo "Failing workflow per Fail Forward policy."
+              exit 1
+            fi
+
+            # 2. Record new commit after deployment and smoke tests succeed
+            echo "${{ github.sha }}" > .deploy_success
+            echo "✅ Deployment verified! Recorded ${{ github.ref_name }} (${{ github.sha }}) as the new stable baseline."
+
+      - name: 🔗 Record the environment URL
+        id: record
+        env:
+          SERVER_HOST: ${{ vars.SERVER_HOST }}
+        run: echo "url=http://${SERVER_HOST}:9091" >> "$GITHUB_OUTPUT"

@@ -1,0 +1,109 @@
+"""Generate deploy/ait/adapter/student_identity_data.csv from src/portal/fixtures/students.json.
+
+See docs/concepts/transcript-credential.md.
+Run: python3 src/tools/generate_csv.py
+"""
+
+from __future__ import annotations
+
+import csv
+import json
+import sys
+from pathlib import Path
+
+REPO_ROOT = Path(__file__).resolve().parent.parent.parent
+sys.path.insert(0, str(REPO_ROOT / "mock" / "adapter"))
+from ait_courses import enrich_ait_transcript_subject  # noqa: E402
+
+STUDENTS_JSON = REPO_ROOT / "tests" / "fixtures" / "students.json"
+OUT_CSV = REPO_ROOT / "deploy" / "ait" / "adapter" / "student_identity_data.csv"
+
+# Locked claim list. Order here becomes the CSV column order and matches the
+# credentialSubject of the template in deploy/ait/certify_seed.sql.
+CLAIM_COLUMNS = [
+    "fullName",
+    "dateOfBirth",
+    "country",
+    "registrationNo",
+    "previousDegree",
+    "yearAwarded",
+    "dateAdmitted",
+    "option",
+    "degreeAwarded",
+    "dateGraduation",
+    "faculty",
+    "academicProgram",
+    "areaOfSpecialization",
+    "notes",
+    "issueDate",
+    "courses",
+    "courseList",
+    "thesisTitle",
+    "thesisGrade",
+    "programCommittee",
+    "courseworkCredits",
+    "thesisCredits",
+    "totalCredits",
+    "thesisExamination",
+]
+
+# Read by the mock adapter (adapter/), not by Certify: the eligibility
+# attributes of contracts.md section 2b. They follow the claims.
+ADAPTER_COLUMNS = ["holds", "conferralStatus", "balance"]
+
+CSV_COLUMNS = ["id", *CLAIM_COLUMNS, *ADAPTER_COLUMNS]
+
+
+def load_students(path: Path = STUDENTS_JSON) -> dict:
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def build_rows(students: list[dict]) -> list[dict]:
+    """One CSV row per degree, not per student — each degree is its own issuable
+    Certify/Keycloak identity (`degree["keycloakId"]`) so a multi-degree student
+    can claim a distinct transcript VC per degree (see PLAN.md Phase 7).
+
+    Values are written verbatim (the csv module quotes a newline or a `"`); `courses`
+    and `holds` are JSON text. Escaping for Certify's quoted template is the Data-provider
+    plugin's (plugin/)."""
+    rows = []
+    for student in students:
+        for degree in student["degrees"]:
+            subject = {
+                "fullName": student["fullName"],
+                "dateOfBirth": student["dateOfBirth"],
+                "country": student["country"],
+                **degree,
+            }
+            enriched = enrich_ait_transcript_subject(subject)
+            row = {"id": degree["keycloakId"]}
+            for claim in CLAIM_COLUMNS:
+                row[claim] = str(enriched.get(claim, ""))
+            eligibility = degree["eligibility"]
+            row.update(
+                holds=json.dumps(eligibility["holds"]),
+                conferralStatus=eligibility["conferralStatus"],
+                balance=eligibility["balance"],
+            )
+            rows.append(row)
+    return rows
+
+
+def write_csv(rows: list[dict], out_path: Path = OUT_CSV) -> None:
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(out_path, "w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=CSV_COLUMNS)
+        writer.writeheader()
+        writer.writerows(rows)
+
+
+def main() -> None:
+    data = load_students()
+    # Registrars don't get transcripts — only students go into the CSV.
+    rows = build_rows(data["students"])
+    write_csv(rows)
+    print(f"Wrote {len(rows)} rows, {len(CSV_COLUMNS)} columns, to {OUT_CSV}")
+
+
+if __name__ == "__main__":
+    main()

@@ -4,90 +4,72 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this repository is
 
-A self-contained demo of one journey: an AIT student requests an academic transcript, a registrar approves it, the student claims it as a W3C Verifiable Credential (VCDM 2.0, JSON-LD, Ed25519Signature2020) into Inji Web, and a relying party verifies it in Inji Verify, including revocation. Everything runs in one Docker Compose stack (`vc-stack/`) built from pinned upstream Inji images plus one custom service, the FastAPI demo app in `app/`. `PRD.md` is the authority on what the demo does and does not do; its §3 non-goals and §6.3 (approval is enforced in the demo app UI only, not at issuance) are deliberate.
+The Issuer: a credential issuer built on pinned upstream Inji images. A wallet asks Inji Certify for a credential; Certify's Data-provider plugin (`plugin/`) reads the student's record from an Adapter (`adapter/` is the mock one) and, with the gate on, first asks the Gateway (`gateway/`), the optional Approval gate, which runs the credential type's Checklist on the Adapter's eligibility attributes; Certify signs the record's claims (W3C VCDM 2.0, JSON-LD, Ed25519Signature2020). Why the gate sits beside the data path: `docs/adr/0001-approval-gate-beside-the-data-path.md`. Around it, a demo stack runs the whole journey locally: the Portal (`portal/`, the demo app), Keycloak, Mimoto, Inji Web and Inji Verify, revocation included.
 
-The documents under `wiki/project/` (the issuer proposal of PR 4, and `issuer-v0.1/` with its responsibilities, contracts and deviations) and the glossary in `CONTEXT.md` describe the planned Issuer product, not the running demo. Do not treat them as a description of the code.
+An **Installation** (`deploy/<name>/`) is one issuing deployment's settings: `ait` issues the AIT transcript, `hackathon` the Developer Passport and the Achievement. Terms are in `CONTEXT.md`. What the Issuer must become is in `docs/project/issuer-v0.1/`; the configuration contract there is checked against the Compose files, and `spec-part-2.md` is planned work, not code.
 
-`wallet/` carries patches, not a wallet: `wallet/apply.sh <platform>` clones Inji Wallet v0.22.1 and applies the `common/` and per-platform changes that let it talk to the GCP deployment. The phone app gets its own issuer list and metadata through the `api.` gateway (`vc-stack/config/mimoto-issuers-mobile.json`, `public-gateway-mobile.conf`); see `wiki/architecture/inji-mobile-wallet.md` and `wallet/README.md`.
+- **Web Wallet.** End-to-end credential claiming is demonstrated via the Inji Web Wallet container.
 
 ## Commands
 
-Everything runs through Docker; the host needs only Docker Desktop (Compose v2), `jq`, `curl` and `awk`. On Windows, use WSL2 with the repo cloned into the WSL filesystem, not Git Bash and not `/mnt/c`.
+- Standard automation scripts in `scripts/`:
+  - `./scripts/deploy.sh [installation] [--wipe]`: Builds plugin JAR if needed and brings up the Issuer Platform stack.
+  - `./scripts/smoke-test.sh [certify_url] [student_id] [config_id]`: Post-deployment OpenID4VCI issuance smoke test.
+  - `./scripts/release.sh`: Build and publish Docker images and release artifacts.
+- Tests are plain Python scripts:
+  - `python3 tests/test_installations.py`
+  - `python3 tests/test_authorization_server.py`
+  - `python3 tests/test_inji_web_vc_readiness.py`
+  - `python3 src/verifier/test_verifier.py`
+  - `python3 src/tools/test_generate_csv.py`
+  - `python3 src/tools/test_render_mimoto_issuers_config.py`
+  - `.venv/bin/python tests/test_issue_and_verify.py`
+  - `.venv/bin/python src/adapter/test_adapter.py`
+  - `.venv/bin/python src/gateway/tests/test_evaluations.py`
+- Compose profiles:
+  - `compose.yaml`: Inji Certify, Certify Nginx, PostgreSQL database, VDR context server, template-sync.
+  - `compose.verify.yaml`: Custom branded Verifier (`src/verifier` on port 4007) and Inji Verify service (port 9095).
+  - `compose.demo.yaml`: End-to-end demo with Inji Web Wallet mock (port 4004), Mimoto (port 9099), Keycloak (port 9080), demo app (port 4100), gateway, and adapter.
 
-```sh
-./run-demo.sh                      # full bring-up: build demo app, regenerate the Certify CSV from data/students.json, render mimoto-issuers-config.json, then vc-stack/bootstrap.sh
-./run-demo.sh --wipe               # same, after tearing down volumes and ephemeral files (new signing key and did:key)
-./vc-stack/bootstrap.sh --validate # only the end-to-end health checks
-./vc-stack/bootstrap.sh --did-refresh  # only the post-wipe did:key refresh
-```
-
-After the first `run-demo.sh` (which creates `vc-stack/.env` and the external network), the plain Compose form works: `docker compose -f vc-stack/docker-compose.yaml up -d --build`. Re-run `./run-demo.sh` whenever `data/students.json` changes, so the Certify CSV stays in sync.
-
-Demo app development: `app/` and `data/` are bind-mounted and uvicorn runs with `--reload`, so Python and template edits apply live. Rebuild only when `app/requirements.txt` changes:
-
-```sh
-docker compose -f vc-stack/docker-compose.yaml build demo-app
-docker compose -f vc-stack/docker-compose.yaml up -d demo-app
-```
-
-Tests are plain Python scripts, not pytest. Run one by name:
-
-```sh
-./vc-stack/smoke.sh                                   # stack smoke checks over curl/jq; stack must be up; also runs the readiness script
-python3 vc-stack/test_inji_web_vc_readiness.py        # config checks for the Inji Web download path, no Docker needed
-python3 vc-stack/test_inji_web_vc_readiness.py --live # same plus live Mimoto/Inji Web checks
-python3 app/test_auth.py                              # demo app logic; host Python or inside the image, see below
-python3 app/test_requests.py
-python3 data/test_ait_courses.py                      # data fixture tests
-python3 data/test_generate_csv.py
-python3 data/test_render_mimoto_issuers_config.py      # issuer-list rendering, web and mobile
-python3 vc-stack/test_context_refresh.py              # context_refresh.sql against a throwaway Postgres; needs Docker
-docker compose -f vc-stack/docker-compose.yaml run --rm --no-deps demo-app python app/test_requests.py   # the in-container form
-```
-
-The full browser OAuth and PDF download is still manual (PRD §9); the readiness script only guards the misconfigurations that broke it before.
-
-Local URLs: demo app `:4100` (`/student/login`, `/registrar/login`), Inji Web `:4004`, Inji Verify `:4007`, Keycloak admin `:9080` (admin / admin), Certify behind nginx `:9091`. Every host port is the upstream `inji/vc-stack` default plus 1000, so both stacks can run side by side; the Docker network is `vc_stack_network` for the same reason.
-
-Deployment is manual and ships one commit: push, then run the `Deploy` workflow (`workflow_dispatch` only) for a branch or tag. It copies `deploy/remote-deploy.sh` to the GCE VM, which checks out that commit into `/opt/ait-transcript-demo`, copies the VM's `app.env` to `vc-stack/.env`, and runs `run-demo.sh`. Nothing on the VM pulls code by itself.
+Deployment is manual: push, then run the `Deploy` workflow for a commit. A commit that changes an Installation's `certify_seed.sql` needs `wipe=true`, which also renews the signing key and `did:key`.
 
 ## Architecture
 
-**Data flow, which crosses four places.** `data/students.json` is the single source of truth for mock personas (registrars and students, each student with a `degrees` list). `data/generate_csv.py` turns it into `vc-stack/config/student_identity_data.csv` (git-ignored), which Certify's CSV data-provider plugin reads to build claims. The column order in `generate_csv.py`'s `CLAIM_COLUMNS` must match `data-columns` in `vc-stack/config/certify-csvdp-student.properties` exactly, because Certify maps cells to claims by position. `data/ait_courses.py` derives the course claims (`courses`, `courseTableHtml`, `courseList`) and is an adapted copy of the frozen `design/ait_courses.py`; change the `data/` copy, never `design/`. Identity is per degree, not per student: a student with two degrees is one JSON entry but two CSV rows and two Keycloak users.
+- **Data.** `tests/fixtures/students.json` is the source of truth for the mock personas; `src/tools/generate_csv.py` can regenerate `deploy/ait/adapter/student_identity_data.csv` from it. Identity is per degree: a student with two degrees is two rows and two Keycloak users. Both `ait` and `hackathon` adapter CSVs are committed.
+- **Data flow.** The token's `sub` and `scope` go from Certify to the plugin, which asks the Gateway's `POST /evaluations` (`{sub, scope}`) when the gate is on, then reads the record at its record URL with `{sub}` filled in (`GET /student/{sub}/transcript`); the Gateway reads only its eligibility URL (`GET /student/{sub}/eligibility`). Both URLs are whole settings the deployment owns. `docs/contracts/adapter-openapi.yaml` is the contract (a record schema and an eligibility schema per scope, by `x-scope`) and, with `docs/schemas/ait-transcript-credential.v2.schema.json`, a master file: a test holds the transcript record to that schema's subject. `docs/project/issuer-v0.1/contracts.md` section 2 explains it. The Adapter serves values verbatim; the plugin is the only escaper.
+- **Mock Adapter** (`mock/adapter/`). The mock, column-driven, reads the CSV on every request and keys a row by its `id`, the `sub`: `/student/{sub}/transcript` serves the record to both Installations' Certify, the scope picking its schema.
+- **Gateway** (`src/gateway/`, optional). `POST /evaluations`, the read-only Checklist evaluation (`{sub, scope}`, reads only `GATEWAY_ELIGIBILITY_URL`).
+- **Data-provider plugin** (`src/issuer/`, Java 21). `IssuerDataProviderPlugin` asks the Gateway's `POST /evaluations` about the token's `sub` when `mosip.certify.gateway.enabled=true`, reads the record at `mosip.certify.adapter.record-url` with `{sub}` filled in. Compiled against `certify-integration-api:0.14.0`.
+- **Verifier** (`src/verifier/`). Custom branded Inji Verify UI overlay with institutional theme CSS variables and custom SVG logo.
+- **Registrar approval.** The Portal shows the claim link only after a registrar approves.
+- **Contexts**: the JSON-LD contexts in `deploy/<tenant>/contexts/` are served by `vdr`.
+- **Revocation** is one Certify status API call from the Portal; Certify re-signs the status list about every 60 seconds (`docs/concepts/vc-revocation.md`).
 
-**The demo app** (`app/main.py`, served by uvicorn on `:4100`) has a student side (request, see claim instructions) and a registrar side (approve, reject, revoke, reissue). `requests.py` holds the request state machine (`pending`, `approved`, `rejected`) over SQLite in `db.py`, bind-mounted at `.demo-state/demo_requests.db` so it survives `down`/`up`. `auth.py` is a signed-cookie persona picker, not authentication. `certify_client.py` is the only server-to-server integration: it talks to Certify through `certify-nginx` for `ledger-search`, the Bitstring status list and the revoke call. The app never calls Mimoto or Keycloak; claiming happens in the browser via Inji Web.
+`bootstrap.sh` is idempotent and does what Compose cannot: `.env`, the network, Mimoto's keystore, bring-up order, the did:key refresh after a wipe, the context refresh, and validation.
 
-**Approval gate.** Every mock student is always issuable at the Certify and Keycloak layer. Approval is enforced only by what the demo app shows (the claim link appears after approval). This is a documented scope cut, `wiki/concepts/approval-gate.md`; do not "fix" it unless asked.
+## Things that bite
 
-**The stack.** `vc-stack/docker-compose.yaml` runs PostgreSQL, Inji Certify 0.14 (with its nginx), Mimoto 0.21, Keycloak 24 (with its nginx), Inji Web 0.16, Inji Verify 0.17 (service and UI), a public gateway and the demo app. `bootstrap.sh` is idempotent and does the parts Compose cannot: `.env`, the Docker network, Mimoto's OIDC keystore and client cert, syncing that cert into `keycloak-realm.json`, bringing services up in order, waiting, the did:key refresh after a wipe, and end-to-end validation. Seed SQL lives in `certify_init.sql`, `mimoto_init.sql` and `verify_init.sql`; Certify's credential configuration, including the VC template and the JSON-LD context URL, is an `INSERT` in `certify_init.sql`. The AIT JSON-LD context is `vc-stack/config/academic-transcript-context.json`, served by certify-nginx and referenced as `http://host.docker.internal:9091/...` so verify-service can resolve it from inside Docker.
+Read before touching the stack:
 
-**Revocation.** The registrar's revoke is one Certify status API call; Certify's batch job re-signs the status list every 10 seconds in this stack, and the verifier fetches it from the URL inside the credential. There is no duplicate revocation state in the demo app; see `wiki/concepts/vc-revocation.md`, which also records the VCDM 1.1 to 2.0 migration that made `credentialStatus` appear.
-
-## Things that bite, documented once
-
-Read before touching the stack, and do not re-discover them:
-
-- `wiki/architecture/vc-stack.md`: Keycloak's browser URL is `localhost:9080` while its token issuer is `http://keycloak:8080`; realm changes need a container recreate, not a restart; the Keycloak and Certify nginx containers resolve upstreams at start, so a recreated `keycloak-server` or `certify` leaves `:9080`/`:9091` at 502 until the nginx is restarted (`run-demo.sh` already restarts the proxies).
-- `wiki/concepts/transcript-credential.md` and `wiki/concepts/vc-revocation.md`: each has a "Gotchas already hit" section.
-- `wiki/guides/vc-download-troubleshooting.md`: the four layered failures behind an empty issuer list, a Keycloak login that does not load, or "session is not valid" on download.
+- `docs/architecture/vc-stack.md`: Keycloak's browser URL is `localhost:9080` but its token issuer is `http://keycloak:8080`; realm changes need a recreate; the nginx containers resolve upstreams at start, so recreating `keycloak-server` or `certify` needs the proxies restarted (`run-demo.sh` does).
+- `docs/reference/vc-download-troubleshooting.md`: the four layered failures behind an empty issuer list, a login page that does not load, or "session is not valid".
+- `docs/concepts/transcript-credential.md` and `docs/concepts/vc-revocation.md`: their "Gotchas" sections.
+- Mount the plugin jar as a single file, never `additional_jars/` as a directory, which would hide the four bundled jars.
+- Never `sed -i` a bind-mounted file: Docker Desktop keeps mounting the replaced file, so the next restart fails. Use `sed_in_place` in `bootstrap.sh`.
+- Certify runs as root and writes `vc-stack/data/` as root; remove it from a container.
 
 ## Repository rules
 
-- `*.sh` files are forced to LF by `.gitattributes` because they run on Linux runners and the VM; the Markdown and config files in a Windows checkout are CRLF through `core.autocrlf`.
-- Generated or environment-specific files are git-ignored and must stay so: `vc-stack/config/student_identity_data.csv`, `vc-stack/config/mimoto-issuers-config.json` (rendered from its `.template` with `INJI_WEB_URL`), `vc-stack/.env`, `vc-stack/certs/`, `vc-stack/data/`, `.demo-state/*`.
-- `AGENTS.md`, `PLAN.md` and `wiki/log.md` at the root are local-only notes and are ignored by git; some docstrings still refer to them.
-- `wiki/OVERVIEW.md` is the index of the wiki; add new pages there.
+- `*.sh` files are LF (`.gitattributes`); other text files are CRLF in a Windows checkout.
+- Generated and environment files stay git-ignored: `deploy/<name>/mimoto-issuers-config.json`, `vc-stack/.env`, `vc-stack/certs/`, `vc-stack/data/`, `vc-stack/plugins/`, `src/issuer/target/`, `.demo-state/`. No jar is committed.
+- `AGENTS.md`, `PLAN.md` and `docs/log.md` at the root are local-only and git-ignored.
+
+## Docs
+
+`docs/OVERVIEW.md` is the index: what to read first, then `docs/reference/` (lookup pages agents and operators use, not reading material). A page named `*.stale.md` with "(stale)" in its title was written by someone else and no longer holds; leave it, do not cite it as current. Retired pages are not kept; OVERVIEW names the commit to recover them from. Add a page only when no existing page can take the content, and list it in OVERVIEW.
 
 ## Agent skills
 
-### Issue tracker
-
-Issues live in GitHub Issues for `mosip-asia/ait-transcript`, via the `gh` CLI. See `docs/agents/issue-tracker.md`.
-
-### Triage labels
-
-Default vocabulary: `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`. See `docs/agents/triage-labels.md`.
-
-### Domain docs
-
-Single-context: `CONTEXT.md` and `docs/adr/` at the repo root, alongside the existing `wiki/`. See `docs/agents/domain.md`.
+- **Issue tracker**: local Markdown outside this repo; never GitHub Issues. See `docs/agents/issue-tracker.md`.
+- **Triage labels**: `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`, as a `Status:` line.
+- **Domain docs**: one context, `CONTEXT.md`; decisions in `docs/adr/`.

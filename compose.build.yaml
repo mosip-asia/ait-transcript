@@ -1,0 +1,25 @@
+# ==============================================================================
+# Inji Certify SPI Plugin Builder (Compiler Container)
+# ==============================================================================
+# Compiles the Java SPI plugin using an isolated Maven container.
+# Saves the built JAR to host at ./src/issuer/target/issuer-data-provider-plugin.jar
+# without requiring Java or Maven installed on the host machine.
+#
+# Usage:
+#   docker compose -f compose.build.yaml run --rm plugin-builder
+# ==============================================================================
+name: ait-issuer-build
+
+services:
+  plugin-builder:
+    image: maven:3.9-eclipse-temurin-21
+    volumes:
+      - ./src/issuer:/src
+      - maven-cache:/var/maven/.m2
+    environment:
+      - MAVEN_CONFIG=/var/maven/.m2
+    working_dir: /src
+    command: sh -c "mvn -q -B -Duser.home=/var/maven package -DskipTests && chmod -R a+rwX target"
+
+volumes:
+  maven-cache:

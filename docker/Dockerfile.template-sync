@@ -1,0 +1,23 @@
+FROM ghcr.io/astral-sh/uv:python3.11-alpine
+
+WORKDIR /app
+
+ENV UV_COMPILE_BYTECODE=1
+
+# Copy root pyproject, lockfile, and README
+COPY pyproject.toml uv.lock* README.md /app/
+
+# Copy packages specified in pyproject.toml wheel targets
+COPY src/ /app/src/
+
+# Synchronize dependencies and install project scripts
+RUN uv sync --no-dev
+
+ENV POSTGRES_HOST=database \
+    POSTGRES_PORT=5432 \
+    POSTGRES_USER=postgres \
+    POSTGRES_PASSWORD=postgres \
+    CREDENTIALS_DIR=/app/config/credentials
+
+ENTRYPOINT ["uv", "run", "certify-template-sync"]
+CMD ["--apply"]
