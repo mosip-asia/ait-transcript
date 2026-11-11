@@ -1,48 +1,60 @@
 ---
-title: Wiki
+title: Documentation Index
 description: What to read in this repo, in order, and where the rest is.
 tags:
-  - wiki
+  - docs
   - overview
 ---
-# Wiki
+# Documentation Index
 
-This repo is the Issuer (Inji Certify with its Data-provider plugin, an Adapter behind it and the optional Gateway beside it) and the demo stack that runs the whole journey around it: sign in, claim a credential into a wallet, verify it, revoke it.
+This repository houses the **Institutional Verifiable Credential Platform (Issuer)**: Inji Certify with its Data-provider plugin, an Adapter behind it, an optional Gateway clearance engine beside it, and a complete demo stack running the issuance journey (sign-in, credential claim into mobile/web wallets, verification, and revocation).
 
-## Start here, in this order
+---
 
-1. [README](../README.md): run it, test it, deploy it.
-2. [CONTEXT.md](../CONTEXT.md): the terms every other page uses.
-3. [Responsibilities](./project/issuer-v0.1/responsibilities.md): who owns which part of the Issuer.
-4. [Local stack](./architecture/vc-stack.md): the five deployments and their containers.
-5. [Credential request](./concepts/credential-request.md): what a wallet sends, what the token carries, how the Data-provider plugin turns it into a record.
-6. [Interface contracts](./project/issuer-v0.1/contracts.md), with [`adapter/openapi.yaml`](../adapter/openapi.yaml): what each side provides.
-7. [Part 2 spec](./project/issuer-v0.1/spec-part-2.md): what is being built next.
-8. [Configuration contract](./project/issuer-v0.1/configuration-contract.md): what infra deploys. For infra, or anyone changing a `compose.yaml`.
+## 1. Start here, in this order
 
-## When you need it
+1. [README](../README.md): Quick start, architecture, local execution, and testing.
+2. [CONTEXT.md](../CONTEXT.md): Common terminology, entities, and invariant rules.
+3. [Institutional VC Issuer Proposal](./project/proposal-issuer.md): The architectural foundation of the complete university issuer.
+4. [Verifier Scope & Architecture](./project/verifier-scope.md): Verification workflows from paper PDFs to digital OpenID4VP presentations.
+5. [Responsibilities](./project/issuer-v0.1/responsibilities.md): Ownership boundaries across the Issuer platform components.
+6. [Local stack](./architecture/vc-stack.md): Container services, networking, and deployment topology.
+7. [Credential request](./concepts/credential-request.md): Token flow, claims mapping, and Data-provider plugin resolution.
+8. [Interface contracts](./project/issuer-v0.1/contracts.md) (with [Adapter OpenAPI](./contracts/adapter-openapi.yaml)): External and internal service boundaries.
+9. [Part 2 spec](./project/issuer-v0.1/spec-part-2.md): Planned deliverables for full v0.1.0 close.
+10. [Configuration contract](./project/issuer-v0.1/configuration-contract.md): Infrastructure settings and configuration baseline.
+11. [CI/CD & Deployment Architecture](./deployment.md): Multi-environment promotion, NetBird VPN mesh, and automated rollback.
 
-- [Deviations from the proposal](./project/issuer-v0.1/deviations.md): where v0.1 departs from the issuer proposal (PR 4), and why.
-- [SIS Adapter handover](./project/issuer-v0.1/sis-adapter-handover.md): what the SIS Adapter and the server's settings must provide, in plain words. For infra and the Adapter's builders.
-- Decisions, in [`docs/adr/`](../docs/adr/): [0001, the Approval gate sits beside the data path](../docs/adr/0001-approval-gate-beside-the-data-path.md), why the plugin reads the record and the Gateway is optional.
-- [Transcript JSON-LD context](./concepts/transcript-context.md): the rules that get every claim signed.
-- [Transcript credential](./concepts/transcript-credential.md): the claim shape and its gotchas.
-- [VC revocation](./concepts/vc-revocation.md): revoke and reissue, and their gotchas.
-- [Wallet developer URLs](./guides/wallet-developer-urls.md) and [non-Inji OpenID4VCI wallets](./guides/other-openid4vci-wallets.md): for people building a wallet.
-- [Schemas](./schemas/): the transcript credential's JSON Schema and an example.
+---
 
-## Reference
+## 2. Deep Dives & Architectural Decisions
 
-Lookup pages for agents and operators, not reading material:
+- [ADR 0001: Approval gate sits beside the data path](./adr/0001-approval-gate-beside-the-data-path.md): Why the plugin reads records directly and the Gateway is optional.
+- [Deviations from the proposal](./project/issuer-v0.1/deviations.md): Documented differences between proposal and current implementation.
+- [SIS Adapter handover](./project/issuer-v0.1/sis-adapter-handover.md): Field mapping and expectations for the real SIS Adapter.
+- [Transcript JSON-LD context](./concepts/transcript-context.md): Signing rules, `@json` course representations, and context hashing.
+- [Transcript credential](./concepts/transcript-credential.md): Schema structure, subject claims, and gotchas.
+- [VC revocation](./concepts/vc-revocation.md): Bitstring Status List v1.0, revocation batches, and status verification.
+- [Wallet developer URLs](./guides/wallet-developer-urls.md) & [Non-Inji OpenID4VCI wallets](./guides/other-openid4vci-wallets.md): Guidelines for external wallet integration.
+- [Schemas](./schemas/): Master JSON schemas and sample credential payloads.
 
-- [VC download troubleshooting](./reference/vc-download-troubleshooting.md): four layered failures and how to tell them apart.
-- [Inji mobile wallet](./reference/inji-mobile-wallet.md): why the phone gets its own issuer list and metadata.
-- [Pre-authorized flow](./reference/certify-preauth-flow.md): why one Certify 0.14 cannot serve pre-authorized offers and wallet-initiated issuance together.
+---
 
-## Stale
+## 3. Operational Reference
 
-Written by someone else and no longer accurate; kept, marked in the file name and title:
+Lookup guides for operators, developers, and agents:
 
-- [PRD (stale)](../PRD.stale.md) · [Approval gate (stale)](./concepts/approval-gate.stale.md)
+- [CI/CD & Deployment Architecture](./deployment.md): Branch promotions (`dev` -> `uat` -> `main`), secrets, and SSH deployment over NetBird.
+- [VC download troubleshooting](./reference/vc-download-troubleshooting.md): Diagnosing issuer lists, session failures, and token errors.
+- [Inji mobile wallet](./reference/inji-mobile-wallet.md): Mobile-specific issuer lists and metadata routing.
+- [Pre-authorized flow](./reference/certify-preauth-flow.md): Constraints on multi-mode issuance in Inji Certify 0.14.
+- [Issue Tracker Guidelines](./agents/issue-tracker.md): Local Markdown-based ticketing guidelines.
 
-Retired pages (the hackathon chain spec, the research notes on signing coverage, JSON literals, the data-provider plugin and the hackathon configurations, the PR 4 diagrams) are in git: `git show 1d68d74:<path>`.
+---
+
+## 4. Historical & Stale Content
+
+Historical design and legacy exploratory documents:
+
+- [Approval gate (stale)](./concepts/approval-gate.stale.md): Early exploratory notes prior to ADR 0001.
+- Historical commits for retired specifications: Recoverable via `git show 1d68d74:<path>`.

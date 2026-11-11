@@ -444,6 +444,10 @@ Target hosts execute `scripts/deploy.sh` over an encrypted NetBird mesh network 
 
 ## 8. Documentation & References
 
+- [Documentation Index (`docs/OVERVIEW.md`)](./docs/OVERVIEW.md)
+- [CI/CD & Deployment Architecture (`docs/deployment.md`)](./docs/deployment.md)
+- [Institutional VC Issuer Proposal (`docs/project/proposal-issuer.md`)](./docs/project/proposal-issuer.md)
+- [Verifier Scope & Architecture (`docs/project/verifier-scope.md`)](./docs/project/verifier-scope.md)
 - [Architecture & Topology (`docs/architecture/vc-stack.md`)](./docs/architecture/vc-stack.md)
 - [ADR 0001: Approval Gate Beside the Data Path](./docs/adr/0001-approval-gate-beside-the-data-path.md)
 - [Inji Certify Standalone Deployment (`deploy/README.md`)](./deploy/README.md)

@@ -13,7 +13,7 @@ tags:
 # Verifier Scope & Architecture: From Physical PDFs to Digital Presentations
 
 > [!NOTE]
-> **Companion Document**: This specification is a dedicated architectural companion to [The Role & Functionality of a Complete University VC Issuer](./README.md). While the Issuer manages the *outbound creation and lifecycle* of credentials, this document governs how those credentials are *inspected, cryptographically validated, and consumed* by third parties.
+> **Companion Document**: This specification is a dedicated architectural companion to [Institutional VC Issuer Proposal](./proposal-issuer.md). While the Issuer manages the *outbound creation and lifecycle* of credentials, this document governs how those credentials are *inspected, cryptographically validated, and consumed* by third parties.
 
 ---
 
