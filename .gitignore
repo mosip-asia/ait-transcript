@@ -15,6 +15,7 @@ src/portal/*.db
 .claude/
 .venv/
 venv/
+.nfs*
 .env
 .pytest_cache/
 
