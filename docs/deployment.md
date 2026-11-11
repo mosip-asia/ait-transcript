@@ -22,10 +22,10 @@ This document describes the deployment architecture, continuous delivery (CD) pi
 2. **Release Tag (`v*`) & Dev Deployment**:
    - Cut release tag: `bash scripts/release.sh vX.Y.Z`.
    - Running `scripts/release.sh` executes pre-flight checks (data guard, Compose configs, JSON schemas, and host test suite), tags the tip of `origin/dev`, and pushes the tag to GitHub.
-   - Pushing the tag triggers [`.github/workflows/cd.yml`](../.github/workflows/cd.yml), deploying automatically to the **dev** environment (VM `ait-itserv-dev`).
+   - Pushing the tag triggers [`.github/workflows/cd.yml`](../.github/workflows/cd.yml), deploying automatically to the **dev** environment (GCE VM `issuer-dev` / NetBird peer `issuer-dev-vm`).
 3. **UAT Promotion (`uat`)**:
    - Fast-forward branch: `bash scripts/release.sh promote uat [vX.Y.Z]`.
-   - The push automatically deploys to the **uat** environment (VM `ait-itserv-uat`).
+   - The push automatically deploys to the **uat** environment (GCE VM `issuer-uat` / NetBird peer `issuer-uat-vm`).
 4. **Production Promotion (`main`)**:
    - Fast-forward branch: `bash scripts/release.sh promote main [vX.Y.Z]`.
    - The push automatically deploys to the **production** environment (campus VM `ait-itserv-vm`).
@@ -39,9 +39,9 @@ Configure three environments in GitHub (**Settings > Environments**): `dev`, `ua
 | Variable / Secret | Type | Scope | Description |
 |---|---|---|---|
 | `NETBIRD_SETUP_KEY` | Secret | Repo / Env | NetBird WireGuard mesh VPN setup key for runner access |
-| `SSH_PRIVATE_KEY` | Secret | Environment | SSH private key to authenticate against deployment server |
-| `SERVER_HOST` | Variable | Environment | Target server IP or NetBird mesh hostname (e.g. `ait-itserv-dev.netbird.selfhosted`) |
-| `SERVER_USER` | Variable | Environment | Target server SSH user |
+| `SSH_PRIVATE_KEY` | Secret | Environment | SSH private key to authenticate as `deploy` user against deployment server |
+| `SERVER_HOST` | Variable | Environment | Target server NetBird mesh hostname (e.g. `issuer-dev-vm.netbird.selfhosted`, `issuer-uat-vm.netbird.selfhosted`) |
+| `SERVER_USER` | Variable | Environment | Target server SSH user (`deploy`) |
 | `SERVER_PROJECT_DIR` | Variable | Environment | Target directory on host (e.g. `/opt/ait-transcript`) |
 | `NETBIRD_MANAGEMENT_URL` | Variable | Repo / Env | *(Optional)* Self-hosted NetBird management URL |
 

@@ -6,8 +6,8 @@
 # which defines run_release_checks.
 #
 # One pipeline (.github/workflows/cd.yml), three environments:
-#   dev         <- every release tag v* cut from 'dev'   (VM ait-itserv-dev)
-#   uat         <- every push to branch 'uat'             (VM ait-itserv-uat)
+#   dev         <- every release tag v* cut from 'dev'   (GCE VM issuer-dev / issuer-dev-vm)
+#   uat         <- every push to branch 'uat'             (GCE VM issuer-uat / issuer-uat-vm)
 #   production  <- every push to branch 'main'            (campus VM ait-itserv-vm)
 #
 # Usage (Git Bash on Windows; any bash elsewhere):
@@ -79,8 +79,8 @@ ACTIONS_URL="https://github.com/${REPO_SLUG}/actions/workflows/cd.yml"
 
 describe_env() {
   case "$1" in
-    dev) echo "dev (VM ait-itserv-dev)" ;;
-    uat) echo "uat (VM ait-itserv-uat)" ;;
+    dev) echo "dev (GCE VM issuer-dev / issuer-dev-vm)" ;;
+    uat) echo "uat (GCE VM issuer-uat / issuer-uat-vm)" ;;
     main) echo "production (campus VM ait-itserv-vm)" ;;
   esac
 }

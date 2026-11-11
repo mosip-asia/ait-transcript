@@ -3,8 +3,8 @@ name: 🚀 Deployment
 # One workflow, three environments. The GitHub Environments dev, uat and production hold the
 # same variable and secret names (SERVER_HOST, SERVER_USER, SERVER_PROJECT_DIR, SSH_PRIVATE_KEY)
 # with their own values; NETBIRD_MANAGEMENT_URL and NETBIRD_SETUP_KEY stay at repository level.
-#   push of a v* tag  (scripts/release.sh vX.Y.Z, cut from dev)  -> dev        (VM ait-itserv-dev)
-#   push to branch uat  (scripts/release.sh promote uat)          -> uat        (VM ait-itserv-uat)
+#   push of a v* tag  (scripts/release.sh vX.Y.Z, cut from dev)  -> dev        (GCE VM issuer-dev / issuer-dev-vm)
+#   push to branch uat  (scripts/release.sh promote uat)          -> uat        (GCE VM issuer-uat / issuer-uat-vm)
 #   push to branch main (scripts/release.sh promote main)         -> production (campus VM ait-itserv-vm)
 #   workflow_dispatch: redeploy one environment from its own ref (recovery only)
 on:
